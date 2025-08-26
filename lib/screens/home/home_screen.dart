@@ -1,6 +1,6 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart'; // HapticFeedback
-import 'package:easy_localization/easy_localization.dart';
 import 'package:move_young/models/event_model.dart';
 import 'package:move_young/services/load_events_from_json.dart';
 import 'package:move_young/theme/tokens.dart';
@@ -94,7 +94,7 @@ class _HomeScreenNewState extends State<HomeScreenNew> {
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           child: Padding(
-            padding: AppPaddings.allReg,
+            padding: AppPaddings.symmHorizontalReg,
             child: Container(
               decoration: BoxDecoration(
                 color: AppColors.white,
@@ -106,7 +106,7 @@ class _HomeScreenNewState extends State<HomeScreenNew> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text('hello'.tr(), style: AppTextStyles.headline),
-                  const SizedBox(height: AppHeights.huge),
+                  const SizedBox(height: AppHeights.big),
 
                   // --- Activities card (ripple + haptic) ---
                   Container(

@@ -1,4 +1,5 @@
 {
+    "activities": "Activiteiten",
     "agenda": "Agenda",
     "age_group": "Leeftijdsgroep",
     "artificial_turf": "Kunstgras",
@@ -23,7 +24,7 @@
     "failed_location": "Kan je locatie niet ophalen.",
     "find_location_exercise": "Vind een locatie voor je oefening",
     "find_your_activity": "Vind je activiteit",
-    "find_your_next_event_for_exercise": "Vind je volgende sportevenement",
+    "find_your_next_sport_event": "Vind uw volgende sportevenement",
     "fitness": "Fitness",
     "fitness_stations": "Fitnessstations",
     "football_fields": "Voetbalvelden",

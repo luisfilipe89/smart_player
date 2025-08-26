@@ -1,7 +1,5 @@
-// file: widgets/activity_category_page.dart
-
 import 'package:flutter/material.dart';
-import 'package:move_young/widgets/activity_card.dart';
+import 'package:move_young/widgets_sports/activity_card.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:move_young/models/activity.dart';
 

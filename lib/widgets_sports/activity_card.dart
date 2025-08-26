@@ -22,16 +22,16 @@ class ActivityCard extends StatelessWidget {
     final isNetworkImage = imageUrl.startsWith('http');
     final imgH = AppHeights.cardImage(context);
 
-    return Container(
-      margin: AppPaddings.topBottom,
-      decoration: BoxDecoration(
-        color: AppColors.white,
-        borderRadius: BorderRadius.circular(AppRadius.card),
-        boxShadow: AppShadows.md,
-      ),
+    return Padding(
+      padding: AppPaddings.topBottom,
       child: Material(
-        color: Colors.transparent,
-        borderRadius: BorderRadius.circular(AppRadius.card),
+        color: AppColors.white,
+        elevation: 3, // tune to match other screens
+        shadowColor: AppColors.blackShadow,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadius.card),
+        ),
+
         clipBehavior: Clip.antiAlias,
         child: InkWell(
           onTap: onTap,

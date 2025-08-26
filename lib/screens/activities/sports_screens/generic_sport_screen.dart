@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
@@ -6,14 +7,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:move_young/services/overpass_service.dart';
 import 'package:move_young/screens/maps/gmaps_screen.dart';
-import 'package:move_young/utils/reverse_geocoding.dart';
-import 'package:move_young/config/sport_characteristics_registry.dart';
-import 'package:move_young/config/sport_display_registry.dart';
-import 'package:move_young/config/sport_filters_registry.dart';
-import 'package:move_young/widgets/sport_field_card.dart';
-import 'dart:async';
+import 'package:move_young/widgets_navigation/reverse_geocoding.dart';
+import 'package:move_young/widgets_sports/sport_field_card.dart';
 import 'package:easy_localization/easy_localization.dart';
-import 'package:move_young/theme/tokens.dart';
+import 'package:move_young/config/_config.dart';
+import 'package:move_young/theme/_theme.dart';
 
 class GenericSportScreen extends StatefulWidget {
   final String title;
@@ -344,7 +342,7 @@ class _GenericSportScreenState extends State<GenericSportScreen>
 
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
-      padding: const EdgeInsets.symmetric(horizontal: 16),
+      padding: AppPaddings.symmHorizontalReg,
       child: ChipTheme(
         data: theme.chipTheme.copyWith(
           backgroundColor: neutralBg,
@@ -455,18 +453,12 @@ class _GenericSportScreenState extends State<GenericSportScreen>
   @override
   Widget build(BuildContext context) {
     super.build(context);
+
     return Scaffold(
-      resizeToAvoidBottomInset: true,
       appBar: AppBar(
+        leadingWidth: 48,
+        leading: const AppBackButton(),
         title: Text(widget.title),
-        centerTitle: true,
-        backgroundColor: AppColors.white,
-        foregroundColor: AppColors.black,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new),
-          onPressed: () => Navigator.pop(context),
-        ),
-        elevation: 0,
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
@@ -475,202 +467,236 @@ class _GenericSportScreenState extends State<GenericSportScreen>
               : RefreshIndicator(
                   onRefresh: () => _loadData(bypassCache: true),
                   child: Padding(
-                    padding: AppPaddings.allReg,
-                    child: Container(
-                      decoration: BoxDecoration(
-                        boxShadow: AppShadows.md, // keep panel shadow
-                        borderRadius:
-                            BorderRadius.circular(AppRadius.container),
-                      ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(
-                            AppRadius.container), // clip scroll to radius
-                        child: ColoredBox(
-                          color: AppColors.white, // panel background
-                          child: CustomScrollView(
-                            key: PageStorageKey('sport:${widget.sportType}'),
-                            keyboardDismissBehavior:
-                                ScrollViewKeyboardDismissBehavior.onDrag,
-                            slivers: [
-                              SliverPersistentHeader(
-                                pinned: true,
-                                delegate: _PinnedHeaderDelegate(
-                                  child: Column(
-                                    children: [
-                                      Padding(
-                                        padding: AppPaddings.allBig,
-                                        child: Text(
-                                            'find_location_exercise'.tr(),
-                                            style: AppTextStyles.headline),
-                                      ),
-                                      Padding(
-                                        padding: AppPaddings.symmHorizontalReg,
-                                        child: Row(
+                    padding: AppPaddings.symmHorizontalReg,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Container(
+                            decoration: BoxDecoration(
+                              borderRadius:
+                                  BorderRadius.circular(AppRadius.container),
+                              boxShadow: AppShadows.md,
+                            ),
+                            child: ClipRRect(
+                              borderRadius:
+                                  BorderRadius.circular(AppRadius.container),
+                              child: ColoredBox(
+                                color: AppColors.white,
+                                child: CustomScrollView(
+                                  key: PageStorageKey(
+                                      'sport:${widget.sportType}'),
+                                  keyboardDismissBehavior:
+                                      ScrollViewKeyboardDismissBehavior.onDrag,
+                                  slivers: [
+                                    SliverPersistentHeader(
+                                      pinned: true,
+                                      delegate: _PinnedHeaderDelegate(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.stretch,
                                           children: [
-                                            Expanded(
-                                              child: TextField(
-                                                controller: _searchController,
-                                                textInputAction:
-                                                    TextInputAction.search,
-                                                onSubmitted: (_) {
-                                                  setState(() {
-                                                    _searchQuery =
-                                                        _searchController.text;
-                                                    _applyFilters();
-                                                  });
-                                                },
-                                                decoration: InputDecoration(
-                                                  hintText:
-                                                      'search_by_name_address'
-                                                          .tr(),
-                                                  filled: true,
-                                                  fillColor:
-                                                      AppColors.lightgrey,
-                                                  prefixIcon:
-                                                      const Icon(Icons.search),
-                                                  suffixIcon: (_searchController
-                                                          .text.isEmpty)
-                                                      ? IconButton(
-                                                          icon: const Icon(
-                                                              Icons.map),
-                                                          onPressed:
-                                                              _openMapWithFiltered,
-                                                        )
-                                                      : SizedBox(
-                                                          width: 96,
-                                                          child: Row(
-                                                            mainAxisAlignment:
-                                                                MainAxisAlignment
-                                                                    .end,
-                                                            mainAxisSize:
-                                                                MainAxisSize
-                                                                    .min,
-                                                            children: [
-                                                              IconButton(
-                                                                icon: const Icon(
-                                                                    Icons
-                                                                        .clear),
-                                                                onPressed: () {
-                                                                  _searchController
-                                                                      .clear();
-                                                                  setState(() {
-                                                                    _searchQuery =
-                                                                        '';
-                                                                    _applyFilters();
-                                                                  });
-                                                                },
-                                                              ),
-                                                              IconButton(
-                                                                icon: const Icon(
-                                                                    Icons.map),
-                                                                onPressed:
-                                                                    _openMapWithFiltered,
-                                                              ),
-                                                            ],
-                                                          ),
+                                            PanelHeader(
+                                                'find_location_exercise'.tr()),
+                                            Padding(
+                                              padding:
+                                                  AppPaddings.symmHorizontalReg,
+                                              child: Row(
+                                                children: [
+                                                  Expanded(
+                                                    child: TextField(
+                                                      controller:
+                                                          _searchController,
+                                                      textInputAction:
+                                                          TextInputAction
+                                                              .search,
+                                                      onSubmitted: (_) {
+                                                        setState(() {
+                                                          _searchQuery =
+                                                              _searchController
+                                                                  .text;
+                                                          _applyFilters();
+                                                        });
+                                                      },
+                                                      decoration:
+                                                          InputDecoration(
+                                                        hintText:
+                                                            'search_by_name_address'
+                                                                .tr(),
+                                                        filled: true,
+                                                        fillColor:
+                                                            AppColors.lightgrey,
+                                                        prefixIcon: const Icon(
+                                                            Icons.search),
+                                                        suffixIcon:
+                                                            (_searchController
+                                                                    .text
+                                                                    .isEmpty)
+                                                                ? IconButton(
+                                                                    icon: const Icon(
+                                                                        Icons
+                                                                            .map),
+                                                                    onPressed:
+                                                                        _openMapWithFiltered,
+                                                                  )
+                                                                : SizedBox(
+                                                                    width: 96,
+                                                                    child: Row(
+                                                                      mainAxisAlignment:
+                                                                          MainAxisAlignment
+                                                                              .end,
+                                                                      mainAxisSize:
+                                                                          MainAxisSize
+                                                                              .min,
+                                                                      children: [
+                                                                        IconButton(
+                                                                          icon:
+                                                                              const Icon(Icons.clear),
+                                                                          onPressed:
+                                                                              () {
+                                                                            _searchController.clear();
+                                                                            setState(() {
+                                                                              _searchQuery = '';
+                                                                              _applyFilters();
+                                                                            });
+                                                                          },
+                                                                        ),
+                                                                        IconButton(
+                                                                          icon:
+                                                                              const Icon(Icons.map),
+                                                                          onPressed:
+                                                                              _openMapWithFiltered,
+                                                                        ),
+                                                                      ],
+                                                                    ),
+                                                                  ),
+                                                        border:
+                                                            OutlineInputBorder(
+                                                          borderRadius:
+                                                              BorderRadius
+                                                                  .circular(
+                                                                      AppRadius
+                                                                          .image),
+                                                          borderSide:
+                                                              BorderSide.none,
                                                         ),
-                                                  border: OutlineInputBorder(
-                                                    borderRadius:
-                                                        BorderRadius.circular(
-                                                            AppRadius.image),
-                                                    borderSide: BorderSide.none,
+                                                      ),
+                                                      onChanged: (value) {
+                                                        if (_debounce
+                                                                ?.isActive ??
+                                                            false) {
+                                                          _debounce!.cancel();
+                                                        }
+                                                        _debounce = Timer(
+                                                            const Duration(
+                                                                milliseconds:
+                                                                    300), () {
+                                                          if (!mounted) return;
+                                                          setState(() {
+                                                            _searchQuery =
+                                                                value;
+                                                            _applyFilters();
+                                                          });
+                                                        });
+                                                      },
+                                                    ),
                                                   ),
-                                                ),
-                                                onChanged: (value) {
-                                                  if (_debounce?.isActive ??
-                                                      false) {
-                                                    _debounce!.cancel();
-                                                  }
-                                                  _debounce = Timer(
-                                                      const Duration(
-                                                          milliseconds: 300),
-                                                      () {
-                                                    if (!mounted) return;
-                                                    setState(() {
-                                                      _searchQuery = value;
-                                                      _applyFilters();
-                                                    });
-                                                  });
-                                                },
+                                                ],
                                               ),
                                             ),
+                                            const SizedBox(
+                                                height: AppHeights.reg),
+                                            _buildFilterChips(),
+                                            const SizedBox(
+                                                height: AppHeights.small),
                                           ],
                                         ),
                                       ),
-                                      const SizedBox(height: AppHeights.reg),
-                                      _buildFilterChips(),
-                                      const SizedBox(height: AppHeights.small),
-                                    ],
-                                  ),
+                                    ),
+                                    SliverPadding(
+                                      padding: AppPaddings.symmHorizontalReg,
+                                      sliver: _filteredLocations.isEmpty
+                                          ? SliverToBoxAdapter(
+                                              child: Padding(
+                                                padding:
+                                                    AppPaddings.allSuperBig,
+                                                child: Center(
+                                                  child: Text(
+                                                    'no_fields_found'.tr(),
+                                                    textAlign: TextAlign.center,
+                                                    style:
+                                                        AppTextStyles.cardTitle,
+                                                  ),
+                                                ),
+                                              ),
+                                            )
+                                          : SliverList(
+                                              delegate:
+                                                  SliverChildBuilderDelegate(
+                                                (context, index) {
+                                                  final field =
+                                                      _filteredLocations[index];
+                                                  final lat = field['lat']
+                                                          ?.toString() ??
+                                                      '';
+                                                  final lon = field['lon']
+                                                          ?.toString() ??
+                                                      '';
+                                                  final distance =
+                                                      (field['distance']
+                                                                  as num?)
+                                                              ?.toDouble() ??
+                                                          double.infinity;
+
+                                                  return SportFieldCard(
+                                                    field: field,
+                                                    isFavorite: _favoriteIds
+                                                        .contains('$lat,$lon'),
+                                                    distanceText:
+                                                        _formatDistance(
+                                                            distance),
+                                                    getDisplayName:
+                                                        _getDisplayName,
+                                                    characteristics:
+                                                        _buildCharacteristicsRow(
+                                                            field),
+                                                    onToggleFavorite: () async {
+                                                      final id = '$lat,$lon';
+                                                      await _toggleFavorite(id);
+                                                      HapticFeedback
+                                                          .selectionClick();
+                                                    },
+                                                    onShare: () async {
+                                                      final name =
+                                                          await _getDisplayName(
+                                                              field);
+                                                      _shareLocation(
+                                                          name, lat, lon);
+                                                    },
+                                                    onDirections: () =>
+                                                        _openDirections(
+                                                            lat, lon),
+                                                  );
+                                                },
+                                                childCount:
+                                                    _filteredLocations.length,
+                                              ),
+                                            ),
+                                    ),
+                                    const SliverToBoxAdapter(
+                                      child: SizedBox(height: AppHeights.reg),
+                                    ),
+                                  ],
                                 ),
                               ),
-                              SliverPadding(
-                                padding: AppPaddings.symmHorizontalReg,
-                                sliver: _filteredLocations.isEmpty
-                                    ? SliverToBoxAdapter(
-                                        child: Padding(
-                                          padding: AppPaddings.allSuperBig,
-                                          child: Center(
-                                            child: Text('no_fields_found'.tr(),
-                                                textAlign: TextAlign.center,
-                                                style: AppTextStyles.cardTitle),
-                                          ),
-                                        ),
-                                      )
-                                    : SliverList(
-                                        delegate: SliverChildBuilderDelegate(
-                                          (context, index) {
-                                            final field =
-                                                _filteredLocations[index];
-                                            final lat =
-                                                field['lat']?.toString() ?? '';
-                                            final lon =
-                                                field['lon']?.toString() ?? '';
-                                            final distance =
-                                                (field['distance'] as num?)
-                                                        ?.toDouble() ??
-                                                    double.infinity;
-
-                                            return SportFieldCard(
-                                              field: field,
-                                              isFavorite: _favoriteIds
-                                                  .contains('$lat,$lon'),
-                                              distanceText:
-                                                  _formatDistance(distance),
-                                              getDisplayName: _getDisplayName,
-                                              characteristics:
-                                                  _buildCharacteristicsRow(
-                                                      field),
-                                              onToggleFavorite: () async {
-                                                final id = '$lat,$lon';
-                                                await _toggleFavorite(id);
-                                                HapticFeedback.selectionClick();
-                                              },
-                                              onShare: () async {
-                                                final name =
-                                                    await _getDisplayName(
-                                                        field);
-                                                _shareLocation(name, lat, lon);
-                                              },
-                                              onDirections: () =>
-                                                  _openDirections(lat, lon),
-                                            );
-                                          },
-                                          childCount: _filteredLocations
-                                              .length, // ✅ important
-                                        ),
-                                      ),
-                              ),
-                              const SliverToBoxAdapter(
-                                  child: SizedBox(height: AppHeights.reg)),
-                            ],
-                          ), // CustomScrollView
-                        ), // ColoredBox
-                      ), // ClipRRect
-                    ), // Container
-                  ), // Padding
-                ), // RefreshIndicator
-    ); // Scaffold
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+    );
   }
 }
 

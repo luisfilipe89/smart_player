@@ -42,6 +42,8 @@ class AppHeights {
   static const huge = 20.0;
   static const superHuge = 24.0;
   static const image = 140.0;
+
+  //Distance between cards in SportFields
   static double cardImage(BuildContext context) {
     final width = MediaQuery.of(context).size.width;
     final target = width * 0.28; // around 28% of screen width

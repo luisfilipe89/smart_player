@@ -1,14 +1,14 @@
-import 'package:flutter/material.dart';
-import 'package:move_young/models/event_model.dart';
-import 'package:move_young/services/load_events_from_json.dart';
+import 'dart:async';
+import 'package:shimmer/shimmer.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:shimmer/shimmer.dart';
-import 'dart:async';
 import 'package:easy_localization/easy_localization.dart';
-import 'package:move_young/theme/tokens.dart';
+import 'package:flutter/material.dart';
+import 'package:move_young/models/event_model.dart';
+import 'package:move_young/services/load_events_from_json.dart';
+import 'package:move_young/theme/_theme.dart';
 
 class AgendaScreen extends StatefulWidget {
   const AgendaScreen({super.key});
@@ -20,6 +20,7 @@ class AgendaScreen extends StatefulWidget {
 class _AgendaScreenState extends State<AgendaScreen> {
   Set<String> _favoriteTitles = {};
   final TextEditingController _searchController = TextEditingController();
+
   List<Event> allEvents = [];
   List<Event> filteredEvents = [];
 
@@ -33,6 +34,33 @@ class _AgendaScreenState extends State<AgendaScreen> {
     super.initState();
     loadEvents();
     _loadFavorites();
+  }
+
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  // --------------------------------------------
+  // Data + prefs
+  // --------------------------------------------
+  Future<void> loadEvents() async {
+    final loaded = await loadEventsFromJson();
+    if (!mounted) return;
+
+    setState(() {
+      allEvents = loaded;
+      _applyFilters();
+    });
+
+    // Preload a few images for smoother first paint
+    for (var event in allEvents.take(5)) {
+      if (event.imageUrl?.isNotEmpty ?? false) {
+        precacheImage(CachedNetworkImageProvider(event.imageUrl!), context);
+      }
+    }
   }
 
   Future<void> _loadFavorites() async {
@@ -54,11 +82,30 @@ class _AgendaScreenState extends State<AgendaScreen> {
     });
   }
 
-  Future<void> _shareEvent(Event event) async {
-    final String text = (event.url?.isNotEmpty ?? false)
-        ? '${event.title}\n${event.url!}'
-        : event.title;
-    await Share.share(text);
+  // --------------------------------------------
+  // Filters + search
+  // --------------------------------------------
+  void _applyFilters() {
+    final events = allEvents.where((event) {
+      final queryMatch =
+          event.title.toLowerCase().contains(_searchQuery.toLowerCase());
+      if (!queryMatch) return false;
+
+      final isRecurring = event.isRecurring;
+      if (isRecurring && !_showRecurring) return false;
+      if (!isRecurring && !_showOneTime) return false;
+
+      return true;
+    }).toList();
+
+    setState(() => filteredEvents = events);
+
+    // Preload visible filtered images
+    for (var event in events.take(10)) {
+      if (event.imageUrl?.isNotEmpty ?? false) {
+        precacheImage(CachedNetworkImageProvider(event.imageUrl!), context);
+      }
+    }
   }
 
   void _onSearchChanged(String query) {
@@ -69,6 +116,27 @@ class _AgendaScreenState extends State<AgendaScreen> {
         _applyFilters();
       });
     });
+  }
+
+  // --------------------------------------------
+  // Actions
+  // --------------------------------------------
+  Future<void> _shareEvent(Event event) async {
+    final String text = (event.url?.isNotEmpty ?? false)
+        ? '${event.title}\n${event.url!}'
+        : event.title;
+    await Share.share(text);
+  }
+
+  Future<void> _openUrl(String url) async {
+    final uri = Uri.parse(url);
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } else if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('could_not_open'.tr())),
+      );
+    }
   }
 
   Future<void> _openDirections(BuildContext context, String location) async {
@@ -89,94 +157,109 @@ class _AgendaScreenState extends State<AgendaScreen> {
     }
   }
 
-  Future<void> loadEvents() async {
-    final loaded = await loadEventsFromJson();
-    if (!mounted) return;
-
-    setState(() {
-      allEvents = loaded;
-      _applyFilters();
-    });
-
-    // Preload a few images
-    for (var event in allEvents.take(5)) {
-      if (event.imageUrl?.isNotEmpty ?? false) {
-        precacheImage(CachedNetworkImageProvider(event.imageUrl!), context);
-      }
-    }
-  }
-
-  void _applyFilters() {
-    final events = allEvents.where((event) {
-      final queryMatch =
-          event.title.toLowerCase().contains(_searchQuery.toLowerCase());
-      final isRecurring = event.isRecurring;
-
-      if (!queryMatch) return false;
-      if (isRecurring && !_showRecurring) return false;
-      if (!isRecurring && !_showOneTime) return false;
-
-      return true;
-    }).toList();
-
-    setState(() => filteredEvents = events);
-
-    // Preload visible filtered images
-    for (var event in events.take(10)) {
-      if (event.imageUrl?.isNotEmpty ?? false) {
-        precacheImage(CachedNetworkImageProvider(event.imageUrl!), context);
-      }
-    }
+  // --------------------------------------------
+  // UI helpers
+  // --------------------------------------------
+  Widget _buildSearchField() {
+    return TextField(
+      controller: _searchController,
+      textInputAction: TextInputAction.search,
+      decoration: InputDecoration(
+        hintText: 'search_events'.tr(),
+        filled: true,
+        fillColor: AppColors.lightgrey,
+        prefixIcon: const Icon(Icons.search),
+        suffixIcon: (_searchQuery.isEmpty)
+            ? null
+            : IconButton(
+                icon: const Icon(Icons.clear),
+                onPressed: () {
+                  _searchController.clear();
+                  setState(() {
+                    _searchQuery = '';
+                    _applyFilters();
+                  });
+                },
+              ),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(AppRadius.image),
+          borderSide: BorderSide.none,
+        ),
+      ),
+      onChanged: _onSearchChanged,
+    );
   }
 
   Widget _buildFilterChipsRow() {
+    final theme = Theme.of(context);
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       padding: AppPaddings.symmHorizontalReg,
-      child: Row(
-        children: [
-          // Recurring
-          Padding(
-            padding: AppPaddings.rightSmall,
-            child: FilterChip(
-              label: Text('recurring'.tr()),
-              selected: _showRecurring,
-              showCheckmark: false,
-              avatar: Icon(
-                _showRecurring ? Icons.repeat : Icons.repeat_on_outlined,
-                color: _showRecurring ? AppColors.amber : AppColors.grey,
-                size: 18,
+      child: ChipTheme(
+        data: theme.chipTheme.copyWith(
+          backgroundColor: AppColors.superlightgrey,
+          selectedColor: AppColors.superlightgrey,
+          disabledColor: AppColors.superlightgrey,
+          labelStyle: AppTextStyles.small.copyWith(color: AppColors.blackText),
+          secondaryLabelStyle:
+              AppTextStyles.small.copyWith(color: AppColors.blackText),
+          side: const BorderSide(color: Colors.transparent),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          shape: const StadiumBorder(),
+        ),
+        child: Row(
+          children: [
+            // Recurring
+            Padding(
+              padding: AppPaddings.rightSmall,
+              child: FilterChip(
+                showCheckmark: false,
+                selected: _showRecurring,
+                avatar: Icon(
+                  _showRecurring ? Icons.repeat : Icons.repeat_on_outlined,
+                  color: _showRecurring ? AppColors.amber : AppColors.grey,
+                  size: 18,
+                ),
+                label: Text(
+                  'recurring'.tr(),
+                  style:
+                      AppTextStyles.small.copyWith(color: AppColors.blackText),
+                ),
+                onSelected: (selected) {
+                  setState(() {
+                    _showRecurring = selected;
+                    _applyFilters();
+                  });
+                },
               ),
-              onSelected: (selected) {
-                setState(() {
-                  _showRecurring = selected;
-                  _applyFilters();
-                });
-              },
             ),
-          ),
 
-          // One-time
-          Padding(
-            padding: AppPaddings.rightSmall,
-            child: FilterChip(
-              label: Text('one_time'.tr()),
-              selected: _showOneTime,
-              showCheckmark: false,
-              avatar: Icon(
-                _showOneTime ? Icons.event_available : Icons.event_note,
-                color: _showOneTime ? AppColors.amber : AppColors.grey,
-                size: 18,
+            // One-time
+            Padding(
+              padding: AppPaddings.rightSmall,
+              child: FilterChip(
+                showCheckmark: false,
+                selected: _showOneTime,
+                avatar: Icon(
+                  _showOneTime ? Icons.event_available : Icons.event_note,
+                  color: _showOneTime ? AppColors.amber : AppColors.grey,
+                  size: 18,
+                ),
+                label: Text(
+                  'one_time'.tr(),
+                  style:
+                      AppTextStyles.small.copyWith(color: AppColors.blackText),
+                ),
+                onSelected: (selected) {
+                  setState(() {
+                    _showOneTime = selected;
+                    _applyFilters();
+                  });
+                },
               ),
-              onSelected: (selected) {
-                setState(() {
-                  _showOneTime = selected;
-                  _applyFilters();
-                });
-              },
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -196,123 +279,111 @@ class _AgendaScreenState extends State<AgendaScreen> {
     );
   }
 
+  Widget _buildImageOrPlaceholder(String? url) {
+    if (url?.isNotEmpty ?? false) {
+      return CachedNetworkImage(
+        imageUrl: url!,
+        height: AppHeights.image,
+        width: double.infinity,
+        fit: BoxFit.cover,
+        fadeInDuration: const Duration(milliseconds: 300),
+        fadeInCurve: Curves.easeInOut,
+        placeholder: (_, __) => _buildShimmerPlaceholder(),
+        errorWidget: (_, __, ___) => Container(
+          height: AppHeights.image,
+          color: AppColors.lightgrey,
+          child: const Icon(Icons.broken_image),
+        ),
+      );
+    }
+    return Container(
+      height: AppHeights.image,
+      decoration: BoxDecoration(
+        color: AppColors.grey,
+        borderRadius: BorderRadius.circular(AppRadius.image),
+      ),
+      child: const Center(child: Icon(Icons.image_not_supported)),
+    );
+  }
+
+  Widget _metaRow(IconData icon, String text, {bool muted = false}) {
+    return Row(
+      children: [
+        Icon(icon, size: 16, color: AppColors.darkgrey),
+        const SizedBox(width: AppWidths.small),
+        Expanded(
+          child: Text(
+            text,
+            style: muted ? AppTextStyles.smallMuted : AppTextStyles.small,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildEventCard(Event event) {
     return Container(
-      margin: AppPaddings.symmReg,
+      margin: AppPaddings.topBottom,
       padding: AppPaddings.allMedium,
       decoration: BoxDecoration(
-          color: AppColors.white,
-          borderRadius: BorderRadius.circular(AppRadius.card),
-          boxShadow: AppShadows.md),
+        color: AppColors.white,
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        boxShadow: AppShadows.md,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (event.imageUrl?.isNotEmpty ?? false)
-            ClipRRect(
-              borderRadius: BorderRadius.circular(AppRadius.image),
-              child: CachedNetworkImage(
-                imageUrl: event.imageUrl!,
-                height: AppHeights.image,
-                width: double.infinity,
-                fit: BoxFit.cover,
-                fadeInDuration: Duration(milliseconds: 300),
-                fadeInCurve: Curves.easeInOut,
-                placeholder: (context, url) => _buildShimmerPlaceholder(),
-                errorWidget: (context, url, error) => Container(
-                  height: AppHeights.image,
-                  color: AppColors.lightgrey,
-                  child: const Icon(Icons.broken_image),
-                ),
-              ),
-            )
-          else
-            Container(
-              height: AppHeights.image,
-              decoration: BoxDecoration(
-                color: AppColors.grey,
-                borderRadius: BorderRadius.circular(AppRadius.image),
-              ),
-              child: const Center(child: Icon(Icons.image_not_supported)),
-            ),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(AppRadius.image),
+            child: _buildImageOrPlaceholder(event.imageUrl),
+          ),
           const SizedBox(height: AppHeights.reg),
-          Text(event.title, style: AppTextStyles.cardTitle),
+          Text(
+            event.title,
+            style: AppTextStyles.cardTitle,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
           const SizedBox(height: AppHeights.reg),
-          Row(
-            children: [
-              Icon(Icons.access_time, size: 16, color: AppColors.darkgrey),
-              const SizedBox(width: AppWidths.small),
-              Text(event.dateTime, style: AppTextStyles.small),
-            ],
-          ),
+          _metaRow(Icons.access_time, event.dateTime),
           const SizedBox(height: AppHeights.small),
-          Row(
-            children: [
-              Icon(Icons.location_on, size: 16, color: AppColors.darkgrey),
-              const SizedBox(width: AppWidths.small),
-              Expanded(
-                child: Text(event.location, style: AppTextStyles.small),
-              ),
-            ],
-          ),
+          _metaRow(Icons.location_on, event.location),
           const SizedBox(height: AppHeights.small),
-          Row(
-            children: [
-              Icon(Icons.group, size: 16, color: AppColors.darkgrey),
-              const SizedBox(width: AppWidths.small),
-              Text(event.targetGroup, style: AppTextStyles.small),
-            ],
-          ),
+          _metaRow(Icons.group, event.targetGroup),
           const SizedBox(height: AppHeights.small),
-          Row(
-            children: [
-              Icon(Icons.euro, size: 16, color: AppColors.darkgrey),
-              const SizedBox(width: AppWidths.small),
-              Text(event.cost.replaceAll('€', '').trim(),
-                  style: AppTextStyles.smallMuted),
-            ],
-          ),
+          _metaRow(Icons.euro, event.cost.replaceAll('€', '').trim(),
+              muted: true),
           const SizedBox(height: AppHeights.big),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
               IconButton(
+                tooltip: 'favorite'.tr(),
                 icon: Icon(
                   _favoriteTitles.contains(event.title)
                       ? Icons.favorite
                       : Icons.favorite_border,
-                  color: _favoriteTitles.contains(event.title)
-                      ? AppColors.red
-                      : AppColors.blackIcon,
                 ),
-                tooltip: 'Favorite',
+                color: _favoriteTitles.contains(event.title)
+                    ? AppColors.red
+                    : AppColors.blackIcon,
                 onPressed: () => _toggleFavorite(event.title),
               ),
               IconButton(
+                tooltip: 'share'.tr(),
                 icon: const Icon(Icons.share),
-                tooltip: 'Share Event',
                 onPressed: () => _shareEvent(event),
               ),
               IconButton(
+                tooltip: 'directions'.tr(),
                 icon: const Icon(Icons.directions),
-                tooltip: 'Open in Maps',
                 onPressed: () => _openDirections(context, event.location),
               ),
               if (event.url != null && event.url!.trim().isNotEmpty)
                 ElevatedButton.icon(
-                  onPressed: () async {
-                    final url = event.url!.trim();
-                    final uri = Uri.parse(url);
-                    if (await canLaunchUrl(uri)) {
-                      await launchUrl(uri,
-                          mode: LaunchMode.externalApplication);
-                    } else if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Could not open the enrolment page'),
-                        ),
-                      );
-                    }
-                  },
+                  onPressed: () => _openUrl(event.url!.trim()),
                   icon: const Icon(Icons.open_in_new),
                   label: Text('to_enroll'.tr()),
                   style: ElevatedButton.styleFrom(
@@ -331,96 +402,93 @@ class _AgendaScreenState extends State<AgendaScreen> {
     );
   }
 
-  @override
-  void dispose() {
-    _debounce?.cancel();
-    _searchController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: RefreshIndicator(
-        onRefresh: loadEvents,
-        child: CustomScrollView(
-          slivers: [
-            // --- Centered title ---
-            SliverAppBar(
-              pinned: true,
-              floating: false,
-              snap: false,
-              elevation: 0,
-              backgroundColor: AppColors.white,
-              foregroundColor: AppColors.black,
-              centerTitle: true,
-              title: Text('agenda'.tr()),
+  // --------------------------------------------
+  // Layout
+  // --------------------------------------------
+  Widget _buildScrollContent() {
+    return RefreshIndicator(
+      onRefresh: loadEvents,
+      child: CustomScrollView(
+        key: const PageStorageKey('agenda'),
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+        slivers: [
+          // Pinned header (headline + search + chips)
+          SliverPersistentHeader(
+            pinned: true,
+            delegate: _PinnedHeaderDelegate(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  PanelHeader('find_location_exercise'.tr()),
+                  Padding(
+                    padding: AppPaddings.symmHorizontalReg,
+                    child: _buildSearchField(),
+                  ),
+                  const SizedBox(height: AppHeights.reg),
+                  _buildFilterChipsRow(),
+                  const SizedBox(height: AppHeights.small),
+                ],
+              ),
             ),
+          ),
 
-            // --- Subtitle (non-pinned) ---
+          // Content
+          if (filteredEvents.isEmpty)
             SliverToBoxAdapter(
               child: Padding(
-                padding: AppPaddings.symmReg,
-                child: Text(
-                    'find_your_next_event_for_exercise'.tr(
-                      args: const [], // add key to your locales
-                    ),
-                    textAlign: TextAlign.left,
-                    style: AppTextStyles.headline),
-              ),
-            ),
-
-            // --- Pinned: search + filters
-            SliverPersistentHeader(
-              pinned: true,
-              delegate: _StickyHeaderDelegate(
-                child: Column(
-                  children: [
-                    Padding(
-                      padding: AppPaddings.symmHorizontalReg,
-                      child: TextField(
-                        controller: _searchController,
-                        decoration: InputDecoration(
-                          hintText: 'search_events'.tr(),
-                          filled: true,
-                          fillColor: AppColors.lightgrey,
-                          prefixIcon: const Icon(Icons.search),
-                          border: OutlineInputBorder(
-                            borderRadius:
-                                BorderRadius.circular(AppRadius.image),
-                            borderSide: BorderSide.none,
-                          ),
-                        ),
-                        onChanged: _onSearchChanged,
-                      ),
-                    ),
-                    const SizedBox(height: AppHeights.reg),
-                    _buildFilterChipsRow(),
-                  ],
-                ),
-              ),
-            ),
-
-            // --- List ---
-            if (filteredEvents.isEmpty)
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: AppPaddings.allSuperBig,
-                  child: Center(
-                    child:
-                        Text('no_events_found'.tr(), // add this key if needed
-                            textAlign: TextAlign.center,
-                            style: AppTextStyles.cardTitle),
+                padding: AppPaddings.allSuperBig,
+                child: Center(
+                  child: Text(
+                    'no_events_found'.tr(),
+                    textAlign: TextAlign.center,
+                    style: AppTextStyles.cardTitle,
                   ),
                 ),
-              )
-            else
-              SliverList(
+              ),
+            )
+          else
+            SliverPadding(
+              padding: AppPaddings.symmHorizontalReg,
+              sliver: SliverList(
                 delegate: SliverChildBuilderDelegate(
                   (context, index) => _buildEventCard(filteredEvents[index]),
                   childCount: filteredEvents.length,
                 ),
               ),
+            ),
+
+          const SliverToBoxAdapter(
+            child: SizedBox(height: AppHeights.reg),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('agenda'.tr()),
+      ),
+      body: Padding(
+        padding: AppPaddings.symmHorizontalReg,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Container(
+                decoration: BoxDecoration(
+                  color: AppColors.white,
+                  borderRadius: BorderRadius.circular(AppRadius.container),
+                  boxShadow: AppShadows.md,
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(AppRadius.container),
+                  child: _buildScrollContent(),
+                ),
+              ),
+            ),
           ],
         ),
       ),
@@ -428,26 +496,28 @@ class _AgendaScreenState extends State<AgendaScreen> {
   }
 }
 
-// Sticky header delegate
-class _StickyHeaderDelegate extends SliverPersistentHeaderDelegate {
+// --------------------------------------------
+// Same pinned header behavior as sport screen
+// --------------------------------------------
+class _PinnedHeaderDelegate extends SliverPersistentHeaderDelegate {
   final Widget child;
-  _StickyHeaderDelegate({required this.child});
+  _PinnedHeaderDelegate({required this.child});
+
+  @override
+  double get maxExtent => 200; // match sport screen
+  @override
+  double get minExtent => 200;
 
   @override
   Widget build(
       BuildContext context, double shrinkOffset, bool overlapsContent) {
     return Material(
       color: AppColors.white,
+      surfaceTintColor: Colors.transparent,
       elevation: overlapsContent ? 4 : 0,
       child: child,
     );
   }
-
-  // Height to fit search + chips; tweak if needed
-  @override
-  double get maxExtent => 120;
-  @override
-  double get minExtent => 120;
 
   @override
   bool shouldRebuild(covariant SliverPersistentHeaderDelegate oldDelegate) =>

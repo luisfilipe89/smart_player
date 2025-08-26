@@ -2,19 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:move_young/models/activity.dart';
-import 'package:move_young/widgets/activity_category_page.dart';
-import 'package:move_young/theme/tokens.dart';
-
-// sport screens
-import 'package:move_young/screens/activities/sports_screens/soccer.dart';
-import 'package:move_young/screens/activities/sports_screens/basketball.dart';
-import 'package:move_young/screens/activities/sports_screens/tennis.dart';
-import 'package:move_young/screens/activities/sports_screens/beachvolleyball.dart';
-import 'package:move_young/screens/activities/sports_screens/table_tennis.dart';
-import 'package:move_young/screens/activities/sports_screens/fitness.dart';
-import 'package:move_young/screens/activities/sports_screens/climbing.dart';
-import 'package:move_young/screens/activities/sports_screens/skateboard.dart';
-import 'package:move_young/screens/activities/sports_screens/bmx.dart';
+import 'package:move_young/widgets_sports/activity_category.dart';
+import 'package:move_young/theme/_theme.dart';
+import 'package:move_young/screens/activities/sports_screens/_sport_screens.dart';
 
 typedef ScreenBuilder = Widget Function();
 
@@ -200,18 +190,9 @@ class _ActivitiesScreenState extends State<ActivitiesScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(
-          'Activities'.tr(), // or keep literal "Activities"
-        ),
-        centerTitle: true,
-        backgroundColor: AppColors.white,
-        foregroundColor: AppColors.blackIcon,
-        elevation: 0,
-        systemOverlayStyle: SystemUiOverlayStyle.dark, // dark status bar icons
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new, size: 20),
-          onPressed: () => Navigator.pop(context),
-        ),
+        leadingWidth: 48,
+        leading: const AppBackButton(),
+        title: Text('activities'.tr()),
         actions: [
           IconButton(
             icon: const Icon(Icons.menu, size: 24),
@@ -228,119 +209,124 @@ class _ActivitiesScreenState extends State<ActivitiesScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const SizedBox(height: AppHeights.superbig),
-
-              // ✅ REMOVED the Row with the duplicate back arrow and menu
-
               Expanded(
                 child: Container(
-                  padding: AppPaddings.allBig,
                   decoration: BoxDecoration(
                     color: AppColors.white,
                     borderRadius: BorderRadius.circular(AppRadius.container),
                     boxShadow: AppShadows.md,
                   ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('find_your_activity'.tr(),
-                          style: AppTextStyles.headline),
-                      const SizedBox(height: AppHeights.huge),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(AppRadius.container),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        PanelHeader('find_your_activity'.tr()),
 
-                      // Category tabs
-                      GestureDetector(
-                        behavior: HitTestBehavior.translucent,
-                        onHorizontalDragStart: (_) => _dragDx = 0,
-                        onHorizontalDragUpdate: (d) => _dragDx += d.delta.dx,
-                        onHorizontalDragEnd: (_) {
-                          const threshold =
-                              48.0; // px; tweak to 32–64 as you like
-                          if (_dragDx <= -threshold) {
-                            _goToPage(selectedCategoryIndex +
-                                1); // swipe left -> next
-                          } else if (_dragDx >= threshold) {
-                            _goToPage(selectedCategoryIndex -
-                                1); // swipe right -> prev
-                          }
-                        },
-                        child: SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          physics: const BouncingScrollPhysics(),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: List.generate(categories.length, (index) {
-                              final isSelected = index == selectedCategoryIndex;
-                              return Padding(
-                                padding: AppPaddings.symmHorizontalMedium,
-                                child: Material(
-                                  color: Colors.transparent,
-                                  child: InkWell(
-                                    borderRadius: BorderRadius.circular(8),
-                                    onTap: () {
-                                      _prefetchImagesFor(
-                                          index); // optional: warms images
-                                      _goToPage(
-                                          index); // animation will trigger onPageChanged later
-                                    },
-                                    child: Padding(
-                                      padding: AppPaddings.symmSpecial,
-                                      child: Column(
-                                        children: [
-                                          Text(categories[index].tr(),
-                                              style: AppTextStyles.special),
-                                          AnimatedContainer(
-                                            duration: const Duration(
-                                                milliseconds: 180),
-                                            curve: Curves.easeInOut,
-                                            margin: AppPaddings.topSmall,
-                                            width:
-                                                isSelected ? AppWidths.huge : 0,
-                                            height:
-                                                3, // was 2 — thicker underline
-                                            color: isSelected
-                                                ? AppColors.blackIcon
-                                                : Colors.transparent,
+                        Padding(
+                          padding: AppPaddings.symmHorizontalReg,
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const SizedBox(height: AppHeights.superSmall),
+                              GestureDetector(
+                                behavior: HitTestBehavior.translucent,
+                                onHorizontalDragStart: (_) => _dragDx = 0,
+                                onHorizontalDragUpdate: (d) =>
+                                    _dragDx += d.delta.dx,
+                                onHorizontalDragEnd: (_) {
+                                  const threshold = 48.0;
+                                  if (_dragDx <= -threshold)
+                                    _goToPage(selectedCategoryIndex + 1);
+                                  if (_dragDx >= threshold)
+                                    _goToPage(selectedCategoryIndex - 1);
+                                },
+                                child: SingleChildScrollView(
+                                  scrollDirection: Axis.horizontal,
+                                  physics: const NeverScrollableScrollPhysics(),
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.start,
+                                    children: List.generate(categories.length,
+                                        (index) {
+                                      final isSelected =
+                                          index == selectedCategoryIndex;
+                                      return Padding(
+                                        padding:
+                                            AppPaddings.symmHorizontalMedium,
+                                        child: InkWell(
+                                          borderRadius:
+                                              BorderRadius.circular(8),
+                                          onTap: () {
+                                            _prefetchImagesFor(index);
+                                            _goToPage(index);
+                                          },
+                                          child: Padding(
+                                            padding: AppPaddings
+                                                .symmHorizontalMedium,
+                                            child: Column(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Text(
+                                                  categories[index].tr(),
+                                                  style: AppTextStyles.special,
+                                                ),
+                                                const SizedBox(height: 6),
+                                                AnimatedContainer(
+                                                  duration: const Duration(
+                                                      milliseconds: 180),
+                                                  curve: Curves.easeInOut,
+                                                  width: isSelected
+                                                      ? AppWidths.huge
+                                                      : 0,
+                                                  height: 3,
+                                                  color: isSelected
+                                                      ? AppColors.blackIcon
+                                                      : Colors.transparent,
+                                                ),
+                                              ],
+                                            ),
                                           ),
-                                        ],
-                                      ),
-                                    ),
+                                        ),
+                                      );
+                                    }),
                                   ),
                                 ),
-                              );
-                            }),
+                              ),
+                              const SizedBox(height: AppHeights.big),
+                            ],
                           ),
                         ),
-                      ),
-                      const SizedBox(height: AppHeights.big),
 
-                      // Pages
-                      Expanded(
-                        child: PageView.builder(
-                          controller: _pageController,
-                          allowImplicitScrolling: true,
-                          physics: pagePhysics,
-                          itemCount: categories.length,
-                          onPageChanged: (index) {
-                            setState(() => selectedCategoryIndex = index);
-                            _prefetchImagesFor(index); // current page
-                            _prefetchImagesFor(
-                                index - 1); // previous page (if exists)
-                            _prefetchImagesFor(index + 1);
-                          },
-                          itemBuilder: (context, pageIndex) {
-                            final key = categories[pageIndex];
-                            final pageActivities =
-                                activities[key] ?? const <Activity>[];
-
-                            return ActivityCategoryPage(
-                              key: PageStorageKey('cat_$key'),
-                              activities: pageActivities,
-                              onTapActivity: navigateToMenu,
-                            );
-                          },
+// Pages (same horizontal padding as tabs)
+                        Expanded(
+                          child: Padding(
+                            padding: AppPaddings.symmHorizontalReg,
+                            child: PageView.builder(
+                              controller: _pageController,
+                              allowImplicitScrolling: true,
+                              physics: pagePhysics,
+                              itemCount: categories.length,
+                              onPageChanged: (index) {
+                                setState(() => selectedCategoryIndex = index);
+                                _prefetchImagesFor(index);
+                                _prefetchImagesFor(index - 1);
+                                _prefetchImagesFor(index + 1);
+                              },
+                              itemBuilder: (context, pageIndex) {
+                                final key = categories[pageIndex];
+                                final pageActivities =
+                                    activities[key] ?? const <Activity>[];
+                                return ActivityCategoryPage(
+                                  key: PageStorageKey('cat_$key'),
+                                  activities: pageActivities,
+                                  onTapActivity: navigateToMenu,
+                                );
+                              },
+                            ),
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ),

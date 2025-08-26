@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:move_young/theme/tokens.dart';
 
 // where AppFonts lives
@@ -16,7 +17,16 @@ class AppTheme {
         elevation: 0,
         centerTitle: true,
         titleTextStyle: AppTextStyles.title,
-        iconTheme: IconThemeData(color: AppColors.blackIcon),
+        iconTheme: IconThemeData(color: AppColors.blackIcon, size: 20),
+        actionsIconTheme: IconThemeData(
+          color: AppColors.blackIcon,
+          size: 24,
+        ),
+        systemOverlayStyle: SystemUiOverlayStyle(
+          statusBarColor: AppColors.white, // ← force white
+          statusBarIconBrightness: Brightness.dark, // Android icons dark
+          statusBarBrightness: Brightness.light, // iOS status bar
+        ),
       ),
     );
 
@@ -29,8 +39,9 @@ class AppTheme {
         backgroundColor: chipBg,
         selectedColor: chipBg, // <- avoid Material default (pink)
         disabledColor: AppColors.lightgrey,
-        labelStyle: AppTextStyles.small,
-        secondaryLabelStyle: AppTextStyles.small,
+        labelStyle: AppTextStyles.small.copyWith(color: AppColors.blackText),
+        secondaryLabelStyle:
+            AppTextStyles.small.copyWith(color: AppColors.blackText),
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         shape: const StadiumBorder(), // outline is set per-chip in your screen
       ),

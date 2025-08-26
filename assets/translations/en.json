@@ -1,4 +1,5 @@
 {
+    "activities": "Activities",
     "agenda": "Agenda",
     "age_group": "Age Group",
     "artificial_turf": "Artificial",
@@ -23,7 +24,7 @@
     "failed_location": "Failed to get your location.",
     "find_location_exercise": "Find location for your exercise",
     "find_your_activity": "Find your activity",
-    "find_your_next_event_for_exercise": "Find your next event for exercise",
+    "find_your_next_sport_event": "Find your next sport event",
     "fitness": "Fitness",
     "fitness_stations": "Fitness Stations",
     "football_fields": "Football Fields",
