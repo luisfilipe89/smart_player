@@ -174,8 +174,8 @@ class _HomeScreenNewState extends State<HomeScreenNew> {
                             child: _HomeImageTile(
                               image:
                                   const AssetImage('assets/images/games2.jpg'),
-                              title: 'Book a Field',
-                              subtitle: 'Start a Game & Play',
+                              title: 'organize_a_game'.tr(),
+                              subtitle: 'start_a_game'.tr(),
                               onTap: () {
                                 HapticFeedback.lightImpact();
                                 // TODO: navigate
@@ -186,11 +186,12 @@ class _HomeScreenNewState extends State<HomeScreenNew> {
                         const SizedBox(width: AppWidths.regular),
                         Expanded(
                           child: SizedBox(
-                            height: 140,
-                            child: _HomeQuickTile(
-                              title: 'Basketball courts',
-                              subtitle: 'Hoops near you',
-                              icon: Icons.sports_basketball,
+                            height: 168,
+                            child: _HomeImageTile(
+                              image:
+                                  const AssetImage('assets/images/games3.jpg'),
+                              title: 'join_a_game'.tr(),
+                              subtitle: 'choose_a_game'.tr(),
                               onTap: () {
                                 HapticFeedback.lightImpact();
                                 // TODO: navigate
