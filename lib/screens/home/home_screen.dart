@@ -94,7 +94,7 @@ class _HomeScreenNewState extends State<HomeScreenNew> {
         child: RefreshIndicator(
           onRefresh: _fetch,
           child: ListView(
-            physics: const AlwaysScrollableScrollPhysics(),
+            physics: const NeverScrollableScrollPhysics(),
             padding: AppPaddings.symmHorizontalReg.copyWith(
               bottom: kBottomNavigationBarHeight +
                   MediaQuery.of(context).padding.bottom +
@@ -108,12 +108,12 @@ class _HomeScreenNewState extends State<HomeScreenNew> {
                   borderRadius: BorderRadius.circular(AppRadius.container),
                   boxShadow: AppShadows.md,
                 ),
-                padding: AppPaddings.allBig,
+                padding: AppPaddings.allBig.copyWith(top: 0),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('hello'.tr(), style: AppTextStyles.headline),
-                    const SizedBox(height: AppHeights.big),
+                    Text('hello'.tr(), style: AppTextStyles.title),
+                    const SizedBox(height: AppHeights.small),
 
                     // --- Activities card (ripple + haptic) ---
                     Container(
@@ -145,15 +145,15 @@ class _HomeScreenNewState extends State<HomeScreenNew> {
                                 fit: BoxFit.cover,
                               ),
                               Padding(
-                                padding: AppPaddings.allMedium,
+                                padding: AppPaddings.allSmall,
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text('check_for_fields'.tr(),
-                                        style: AppTextStyles.cardTitle),
+                                        style: AppTextStyles.smallCardTitle),
                                     const SizedBox(height: 1),
                                     Text('look_for_fields'.tr(),
-                                        style: AppTextStyles.body),
+                                        style: AppTextStyles.small),
                                   ],
                                 ),
                               ),
@@ -215,7 +215,7 @@ class _HomeScreenNewState extends State<HomeScreenNew> {
                         children: [
                           // Header with See all
                           Padding(
-                            padding: AppPaddings.allMedium,
+                            padding: AppPaddings.allSmall,
                             child: Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -224,10 +224,11 @@ class _HomeScreenNewState extends State<HomeScreenNew> {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text('upcoming_events'.tr(),
-                                        style: AppTextStyles.cardTitle),
-                                    const SizedBox(height: AppHeights.small),
+                                        style: AppTextStyles.smallCardTitle),
+                                    const SizedBox(
+                                        height: AppHeights.superSmall),
                                     Text('join_sports_event'.tr(),
-                                        style: AppTextStyles.body),
+                                        style: AppTextStyles.small),
                                   ],
                                 ),
                                 if (_state == _LoadState.success &&
@@ -308,115 +309,121 @@ class _HomeScreenNewState extends State<HomeScreenNew> {
                                       );
                                     }
 
-                                    // ✅ No nested scroll: expand inside page
-                                    return ListView.separated(
-                                      shrinkWrap: true,
-                                      physics:
-                                          const NeverScrollableScrollPhysics(),
-                                      padding: const EdgeInsets.only(bottom: 8),
-                                      itemCount: events.length,
-                                      separatorBuilder: (_, __) =>
-                                          const Padding(
+                                    // Scrollable inner list within fixed-height viewport
+                                    return SizedBox(
+                                      height: 220,
+                                      child: ListView.separated(
+                                        primary: false,
+                                        physics: const BouncingScrollPhysics(),
                                         padding:
-                                            AppPaddings.symmHorizontalMedium,
-                                        child: Divider(
-                                            height: 1, color: AppColors.grey),
-                                      ),
-                                      itemBuilder: (context, index) {
-                                        final e = events[index];
-                                        return ListTile(
-                                          contentPadding:
+                                            const EdgeInsets.only(bottom: 8),
+                                        itemCount: events.length,
+                                        separatorBuilder: (_, __) =>
+                                            const Padding(
+                                          padding:
                                               AppPaddings.symmHorizontalMedium,
-                                          leading: const Icon(Icons.event),
-                                          title: Text(
-                                            e.title,
-                                            style: AppTextStyles.cardTitle,
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                          subtitle: Padding(
-                                            padding: AppPaddings.topSuperSmall,
-                                            child: Column(
-                                              crossAxisAlignment:
-                                                  CrossAxisAlignment.start,
-                                              children: [
-                                                Row(children: [
-                                                  const Icon(Icons.access_time,
-                                                      size: 14,
-                                                      color: AppColors.grey),
-                                                  const SizedBox(
-                                                      width: AppWidths.small),
-                                                  Expanded(
-                                                    child: Text(
-                                                      e.dateTime,
-                                                      style:
-                                                          AppTextStyles.small,
-                                                      maxLines: 1,
-                                                      overflow:
-                                                          TextOverflow.ellipsis,
-                                                    ),
-                                                  ),
-                                                ]),
-                                                Row(children: [
-                                                  const Icon(Icons.group,
-                                                      size: 14,
-                                                      color: AppColors.grey),
-                                                  const SizedBox(
-                                                      width: AppWidths.small),
-                                                  Expanded(
-                                                    child: Text(
-                                                      e.targetGroup,
-                                                      style:
-                                                          AppTextStyles.small,
-                                                      maxLines: 1,
-                                                      overflow:
-                                                          TextOverflow.ellipsis,
-                                                    ),
-                                                  ),
-                                                ]),
-                                                Row(children: [
-                                                  const Icon(Icons.location_on,
-                                                      size: 14,
-                                                      color: AppColors.grey),
-                                                  const SizedBox(
-                                                      width: AppWidths.small),
-                                                  Expanded(
-                                                    child: Text(
-                                                      e.location,
-                                                      style:
-                                                          AppTextStyles.small,
-                                                      maxLines: 1,
-                                                      overflow:
-                                                          TextOverflow.ellipsis,
-                                                    ),
-                                                  ),
-                                                ]),
-                                                Row(children: [
-                                                  const Icon(Icons.euro,
-                                                      size: 14,
-                                                      color: AppColors.grey),
-                                                  const SizedBox(
-                                                      width: AppWidths.small),
-                                                  Expanded(
-                                                    child: Text(
-                                                      e.cost,
-                                                      style: AppTextStyles
-                                                          .smallMuted,
-                                                      maxLines: 1,
-                                                      overflow:
-                                                          TextOverflow.ellipsis,
-                                                    ),
-                                                  ),
-                                                ]),
-                                              ],
+                                          child: Divider(
+                                              height: 1, color: AppColors.grey),
+                                        ),
+                                        itemBuilder: (context, index) {
+                                          final e = events[index];
+                                          return ListTile(
+                                            contentPadding: AppPaddings
+                                                .symmHorizontalMedium,
+                                            leading: const Icon(Icons.event),
+                                            title: Text(
+                                              e.title,
+                                              style: AppTextStyles.cardTitle,
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
                                             ),
-                                          ),
-                                          trailing:
-                                              const Icon(Icons.chevron_right),
-                                          onTap: () =>
-                                              HapticFeedback.selectionClick(),
-                                        );
-                                      },
+                                            subtitle: Padding(
+                                              padding:
+                                                  AppPaddings.topSuperSmall,
+                                              child: Column(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.start,
+                                                children: [
+                                                  Row(children: [
+                                                    const Icon(
+                                                        Icons.access_time,
+                                                        size: 14,
+                                                        color: AppColors.grey),
+                                                    const SizedBox(
+                                                        width: AppWidths.small),
+                                                    Expanded(
+                                                      child: Text(
+                                                        e.dateTime,
+                                                        style:
+                                                            AppTextStyles.small,
+                                                        maxLines: 1,
+                                                        overflow: TextOverflow
+                                                            .ellipsis,
+                                                      ),
+                                                    ),
+                                                  ]),
+                                                  Row(children: [
+                                                    const Icon(Icons.group,
+                                                        size: 14,
+                                                        color: AppColors.grey),
+                                                    const SizedBox(
+                                                        width: AppWidths.small),
+                                                    Expanded(
+                                                      child: Text(
+                                                        e.targetGroup,
+                                                        style:
+                                                            AppTextStyles.small,
+                                                        maxLines: 1,
+                                                        overflow: TextOverflow
+                                                            .ellipsis,
+                                                      ),
+                                                    ),
+                                                  ]),
+                                                  Row(children: [
+                                                    const Icon(
+                                                        Icons.location_on,
+                                                        size: 14,
+                                                        color: AppColors.grey),
+                                                    const SizedBox(
+                                                        width: AppWidths.small),
+                                                    Expanded(
+                                                      child: Text(
+                                                        e.location,
+                                                        style:
+                                                            AppTextStyles.small,
+                                                        maxLines: 1,
+                                                        overflow: TextOverflow
+                                                            .ellipsis,
+                                                      ),
+                                                    ),
+                                                  ]),
+                                                  Row(children: [
+                                                    const Icon(Icons.euro,
+                                                        size: 14,
+                                                        color: AppColors.grey),
+                                                    const SizedBox(
+                                                        width: AppWidths.small),
+                                                    Expanded(
+                                                      child: Text(
+                                                        e.cost,
+                                                        style: AppTextStyles
+                                                            .smallMuted,
+                                                        maxLines: 1,
+                                                        overflow: TextOverflow
+                                                            .ellipsis,
+                                                      ),
+                                                    ),
+                                                  ]),
+                                                ],
+                                              ),
+                                            ),
+                                            trailing:
+                                                const Icon(Icons.chevron_right),
+                                            onTap: () =>
+                                                HapticFeedback.selectionClick(),
+                                          );
+                                        },
+                                      ),
                                     );
                                 }
                               },

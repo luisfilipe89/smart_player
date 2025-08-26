@@ -111,17 +111,17 @@ class MainScaffoldState extends State<MainScaffold> {
           ],
         ),
         bottomNavigationBar: SafeArea(
-          child:_BottomBar(
-          currentIndex: _currentIndex,
-          onTap: (index) {
-            if (index == _currentIndex) {
-              _popToRoot(index);
-            } else {
-              setState(() => _currentIndex = index);
-            }
-          },
+          child: _BottomBar(
+            currentIndex: _currentIndex,
+            onTap: (index) {
+              if (index == _currentIndex) {
+                _popToRoot(index);
+              } else {
+                setState(() => _currentIndex = index);
+              }
+            },
+          ),
         ),
-      ),
       ),
     );
   }
