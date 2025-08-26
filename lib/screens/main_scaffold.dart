@@ -110,7 +110,8 @@ class MainScaffoldState extends State<MainScaffold> {
                 child: _WalletFlow(navigatorKey: _walletKey)),
           ],
         ),
-        bottomNavigationBar: _BottomBar(
+        bottomNavigationBar: SafeArea(
+          child:_BottomBar(
           currentIndex: _currentIndex,
           onTap: (index) {
             if (index == _currentIndex) {
@@ -120,6 +121,7 @@ class MainScaffoldState extends State<MainScaffold> {
             }
           },
         ),
+      ),
       ),
     );
   }

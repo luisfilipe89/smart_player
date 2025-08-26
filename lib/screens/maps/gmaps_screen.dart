@@ -199,7 +199,7 @@ class _GenericMapScreenState extends State<GenericMapScreen> {
                         padding: AppPaddings.symmSuperSmall,
                         child: const Text(
                           '© OpenStreetMap contributors (ODbL)',
-                          style: AppTextStyles.supersmall,
+                          style: AppTextStyles.superSmall,
                         ),
                       ),
                     ),

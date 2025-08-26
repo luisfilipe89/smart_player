@@ -419,7 +419,7 @@ class _AgendaScreenState extends State<AgendaScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  PanelHeader('find_location_exercise'.tr()),
+                  PanelHeader('find_your_next_sport_event'.tr()),
                   Padding(
                     padding: AppPaddings.symmHorizontalReg,
                     child: _buildSearchField(),

@@ -142,8 +142,14 @@ class AppTextStyles {
     color: AppColors.blackText,
   );
 
-  static const cardTitleMuted = TextStyle(
-      fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.grey);
+ 
+  static const smallCardTitle = TextStyle(
+    fontFamily: 'Roboto',
+    fontSize: 15,
+    fontWeight: FontWeight.w600,
+    letterSpacing: 0.15,
+    color: AppColors.blackText,
+  );
 
   static const body = TextStyle(
     fontSize: 14,
@@ -156,7 +162,10 @@ class AppTextStyles {
     fontSize: 13,
   );
   static const smallMuted = TextStyle(fontSize: 13, color: AppColors.grey);
-  static const supersmall = TextStyle(
+  static const superSmall = TextStyle(
     fontSize: 10,
+  );
+  static const incrediblySmall = TextStyle(
+    fontSize: 9,
   );
 }

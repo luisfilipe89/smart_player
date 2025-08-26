@@ -236,10 +236,12 @@ class _ActivitiesScreenState extends State<ActivitiesScreen> {
                                     _dragDx += d.delta.dx,
                                 onHorizontalDragEnd: (_) {
                                   const threshold = 48.0;
-                                  if (_dragDx <= -threshold)
+                                  if (_dragDx <= -threshold) {
                                     _goToPage(selectedCategoryIndex + 1);
-                                  if (_dragDx >= threshold)
+                                  }
+                                  if (_dragDx >= threshold) {
                                     _goToPage(selectedCategoryIndex - 1);
+                                  }
                                 },
                                 child: SingleChildScrollView(
                                   scrollDirection: Axis.horizontal,
