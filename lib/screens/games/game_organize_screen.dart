@@ -108,6 +108,9 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
   Future<void> _loadWeather() async {
     if (_selectedDate == null) return;
 
+    print(
+        '🌤️ Loading weather for date: ${_selectedDate!.toIso8601String().split('T')[0]}');
+
     try {
       // Use a default location for 's-Hertogenbosch
       final weatherData = await WeatherService.fetchWeatherForDate(
@@ -116,10 +119,12 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
         longitude: 5.3037,
       );
 
+      print('🌤️ Weather data received: ${weatherData.length} hours');
       setState(() {
         _weatherData = weatherData;
       });
     } catch (e) {
+      print('🌤️ Weather loading error: $e');
       // Set default weather data on error
       setState(() {
         _weatherData = {};
@@ -237,7 +242,7 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('game_creation_failed'.tr() + ': $e'),
+            content: Text('${'game_creation_failed'.tr()}: $e'),
             backgroundColor: AppColors.red,
             duration: const Duration(seconds: 5),
           ),
@@ -719,12 +724,18 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
                   itemBuilder: (context, index) {
                     final time = _availableTimes[index];
                     final isSelected = _selectedTime == time;
+                    // Only show weather if data is available
+                    final hasWeatherData = _weatherData.isNotEmpty;
                     final weatherCondition =
-                        _weatherData[time] ?? WeatherService.sunny;
-                    final weatherIcon = WeatherService.getWeatherIcon(time);
-                    final weatherColor = WeatherService.getWeatherColor(
-                      weatherCondition,
-                    );
+                        hasWeatherData ? _weatherData[time] : null;
+                    final weatherIcon = hasWeatherData &&
+                            weatherCondition != null
+                        ? WeatherService.getWeatherIcon(time, weatherCondition)
+                        : null;
+                    final weatherColor =
+                        hasWeatherData && weatherCondition != null
+                            ? WeatherService.getWeatherColor(weatherCondition)
+                            : null;
 
                     return Padding(
                       padding: EdgeInsets.only(
@@ -734,18 +745,24 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
                       ),
                       child: Column(
                         children: [
-                          // Weather Icon
-                          Container(
-                            width: 80,
-                            height: 30,
-                            child: Center(
-                              child: Icon(
-                                weatherIcon,
-                                color: weatherColor,
-                                size: 20,
+                          // Weather Icon (only show if weather data is available)
+                          if (hasWeatherData && weatherIcon != null)
+                            SizedBox(
+                              width: 80,
+                              height: 30,
+                              child: Center(
+                                child: Icon(
+                                  weatherIcon,
+                                  color: weatherColor,
+                                  size: 20,
+                                ),
                               ),
+                            )
+                          else
+                            const SizedBox(
+                              width: 80,
+                              height: 30,
                             ),
-                          ),
                           const SizedBox(height: 5),
                           // Time Card
                           _buildTimeCard(

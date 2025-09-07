@@ -85,28 +85,34 @@ class _GamesDiscoveryScreenState extends State<GamesDiscoveryScreen> {
 
       if (success) {
         HapticFeedback.lightImpact();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Successfully joined the game!'),
-            backgroundColor: AppColors.green,
-          ),
-        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Successfully joined the game!'),
+              backgroundColor: AppColors.green,
+            ),
+          );
+        }
         _loadGames(); // Refresh the list
       } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Failed to join game. Game might be full.'),
+              backgroundColor: AppColors.red,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to join game. Game might be full.'),
+            content: Text('Error joining game'),
             backgroundColor: AppColors.red,
           ),
         );
       }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error joining game'),
-          backgroundColor: AppColors.red,
-        ),
-      );
     }
   }
 
@@ -284,7 +290,7 @@ class _GamesDiscoveryScreenState extends State<GamesDiscoveryScreen> {
                           style: AppTextStyles.cardTitle,
                         ),
                         Text(
-                          game.formattedDate + ' at ' + game.formattedTime,
+                          '${game.formattedDate} at ${game.formattedTime}',
                           style: AppTextStyles.body.copyWith(
                             color: AppColors.grey,
                           ),
