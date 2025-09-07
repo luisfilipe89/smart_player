@@ -42,8 +42,12 @@ class _AuthScreenState extends State<AuthScreen> {
           _emailController.text.trim(),
           _passwordController.text,
         );
+
         // Update display name
         await AuthService.updateDisplayName(_nameController.text.trim());
+
+        // Small delay to ensure display name is updated
+        await Future.delayed(const Duration(milliseconds: 500));
       }
 
       if (mounted) {
@@ -78,8 +82,13 @@ class _AuthScreenState extends State<AuthScreen> {
         ),
       ),
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(AppSpacing.lg),
+        child: SingleChildScrollView(
+          padding: EdgeInsets.only(
+            left: AppSpacing.lg,
+            right: AppSpacing.lg,
+            top: AppSpacing.lg,
+            bottom: AppSpacing.lg + MediaQuery.of(context).viewInsets.bottom,
+          ),
           child: Form(
             key: _formKey,
             child: Column(
@@ -215,6 +224,7 @@ class _AuthScreenState extends State<AuthScreen> {
                     ),
                   ),
                 ),
+                const SizedBox(height: AppSpacing.xl), // Extra space at bottom
               ],
             ),
           ),

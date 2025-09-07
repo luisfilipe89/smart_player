@@ -760,8 +760,8 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
                           const SizedBox(height: AppHeights.huge),
                         ],
 
-                        // Date Selection Section (only show if sport is selected)
-                        if (_selectedSport != null) ...[
+                        // Date Selection Section (only show if field is selected)
+                        if (_selectedField != null) ...[
                           Text('Choose a Date',
                               style: AppTextStyles.title
                                   .copyWith(fontWeight: FontWeight.w300)),

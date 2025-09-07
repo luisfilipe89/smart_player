@@ -14,8 +14,20 @@ class AuthService {
   static String? get currentUserId => _auth.currentUser?.uid;
 
   // Get current user display name
-  static String get currentUserDisplayName =>
-      _auth.currentUser?.displayName ?? 'Anonymous User';
+  static String get currentUserDisplayName {
+    final user = _auth.currentUser;
+    if (user == null) return 'Anonymous User';
+
+    // If display name is null or empty, try to get email prefix
+    if (user.displayName == null || user.displayName!.isEmpty) {
+      if (user.email != null && user.email!.isNotEmpty) {
+        return user.email!.split('@')[0];
+      }
+      return 'User';
+    }
+
+    return user.displayName!;
+  }
 
   // Sign in anonymously
   static Future<UserCredential?> signInAnonymously() async {
@@ -41,7 +53,7 @@ class AuthService {
   }
 
   // Sign in with email and password
-  static Future<UserCredential?> signInWithEmailAndPassword(
+  static Future<UserCredential> signInWithEmailAndPassword(
     String email,
     String password,
   ) async {
@@ -53,19 +65,19 @@ class AuthService {
       // Signed in with email successfully
       return userCredential;
     } catch (e) {
-      // Error signing in with email
-      return null;
+      // Re-throw the error with more context
+      throw Exception('Sign in failed: ${e.toString()}');
     }
   }
 
   // Alias for signInWithEmailAndPassword
-  static Future<UserCredential?> signInWithEmail(
+  static Future<UserCredential> signInWithEmail(
       String email, String password) async {
     return signInWithEmailAndPassword(email, password);
   }
 
   // Create account with email and password
-  static Future<UserCredential?> createUserWithEmailAndPassword(
+  static Future<UserCredential> createUserWithEmailAndPassword(
     String email,
     String password,
     String displayName,
@@ -83,13 +95,13 @@ class AuthService {
       // Created account with email successfully
       return userCredential;
     } catch (e) {
-      // Error creating account
-      return null;
+      // Re-throw the error with more context
+      throw Exception('Account creation failed: ${e.toString()}');
     }
   }
 
   // Alias for createUserWithEmailAndPassword (without displayName)
-  static Future<UserCredential?> registerWithEmail(
+  static Future<UserCredential> registerWithEmail(
       String email, String password) async {
     return createUserWithEmailAndPassword(email, password, '');
   }
@@ -131,10 +143,16 @@ class AuthService {
   // Update display name
   static Future<void> updateDisplayName(String displayName) async {
     try {
-      await _auth.currentUser?.updateDisplayName(displayName);
-      await _auth.currentUser?.reload();
-      // Display name updated successfully
+      final user = _auth.currentUser;
+      if (user != null && displayName.isNotEmpty) {
+        await user.updateDisplayName(displayName);
+        await user.reload();
+        // Force refresh the user data
+        await user.getIdToken(true);
+        // Display name updated successfully
+      }
     } catch (e) {
+      print('Error updating display name: $e');
       // Error updating display name
     }
   }

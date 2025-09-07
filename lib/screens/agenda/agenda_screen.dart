@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:move_young/models/event_model.dart';
 import 'package:move_young/services/load_events_from_json.dart';
 import 'package:move_young/theme/_theme.dart';
