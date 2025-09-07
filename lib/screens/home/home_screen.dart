@@ -72,10 +72,8 @@ class _HomeScreenNewState extends State<HomeScreenNew> {
             elevation: 0,
             leading: IconButton(
               icon: Icon(
-                AuthService.isSignedIn ? Icons.menu : Icons.person_outline,
-                color: AuthService.isSignedIn
-                    ? AppColors.blackIcon
-                    : AppColors.primary,
+                Icons.account_circle_outlined,
+                color: AppColors.blackIcon,
               ),
               onPressed: () => _showUserMenu(context),
             ),
@@ -102,6 +100,16 @@ class _HomeScreenNewState extends State<HomeScreenNew> {
               ),
             ],
           ),
+          floatingActionButton: !AuthService.isSignedIn
+              ? FloatingActionButton(
+                  onPressed: () => _showUserBottomSheet(context),
+                  backgroundColor: AppColors.primary,
+                  child: const Icon(
+                    Icons.person_add,
+                    color: Colors.white,
+                  ),
+                )
+              : null,
           body: SafeArea(
             top: false, // AppBar covers the top inset already
             child: RefreshIndicator(
@@ -127,8 +135,10 @@ class _HomeScreenNewState extends State<HomeScreenNew> {
                       children: [
                         Text(
                           AuthService.isSignedIn
-                              ? 'Hello ${AuthService.currentUserDisplayName}!'
-                              : 'Hello User!',
+                              ? 'hello_name'.tr(namedArgs: {
+                                  'name': AuthService.currentUserDisplayName,
+                                })
+                              : 'hello_generic'.tr(),
                           style: AppTextStyles.title,
                         ),
                         const SizedBox(height: AppHeights.small),
@@ -495,288 +505,277 @@ class _HomeScreenNewState extends State<HomeScreenNew> {
   }
 
   void _showUserMenu(BuildContext context) {
-    if (AuthService.isSignedIn) {
-      // Show slide-in drawer for authenticated users
-      _showAuthenticatedDrawer(context);
-    } else {
-      // Show bottom sheet for anonymous users
-      _showAnonymousBottomSheet(context);
-    }
+    // Always use bottom sheet for consistency and better UX
+    _showUserBottomSheet(context);
   }
 
-  void _showAuthenticatedDrawer(BuildContext context) {
-    showGeneralDialog(
-      context: context,
-      barrierDismissible: true,
-      barrierLabel: '',
-      transitionDuration: const Duration(milliseconds: 300),
-      pageBuilder: (context, animation, secondaryAnimation) {
-        return const SizedBox.shrink();
-      },
-      transitionBuilder: (context, animation, secondaryAnimation, child) {
-        final screenWidth = MediaQuery.of(context).size.width;
-        final drawerWidth =
-            screenWidth * 0.6; // 60% of screen width to match image
-
-        return SlideTransition(
-          position: Tween<Offset>(
-            begin: const Offset(-1.0, 0.0),
-            end: Offset.zero,
-          ).animate(CurvedAnimation(
-            parent: animation,
-            curve: Curves.easeOut,
-          )),
-          child: Align(
-            alignment: Alignment.centerLeft,
-            child: Container(
-              width: drawerWidth,
-              height: double.infinity,
-              decoration: BoxDecoration(
-                color: AppColors.white,
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.2),
-                    blurRadius: 10,
-                    offset: const Offset(2, 0),
-                  ),
-                ],
-              ),
-              child: Column(
-                children: [
-                  // Content
-                  Expanded(
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 50, 16, 16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          // User info section
-                          if (AuthService.isSignedIn) ...[
-                            Padding(
-                              padding: const EdgeInsets.only(bottom: 24),
-                              child: CircleAvatar(
-                                radius: 18,
-                                backgroundColor: Colors.transparent,
-                                child: Container(
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    border: Border.all(
-                                      color: AppColors.grey,
-                                      width: 1.5,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ] else ...[
-                            // Anonymous user section
-                            Padding(
-                              padding: const EdgeInsets.only(bottom: 24),
-                              child: Row(
-                                children: [
-                                  Text(
-                                    'Guest User',
-                                    style: AppTextStyles.h3.copyWith(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 16),
-                                  CircleAvatar(
-                                    radius: 18,
-                                    backgroundColor: Colors.transparent,
-                                    child: Container(
-                                      decoration: BoxDecoration(
-                                        shape: BoxShape.circle,
-                                        border: Border.all(
-                                          color: AppColors.grey,
-                                          width: 1.5,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-
-                          // Menu options
-                          if (AuthService.isSignedIn) ...[
-                            // Signed in user options
-                            _buildMenuButton(
-                              icon: Icons.settings,
-                              label: 'Profile Settings',
-                              onTap: () {
-                                Navigator.of(context).pop();
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content:
-                                        Text('Profile settings coming soon!'),
-                                    backgroundColor: AppColors.primary,
-                                  ),
-                                );
-                              },
-                            ),
-                            const SizedBox(height: 12),
-                            _buildMenuButton(
-                              icon: Icons.logout,
-                              label: 'Sign Out',
-                              onTap: () async {
-                                Navigator.of(context).pop();
-                                await AuthService.signOut();
-                                if (context.mounted) {
-                                  Navigator.of(context).pushAndRemoveUntil(
-                                    MaterialPageRoute(
-                                      builder: (context) =>
-                                          const WelcomeScreen(),
-                                    ),
-                                    (route) => false,
-                                  );
-                                }
-                              },
-                              isDestructive: true,
-                            ),
-                          ] else ...[
-                            // Anonymous user options
-                            _buildMenuButton(
-                              icon: Icons.login,
-                              label: 'Sign In',
-                              onTap: () async {
-                                Navigator.of(context).pop();
-                                final result = await Navigator.of(context).push(
-                                  MaterialPageRoute(
-                                    builder: (context) => const AuthScreen(),
-                                  ),
-                                );
-                                if (result == true && context.mounted) {
-                                  setState(() {}); // Refresh the UI
-                                }
-                              },
-                            ),
-                            const SizedBox(height: 12),
-                            _buildMenuButton(
-                              icon: Icons.person_add,
-                              label: 'Create Account',
-                              onTap: () async {
-                                Navigator.of(context).pop();
-                                final result = await Navigator.of(context).push(
-                                  MaterialPageRoute(
-                                    builder: (context) => const AuthScreen(),
-                                  ),
-                                );
-                                if (result == true && context.mounted) {
-                                  setState(() {}); // Refresh the UI
-                                }
-                              },
-                              isSecondary: true,
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  void _showAnonymousBottomSheet(BuildContext context) {
+  void _showUserBottomSheet(BuildContext context) {
     showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
       builder: (context) => Container(
-        padding: const EdgeInsets.all(AppSpacing.lg),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Anonymous user section
-            Row(
-              children: [
-                CircleAvatar(
-                  backgroundColor: AppColors.grey,
-                  child: const Icon(
-                    Icons.person_outline,
-                    color: Colors.white,
-                  ),
+        decoration: const BoxDecoration(
+          color: AppColors.white,
+          borderRadius: BorderRadius.only(
+            topLeft: Radius.circular(20),
+            topRight: Radius.circular(20),
+          ),
+        ),
+        child: SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Handle bar
+              Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.symmetric(vertical: 12),
+                decoration: BoxDecoration(
+                  color: AppColors.grey.withOpacity(0.3),
+                  borderRadius: BorderRadius.circular(2),
                 ),
-                const SizedBox(width: AppSpacing.md),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+              ),
+
+              // User Header
+              if (AuthService.isSignedIn) ...[
+                Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                  child: Row(
                     children: [
-                      Text(
-                        'Guest User',
-                        style: AppTextStyles.h3,
+                      CircleAvatar(
+                        radius: 24,
+                        backgroundColor: AppColors.primary,
+                        child: Text(
+                          AuthService.currentUserDisplayName.isNotEmpty
+                              ? AuthService.currentUserDisplayName[0]
+                                  .toUpperCase()
+                              : 'U',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 20,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
                       ),
-                      Text(
-                        'Sign in to sync your data',
-                        style: AppTextStyles.body.copyWith(
-                          color: AppColors.grey,
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              AuthService.currentUserDisplayName.isNotEmpty
+                                  ? AuthService.currentUserDisplayName
+                                  : 'User',
+                              style: AppTextStyles.h3.copyWith(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.blackText,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              AuthService.currentUser?.email?.isNotEmpty == true
+                                  ? AuthService.currentUser!.email!
+                                  : 'user@example.com',
+                              style: AppTextStyles.body.copyWith(
+                                color: AppColors.grey,
+                                fontSize: 14,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
                         ),
                       ),
                     ],
                   ),
                 ),
+                const Divider(height: 1, color: AppColors.lightgrey),
+              ] else ...[
+                // Anonymous user header
+                Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                  child: Row(
+                    children: [
+                      CircleAvatar(
+                        backgroundColor: AppColors.grey,
+                        child: const Icon(
+                          Icons.person_outline,
+                          color: Colors.white,
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'guest_user'.tr(),
+                              style: AppTextStyles.h3.copyWith(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.blackText,
+                              ),
+                            ),
+                            Text(
+                              'guest_prompt'.tr(),
+                              style: AppTextStyles.body.copyWith(
+                                color: AppColors.grey,
+                                fontSize: 14,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const Divider(height: 1, color: AppColors.lightgrey),
               ],
-            ),
-            const SizedBox(height: AppSpacing.lg),
 
-            // Anonymous user options
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: () async {
-                  Navigator.of(context).pop();
-                  final result = await Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (context) => const AuthScreen(),
-                    ),
-                  );
-                  if (result == true && context.mounted) {
-                    setState(() {}); // Refresh the UI
-                  }
-                },
-                icon: const Icon(Icons.login),
-                label: const Text('Sign In'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  foregroundColor: Colors.white,
+              // Menu Items
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Column(
+                  children: [
+                    if (AuthService.isSignedIn) ...[
+                      // Authenticated user menu
+                      _buildBottomSheetButton(
+                        icon: Icons.person_2_outlined,
+                        label: 'profile'.tr(),
+                        onTap: () {
+                          Navigator.of(context).pop();
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('profile_coming_soon'.tr()),
+                              backgroundColor: AppColors.primary,
+                            ),
+                          );
+                        },
+                      ),
+                      _buildBottomSheetButton(
+                        icon: Icons.people_outline,
+                        label: 'friends'.tr(),
+                        onTap: () {
+                          Navigator.of(context).pop();
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('friends_coming_soon'.tr()),
+                              backgroundColor: AppColors.primary,
+                            ),
+                          );
+                        },
+                      ),
+                      _buildBottomSheetButton(
+                        icon: Icons.favorite_outline,
+                        label: 'favorites'.tr(),
+                        onTap: () {
+                          Navigator.of(context).pop();
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('favorites_coming_soon'.tr()),
+                              backgroundColor: AppColors.primary,
+                            ),
+                          );
+                        },
+                      ),
+                      _buildBottomSheetButton(
+                        icon: Icons.settings_outlined,
+                        label: 'settings'.tr(),
+                        onTap: () {
+                          Navigator.of(context).pop();
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('settings_coming_soon'.tr()),
+                              backgroundColor: AppColors.primary,
+                            ),
+                          );
+                        },
+                      ),
+                      _buildBottomSheetButton(
+                        icon: Icons.help_outline_rounded,
+                        label: 'help'.tr(),
+                        onTap: () {
+                          Navigator.of(context).pop();
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('help_coming_soon'.tr()),
+                              backgroundColor: AppColors.primary,
+                            ),
+                          );
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      _buildBottomSheetButton(
+                        icon: Icons.logout_rounded,
+                        label: 'sign_out'.tr(),
+                        onTap: () async {
+                          Navigator.of(context).pop();
+                          await AuthService.signOut();
+                          if (context.mounted) {
+                            Navigator.of(context).pushAndRemoveUntil(
+                              MaterialPageRoute(
+                                builder: (context) => const WelcomeScreen(),
+                              ),
+                              (route) => false,
+                            );
+                          }
+                        },
+                        isDestructive: true,
+                      ),
+                    ] else ...[
+                      // Anonymous user menu
+                      _buildBottomSheetButton(
+                        icon: Icons.login,
+                        label: 'auth_signin'.tr(),
+                        onTap: () async {
+                          Navigator.of(context).pop();
+                          final result = await Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (context) => const AuthScreen(
+                                  startWithRegistration: false),
+                            ),
+                          );
+                          if (result == true && context.mounted) {
+                            setState(() {}); // Refresh the UI
+                          }
+                        },
+                      ),
+                      _buildBottomSheetButton(
+                        icon: Icons.person_add,
+                        label: 'auth_signup'.tr(),
+                        onTap: () async {
+                          Navigator.of(context).pop();
+                          final result = await Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (context) =>
+                                  const AuthScreen(startWithRegistration: true),
+                            ),
+                          );
+                          if (result == true && context.mounted) {
+                            setState(() {}); // Refresh the UI
+                          }
+                        },
+                        isSecondary: true,
+                      ),
+                    ],
+                  ],
                 ),
               ),
-            ),
-            const SizedBox(height: AppSpacing.md),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: () async {
-                  Navigator.of(context).pop();
-                  final result = await Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (context) => const AuthScreen(),
-                    ),
-                  );
-                  if (result == true && context.mounted) {
-                    setState(() {}); // Refresh the UI
-                  }
-                },
-                icon: const Icon(Icons.person_add),
-                label: const Text('Create Account'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.grey,
-                  foregroundColor: Colors.white,
-                ),
-              ),
-            ),
-          ],
+
+              // Bottom padding
+              SizedBox(height: MediaQuery.of(context).padding.bottom + 16),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildMenuButton({
+  Widget _buildBottomSheetButton({
     required IconData icon,
     required String label,
     required VoidCallback onTap,
@@ -787,27 +786,34 @@ class _HomeScreenNewState extends State<HomeScreenNew> {
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(8),
         child: Container(
           width: double.infinity,
-          padding: const EdgeInsets.symmetric(
-            horizontal: 16,
-            vertical: 16,
-          ),
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
           child: Row(
             children: [
               Icon(
                 icon,
-                color: isDestructive ? Colors.red : AppColors.grey,
-                size: 20,
+                color: isDestructive
+                    ? Colors.red.shade600
+                    : isSecondary
+                        ? AppColors.grey
+                        : AppColors.primary,
+                size: 22,
               ),
               const SizedBox(width: 16),
-              Text(
-                label,
-                style: AppTextStyles.body.copyWith(
-                  color: isDestructive ? Colors.red : AppColors.blackText,
-                  fontWeight: FontWeight.w500,
-                  fontSize: 16,
+              Expanded(
+                child: Text(
+                  label,
+                  style: AppTextStyles.body.copyWith(
+                    color: isDestructive
+                        ? Colors.red.shade600
+                        : isSecondary
+                            ? AppColors.grey
+                            : AppColors.blackText,
+                    fontWeight: FontWeight.w500,
+                    fontSize: 15,
+                    letterSpacing: 0.2,
+                  ),
                 ),
               ),
             ],

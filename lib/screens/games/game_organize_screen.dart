@@ -190,29 +190,17 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
     }
   }
 
-  // Get day of week abbreviation (capitalized)
+  // Localized day of week and month abbreviations
   String _getDayOfWeekAbbr(DateTime date) {
-    const days = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
-    return days[date.weekday - 1];
+    // EEE => Mon, Tue (localized). Some locales add a trailing '.' → strip it
+    final s = DateFormat('EEE', context.locale.toString()).format(date);
+    return s.replaceAll('.', '').toUpperCase();
   }
 
-  // Get month abbreviation
   String _getMonthAbbr(DateTime date) {
-    const months = [
-      'JAN',
-      'FEB',
-      'MAR',
-      'APR',
-      'MAY',
-      'JUN',
-      'JUL',
-      'AUG',
-      'SEP',
-      'OCT',
-      'NOV',
-      'DEC',
-    ];
-    return months[date.month - 1];
+    // MMM => Jan, Feb (localized). Some locales add a trailing '.' → strip it
+    final s = DateFormat('MMM', context.locale.toString()).format(date);
+    return s.replaceAll('.', '').toUpperCase();
   }
 
   Future<void> _createGame() async {
@@ -701,7 +689,7 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
 
                         // Available Fields Section (only show if sport is selected)
                         if (_selectedSport != null) ...[
-                          Text('Choose a Field',
+                          Text('choose_field'.tr(),
                               style: AppTextStyles.title
                                   .copyWith(fontWeight: FontWeight.w300)),
                           const SizedBox(height: AppHeights.reg),
@@ -762,7 +750,7 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
 
                         // Date Selection Section (only show if field is selected)
                         if (_selectedField != null) ...[
-                          Text('Choose a Date',
+                          Text('choose_date'.tr(),
                               style: AppTextStyles.title
                                   .copyWith(fontWeight: FontWeight.w300)),
                           const SizedBox(height: AppHeights.reg),
@@ -818,7 +806,7 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
 
                         // Time Selection Section (only show if date is selected)
                         if (_selectedDate != null) ...[
-                          Text('Choose a Time',
+                          Text('choose_time'.tr(),
                               style: AppTextStyles.title
                                   .copyWith(fontWeight: FontWeight.w300)),
                           const SizedBox(height: AppHeights.reg),

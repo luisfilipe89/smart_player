@@ -19,14 +19,27 @@ class AuthService {
     if (user == null) return 'Anonymous User';
 
     // If display name is null or empty, try to get email prefix
-    if (user.displayName == null || user.displayName!.isEmpty) {
-      if (user.email != null && user.email!.isNotEmpty) {
-        return user.email!.split('@')[0];
-      }
-      return 'User';
+    final rawDisplayName = user.displayName?.trim() ?? '';
+    if (rawDisplayName.isNotEmpty) {
+      // Use only the first name for greeting
+      final firstName = rawDisplayName.split(RegExp(r"\s+")).first;
+      return _capitalize(firstName);
     }
 
-    return user.displayName!;
+    if (user.email != null && user.email!.isNotEmpty) {
+      final emailPrefix = user.email!.split('@')[0];
+      // Strip non-letters and capitalize best-effort
+      final cleaned = emailPrefix.replaceAll(RegExp(r"[^A-Za-z]"), '');
+      if (cleaned.isNotEmpty) return _capitalize(cleaned);
+      return emailPrefix; // fallback as-is
+    }
+    return 'User';
+  }
+
+  static String _capitalize(String input) {
+    if (input.isEmpty) return input;
+    if (input.length == 1) return input.toUpperCase();
+    return input[0].toUpperCase() + input.substring(1);
   }
 
   // Sign in anonymously
@@ -62,10 +75,13 @@ class AuthService {
         email: email,
         password: password,
       );
+      // Ensure latest profile (displayName) is loaded
+      await _auth.currentUser?.reload();
       // Signed in with email successfully
       return userCredential;
+    } on FirebaseAuthException catch (e) {
+      throw Exception(_mapFirebaseError(e, isSignup: false));
     } catch (e) {
-      // Re-throw the error with more context
       throw Exception('Sign in failed: ${e.toString()}');
     }
   }
@@ -94,8 +110,9 @@ class AuthService {
 
       // Created account with email successfully
       return userCredential;
+    } on FirebaseAuthException catch (e) {
+      throw Exception(_mapFirebaseError(e, isSignup: true));
     } catch (e) {
-      // Re-throw the error with more context
       throw Exception('Account creation failed: ${e.toString()}');
     }
   }
@@ -154,6 +171,33 @@ class AuthService {
     } catch (e) {
       print('Error updating display name: $e');
       // Error updating display name
+    }
+  }
+
+  // Map FirebaseAuthException to friendly message
+  static String _mapFirebaseError(FirebaseAuthException e,
+      {required bool isSignup}) {
+    switch (e.code) {
+      case 'email-already-in-use':
+        return 'error_email_in_use';
+      case 'invalid-email':
+        return 'auth_email_invalid';
+      case 'weak-password':
+        return 'auth_password_too_short';
+      case 'user-not-found':
+        return 'user_not_found';
+      case 'wrong-password':
+        return 'wrong_password';
+      case 'user-disabled':
+        return 'user_disabled';
+      case 'operation-not-allowed':
+        return 'operation_not_allowed';
+      case 'too-many-requests':
+        return 'too_many_requests';
+      case 'network-request-failed':
+        return 'network_error';
+      default:
+        return isSignup ? 'error_generic_signup' : 'error_generic_signin';
     }
   }
 
