@@ -3,6 +3,9 @@ import 'package:flutter/services.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:move_young/models/game.dart';
 import 'package:move_young/theme/tokens.dart';
+import 'package:move_young/services/overpass_service.dart';
+import 'package:move_young/services/weather_service.dart';
+import 'package:move_young/services/games_service.dart';
 
 class GameOrganizeScreen extends StatefulWidget {
   const GameOrganizeScreen({super.key});
@@ -17,13 +20,17 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
   String? _selectedTime;
   bool _isLoading = false;
 
+  // Fields data
+  List<Map<String, dynamic>> _availableFields = [];
+  Map<String, dynamic>? _selectedField;
+  bool _isLoadingFields = false;
+
+  // Weather data
+  Map<String, String> _weatherData = {};
+
   // Available sports with their icons
   final List<Map<String, dynamic>> _sports = [
-    {
-      'key': 'soccer',
-      'icon': Icons.sports_soccer,
-      'color': Colors.green,
-    },
+    {'key': 'soccer', 'icon': Icons.sports_soccer, 'color': Colors.green},
     {
       'key': 'basketball',
       'icon': Icons.sports_basketball,
@@ -55,14 +62,69 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
       '18:00',
       '19:00',
       '20:00',
-      '21:00'
+      '21:00',
     ];
   }
 
   bool get _isFormComplete {
     return _selectedSport != null &&
+        _selectedField != null &&
         _selectedDate != null &&
         _selectedTime != null;
+  }
+
+  // Load fields for the selected sport
+  Future<void> _loadFields() async {
+    if (_selectedSport == null) return;
+
+    setState(() {
+      _isLoadingFields = true;
+      _availableFields = [];
+      _selectedField = null;
+    });
+
+    try {
+      // Map sport keys to OSM sport types
+      final sportType = _selectedSport == 'soccer' ? 'soccer' : 'basketball';
+
+      final fields = await OverpassService.fetchFields(
+        areaName: "'s-Hertogenbosch",
+        sportType: sportType,
+      );
+
+      setState(() {
+        _availableFields = fields;
+        _isLoadingFields = false;
+      });
+    } catch (e) {
+      setState(() {
+        _availableFields = [];
+        _isLoadingFields = false;
+      });
+    }
+  }
+
+  // Load weather data for the selected date
+  Future<void> _loadWeather() async {
+    if (_selectedDate == null) return;
+
+    try {
+      // Use a default location for 's-Hertogenbosch
+      final weatherData = await WeatherService.fetchWeatherForDate(
+        date: _selectedDate!,
+        latitude: 51.6978, // 's-Hertogenbosch coordinates
+        longitude: 5.3037,
+      );
+
+      setState(() {
+        _weatherData = weatherData;
+      });
+    } catch (e) {
+      // Set default weather data on error
+      setState(() {
+        _weatherData = {};
+      });
+    }
   }
 
   // Get day of week abbreviation (capitalized)
@@ -85,7 +147,7 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
       'SEP',
       'OCT',
       'NOV',
-      'DEC'
+      'DEC',
     ];
     return months[date.month - 1];
   }
@@ -138,22 +200,27 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
         minute,
       );
 
-      // Create a basic game object
+      // Create a game object with selected field data
       final game = Game(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
         sport: _selectedSport!,
         dateTime: combinedDateTime,
-        location: 'TBD', // Will be filled in next step
-        maxPlayers: 10,
+        location: _selectedField?['name'] ?? 'Unknown Field',
+        address: _selectedField?['address'],
+        latitude: _selectedField?['latitude']?.toDouble(),
+        longitude: _selectedField?['longitude']?.toDouble(),
+        maxPlayers: 10, // Default max players
         description: 'Game organized by user',
-        organizerId: 'current_user_id',
-        organizerName: 'Current User',
+        organizerId: 'current_user_id', // TODO: Get from user service
+        organizerName: 'Current User', // TODO: Get from user service
         createdAt: DateTime.now(),
+        players: [], // Start with empty players list
       );
 
-      // TODO: Save game to backend/database
-      debugPrint('Created game: ${game.toJson()}');
-      await Future.delayed(const Duration(seconds: 1)); // Simulate API call
+      // Save game to SQLite database
+      debugPrint('Creating game with data: ${game.toJson()}');
+      await GamesService.createGame(game);
+      debugPrint('Game created and saved: ${game.id}');
 
       if (mounted) {
         HapticFeedback.lightImpact();
@@ -166,11 +233,13 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
         Navigator.of(context).pop();
       }
     } catch (e) {
+      debugPrint('Game creation error: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('game_creation_failed'.tr()),
+            content: Text('game_creation_failed'.tr() + ': $e'),
             backgroundColor: AppColors.red,
+            duration: const Duration(seconds: 5),
           ),
         );
       }
@@ -181,223 +250,6 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
         });
       }
     }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.white,
-      appBar: AppBar(
-        backgroundColor: AppColors.white,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: AppColors.blackIcon),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
-        title: Text(
-          'organize_a_game'.tr(),
-          style: AppTextStyles.title,
-        ),
-        centerTitle: true,
-      ),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: AppPaddings.symmHorizontalReg.copyWith(
-            bottom: AppPaddings.allBig.bottom,
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const SizedBox(height: AppHeights.reg),
-
-              // Title
-              Text(
-                'choose_sport'.tr(),
-                style: AppTextStyles.title,
-              ),
-              const SizedBox(height: AppHeights.small),
-              Text(
-                'select_sport_to_organize'.tr(),
-                style: AppTextStyles.bodyMuted,
-              ),
-
-              const SizedBox(height: AppHeights.huge),
-
-              // Sports Grid
-              SizedBox(
-                height: 120,
-                child: GridView.builder(
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 2,
-                    childAspectRatio: 2.0,
-                    crossAxisSpacing: AppWidths.regular,
-                    mainAxisSpacing: AppHeights.reg,
-                  ),
-                  itemCount: _sports.length,
-                  itemBuilder: (context, index) {
-                    final sport = _sports[index];
-                    final isSelected = _selectedSport == sport['key'];
-
-                    return _buildSportCard(
-                      sport: sport,
-                      isSelected: isSelected,
-                      onTap: () {
-                        HapticFeedback.lightImpact();
-                        setState(() {
-                          _selectedSport = sport['key'];
-                          _selectedDate = null; // Reset date when sport changes
-                          _selectedTime = null; // Reset time when sport changes
-                        });
-                      },
-                    );
-                  },
-                ),
-              ),
-
-              const SizedBox(height: AppHeights.superHuge),
-
-              // Date Selection Section (only show if sport is selected)
-              if (_selectedSport != null) ...[
-                const SizedBox(height: AppHeights.reg),
-                Text(
-                  'choose_date'.tr(),
-                  style: AppTextStyles.title,
-                ),
-                const SizedBox(height: AppHeights.small),
-                Text(
-                  'select_game_date'.tr(),
-                  style: AppTextStyles.bodyMuted,
-                ),
-                const SizedBox(height: AppHeights.reg),
-
-                // Date Grid
-                SizedBox(
-                  height: 65,
-                  child: ListView.builder(
-                    scrollDirection: Axis.horizontal,
-                    itemCount: _availableDates.length,
-                    itemBuilder: (context, index) {
-                      final date = _availableDates[index];
-                      final isSelected = _selectedDate != null &&
-                          _selectedDate!.day == date.day &&
-                          _selectedDate!.month == date.month;
-                      final isToday = date.day == DateTime.now().day &&
-                          date.month == DateTime.now().month;
-
-                      return Padding(
-                        padding: EdgeInsets.only(
-                          right: index < _availableDates.length - 1
-                              ? AppWidths.regular
-                              : 0,
-                        ),
-                        child: _buildDateCard(
-                          date: date,
-                          isSelected: isSelected,
-                          isToday: isToday,
-                          onTap: () {
-                            HapticFeedback.lightImpact();
-                            setState(() {
-                              if (isSelected) {
-                                // If clicking on the already selected date, unselect it
-                                _selectedDate = null;
-                              } else {
-                                // Select the new date
-                                _selectedDate = date;
-                              }
-                            });
-                          },
-                        ),
-                      );
-                    },
-                  ),
-                ),
-                const SizedBox(height: AppHeights.huge),
-              ],
-
-              // Time Selection Section (only show if date is selected)
-              if (_selectedDate != null) ...[
-                Text(
-                  'choose_time'.tr(),
-                  style: AppTextStyles.title,
-                ),
-                const SizedBox(height: AppHeights.small),
-                Text(
-                  'select_game_time'.tr(),
-                  style: AppTextStyles.bodyMuted,
-                ),
-                const SizedBox(height: AppHeights.reg),
-
-                // Time Grid
-                SizedBox(
-                  height: 45,
-                  child: ListView.builder(
-                    scrollDirection: Axis.horizontal,
-                    itemCount: _availableTimes.length,
-                    itemBuilder: (context, index) {
-                      final time = _availableTimes[index];
-                      final isSelected = _selectedTime == time;
-
-                      return Padding(
-                        padding: EdgeInsets.only(
-                          right: index < _availableTimes.length - 1
-                              ? AppWidths.regular
-                              : 0,
-                        ),
-                        child: _buildTimeCard(
-                          time: time,
-                          isSelected: isSelected,
-                          onTap: () {
-                            HapticFeedback.lightImpact();
-                            setState(() {
-                              _selectedTime = time;
-                            });
-                          },
-                        ),
-                      );
-                    },
-                  ),
-                ),
-                const SizedBox(height: AppHeights.huge),
-              ],
-
-              // Create Game Button
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed:
-                      _isLoading || !_isFormComplete ? null : _createGame,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor:
-                        _isFormComplete ? AppColors.blue : AppColors.grey,
-                    foregroundColor: AppColors.white,
-                    padding: AppPaddings.symmMedium,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(AppRadius.card),
-                    ),
-                  ),
-                  child: _isLoading
-                      ? const SizedBox(
-                          height: 20,
-                          width: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            valueColor:
-                                AlwaysStoppedAnimation<Color>(AppColors.white),
-                          ),
-                        )
-                      : Text(
-                          'create_game'.tr(),
-                          style: AppTextStyles.cardTitle.copyWith(
-                            color: AppColors.white,
-                          ),
-                        ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
   }
 
   Widget _buildSportCard({
@@ -412,7 +264,9 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
         border: isSelected
             ? Border.all(color: AppColors.blue, width: 2)
             : Border.all(
-                color: AppColors.grey.withValues(alpha: 0.3), width: 1),
+                color: AppColors.grey.withValues(alpha: 0.3),
+                width: 1,
+              ),
       ),
       child: Material(
         color: Colors.transparent,
@@ -421,31 +275,31 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
         child: InkWell(
           onTap: onTap,
           child: Padding(
-            padding: const EdgeInsets.all(6),
+            padding: const EdgeInsets.all(4),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                // Sport Icon - larger and fills more space
+                // Sport Icon - smaller for compact design
                 Expanded(
-                  flex: 3,
+                  flex: 2,
                   child: Container(
                     width: double.infinity,
                     decoration: BoxDecoration(
                       color: isSelected
                           ? AppColors.blue.withValues(alpha: 0.1)
                           : (sport['color'] as Color).withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(8),
+                      borderRadius: BorderRadius.circular(6),
                     ),
                     child: Icon(
                       sport['icon'] as IconData,
-                      size: 28,
+                      size: 20,
                       color:
                           isSelected ? AppColors.blue : sport['color'] as Color,
                     ),
                   ),
                 ),
 
-                const SizedBox(height: 4),
+                const SizedBox(height: 2),
 
                 // Sport Name - smaller text
                 Expanded(
@@ -455,7 +309,7 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
                     style: AppTextStyles.superSmall.copyWith(
                       color: isSelected ? AppColors.blue : AppColors.blackText,
                       fontWeight: FontWeight.w600,
-                      fontSize: 11,
+                      fontSize: 10,
                     ),
                     textAlign: TextAlign.center,
                     maxLines: 1,
@@ -496,7 +350,9 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
         border: isSelected
             ? Border.all(color: AppColors.blue, width: 2)
             : Border.all(
-                color: AppColors.grey.withValues(alpha: 0.3), width: 1),
+                color: AppColors.grey.withValues(alpha: 0.3),
+                width: 1,
+              ),
       ),
       child: Material(
         color: Colors.transparent,
@@ -566,7 +422,9 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
         border: isSelected
             ? Border.all(color: AppColors.blue, width: 2)
             : Border.all(
-                color: AppColors.grey.withValues(alpha: 0.3), width: 1),
+                color: AppColors.grey.withValues(alpha: 0.3),
+                width: 1,
+              ),
       ),
       child: Material(
         color: Colors.transparent,
@@ -583,6 +441,368 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
               ),
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFieldCard({
+    required Map<String, dynamic> field,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
+    final surface = field['surface'] ?? 'Unknown';
+    final lighting = field['lighting'] ?? false;
+    final address = field['address'] ?? '';
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(AppRadius.card),
+      child: Container(
+        width: 200,
+        height: 100,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(AppRadius.card),
+          border: Border.all(
+            color: isSelected
+                ? AppColors.blue
+                : AppColors.grey.withValues(alpha: 0.3),
+            width: isSelected ? 2 : 1,
+          ),
+        ),
+        padding: const EdgeInsets.all(AppWidths.regular),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              field['name'] ?? 'Unknown Field',
+              style: AppTextStyles.smallCardTitle.copyWith(
+                color: isSelected ? AppColors.blue : AppColors.blackText,
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(height: 4),
+            Text(
+              surface,
+              style: AppTextStyles.superSmall.copyWith(
+                color: AppColors.grey,
+                fontSize: 10,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Row(
+              children: [
+                Icon(
+                  lighting ? Icons.lightbulb : Icons.lightbulb_outline,
+                  size: 12,
+                  color: lighting ? Colors.amber : AppColors.grey,
+                ),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(
+                    address,
+                    style: AppTextStyles.superSmall.copyWith(
+                      color: AppColors.grey,
+                      fontSize: 9,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('organize_game'.tr()),
+        backgroundColor: AppColors.white,
+        elevation: 0,
+      ),
+      backgroundColor: AppColors.white,
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(AppWidths.regular),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Sport Selection Section
+            Text('choose_sport'.tr(), style: AppTextStyles.title),
+            const SizedBox(height: AppHeights.small),
+            Text(
+              'select_sport_prompt'.tr(),
+              style: AppTextStyles.body.copyWith(color: AppColors.grey),
+            ),
+            const SizedBox(height: AppHeights.reg),
+
+            // Sport Grid
+            SizedBox(
+              height: 80,
+              child: GridView.builder(
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 2,
+                  childAspectRatio: 2.0,
+                  crossAxisSpacing: AppWidths.regular,
+                  mainAxisSpacing: AppHeights.reg,
+                ),
+                itemCount: _sports.length,
+                itemBuilder: (context, index) {
+                  final sport = _sports[index];
+                  final isSelected = _selectedSport == sport['key'];
+
+                  return _buildSportCard(
+                    sport: sport,
+                    isSelected: isSelected,
+                    onTap: () {
+                      HapticFeedback.lightImpact();
+                      setState(() {
+                        _selectedSport = sport['key'];
+                        _selectedField = null;
+                        _selectedDate = null;
+                        _selectedTime = null;
+                        _availableFields = [];
+                        _weatherData = {};
+                      });
+                      _loadFields();
+                    },
+                  );
+                },
+              ),
+            ),
+            const SizedBox(height: AppHeights.huge),
+
+            // Available Fields Section (only show if sport is selected)
+            if (_selectedSport != null) ...[
+              Text('available_fields'.tr(), style: AppTextStyles.title),
+              const SizedBox(height: AppHeights.small),
+              Text(
+                'select_field_prompt'.tr(),
+                style: AppTextStyles.body.copyWith(color: AppColors.grey),
+              ),
+              const SizedBox(height: AppHeights.reg),
+              if (_isLoadingFields)
+                const Center(child: CircularProgressIndicator())
+              else if (_availableFields.isEmpty)
+                Container(
+                  height: 100,
+                  decoration: BoxDecoration(
+                    color: AppColors.grey.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(AppRadius.card),
+                    border: Border.all(
+                      color: AppColors.grey.withValues(alpha: 0.3),
+                      width: 1,
+                    ),
+                  ),
+                  child: Center(
+                    child: Text(
+                      'no_fields_available'.tr(),
+                      style: AppTextStyles.body.copyWith(color: AppColors.grey),
+                    ),
+                  ),
+                )
+              else
+                SizedBox(
+                  height: 120,
+                  child: ListView.builder(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: _availableFields.length,
+                    itemBuilder: (context, index) {
+                      final field = _availableFields[index];
+                      final isSelected = _selectedField == field;
+
+                      return Padding(
+                        padding: EdgeInsets.only(
+                          right: index < _availableFields.length - 1
+                              ? AppWidths.regular
+                              : 0,
+                        ),
+                        child: _buildFieldCard(
+                          field: field,
+                          isSelected: isSelected,
+                          onTap: () {
+                            HapticFeedback.lightImpact();
+                            setState(() {
+                              _selectedField = field;
+                            });
+                          },
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              const SizedBox(height: AppHeights.huge),
+            ],
+
+            // Date Selection Section (only show if sport is selected)
+            if (_selectedSport != null) ...[
+              Text('choose_date'.tr(), style: AppTextStyles.title),
+              const SizedBox(height: AppHeights.small),
+              Text(
+                'select_date_prompt'.tr(),
+                style: AppTextStyles.body.copyWith(color: AppColors.grey),
+              ),
+              const SizedBox(height: AppHeights.reg),
+
+              // Date Grid
+              SizedBox(
+                height: 65,
+                child: ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: _availableDates.length,
+                  itemBuilder: (context, index) {
+                    final date = _availableDates[index];
+                    final isSelected = _selectedDate == date;
+                    final isToday = date.day == DateTime.now().day &&
+                        date.month == DateTime.now().month &&
+                        date.year == DateTime.now().year;
+
+                    return Padding(
+                      padding: EdgeInsets.only(
+                        right: index < _availableDates.length - 1
+                            ? AppWidths.regular
+                            : 0,
+                      ),
+                      child: _buildDateCard(
+                        date: date,
+                        isSelected: isSelected,
+                        isToday: isToday,
+                        onTap: () {
+                          HapticFeedback.lightImpact();
+                          setState(() {
+                            if (isSelected) {
+                              // If clicking on the already selected date, unselect it
+                              _selectedDate = null;
+                              _weatherData = {};
+                            } else {
+                              // Select the new date
+                              _selectedDate = date;
+                            }
+                          });
+                          // Load weather data for the selected date
+                          if (_selectedDate != null) {
+                            _loadWeather();
+                          }
+                        },
+                      ),
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(height: AppHeights.huge),
+            ],
+
+            // Time Selection Section (only show if date is selected)
+            if (_selectedDate != null) ...[
+              Text('choose_time'.tr(), style: AppTextStyles.title),
+              const SizedBox(height: AppHeights.small),
+              Text(
+                'select_time_prompt'.tr(),
+                style: AppTextStyles.body.copyWith(color: AppColors.grey),
+              ),
+              const SizedBox(height: AppHeights.reg),
+
+              // Combined Weather Icons and Time Grid
+              SizedBox(
+                height: 80,
+                child: ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: _availableTimes.length,
+                  itemBuilder: (context, index) {
+                    final time = _availableTimes[index];
+                    final isSelected = _selectedTime == time;
+                    final weatherCondition =
+                        _weatherData[time] ?? WeatherService.sunny;
+                    final weatherIcon = WeatherService.getWeatherIcon(time);
+                    final weatherColor = WeatherService.getWeatherColor(
+                      weatherCondition,
+                    );
+
+                    return Padding(
+                      padding: EdgeInsets.only(
+                        right: index < _availableTimes.length - 1
+                            ? AppWidths.regular
+                            : 0,
+                      ),
+                      child: Column(
+                        children: [
+                          // Weather Icon
+                          Container(
+                            width: 80,
+                            height: 30,
+                            child: Center(
+                              child: Icon(
+                                weatherIcon,
+                                color: weatherColor,
+                                size: 20,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 5),
+                          // Time Card
+                          _buildTimeCard(
+                            time: time,
+                            isSelected: isSelected,
+                            onTap: () {
+                              HapticFeedback.lightImpact();
+                              setState(() {
+                                _selectedTime = time;
+                              });
+                            },
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(height: AppHeights.huge),
+            ],
+
+            // Create Game Button
+            SizedBox(
+              width: double.infinity,
+              height: 50,
+              child: ElevatedButton(
+                onPressed: _isFormComplete && !_isLoading ? _createGame : null,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor:
+                      _isFormComplete ? AppColors.blue : AppColors.grey,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(AppRadius.card),
+                  ),
+                  elevation: 0,
+                ),
+                child: _isLoading
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            Colors.white,
+                          ),
+                        ),
+                      )
+                    : Text(
+                        'create_game'.tr(),
+                        style: AppTextStyles.cardTitle.copyWith(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+              ),
+            ),
+          ],
         ),
       ),
     );

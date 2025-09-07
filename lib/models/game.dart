@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 class Game {
   final String id;
   final String sport;
@@ -19,6 +21,7 @@ class Game {
   final String? equipment; // e.g., 'Bring your own ball'
   final double? cost; // Optional cost per player
   final String? contactInfo; // Phone or email for contact
+  final List<String> players; // List of player IDs who joined the game
 
   Game({
     required this.id,
@@ -40,6 +43,7 @@ class Game {
     this.equipment,
     this.cost,
     this.contactInfo,
+    this.players = const [],
   });
 
   // Create a copy with updated fields
@@ -63,6 +67,7 @@ class Game {
     String? equipment,
     double? cost,
     String? contactInfo,
+    List<String>? players,
   }) {
     return Game(
       id: id ?? this.id,
@@ -84,6 +89,7 @@ class Game {
       equipment: equipment ?? this.equipment,
       cost: cost ?? this.cost,
       contactInfo: contactInfo ?? this.contactInfo,
+      players: players ?? this.players,
     );
   }
 
@@ -103,12 +109,13 @@ class Game {
       'organizerId': organizerId,
       'organizerName': organizerName,
       'createdAt': createdAt.toIso8601String(),
-      'isActive': isActive,
+      'isActive': isActive ? 1 : 0, // Convert bool to int for SQLite
       'imageUrl': imageUrl,
-      'skillLevels': skillLevels,
+      'skillLevels': jsonEncode(skillLevels), // Convert list to JSON string
       'equipment': equipment,
       'cost': cost,
       'contactInfo': contactInfo,
+      'players': jsonEncode(players), // Convert list to JSON string
     };
   }
 
@@ -130,12 +137,17 @@ class Game {
       organizerName: json['organizerName'] ?? '',
       createdAt:
           DateTime.parse(json['createdAt'] ?? DateTime.now().toIso8601String()),
-      isActive: json['isActive'] ?? true,
+      isActive: (json['isActive'] ?? 1) == 1, // Convert int to bool for SQLite
       imageUrl: json['imageUrl'],
-      skillLevels: List<String>.from(json['skillLevels'] ?? []),
+      skillLevels: json['skillLevels'] != null
+          ? List<String>.from(jsonDecode(json['skillLevels']))
+          : [],
       equipment: json['equipment'],
       cost: json['cost']?.toDouble(),
       contactInfo: json['contactInfo'],
+      players: json['players'] != null
+          ? List<String>.from(jsonDecode(json['players']))
+          : [],
     );
   }
 

@@ -188,7 +188,8 @@ class _HomeScreenNewState extends State<HomeScreenNew> {
                               subtitle: 'choose_a_game'.tr(),
                               onTap: () {
                                 HapticFeedback.lightImpact();
-                                // TODO: navigate
+                                Navigator.of(context)
+                                    .pushNamed('/discover-games');
                               },
                             ),
                           ),
