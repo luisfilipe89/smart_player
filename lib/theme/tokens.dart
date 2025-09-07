@@ -65,9 +65,11 @@ class AppPaddings {
   static const symmSuperSmall =
       EdgeInsets.symmetric(horizontal: 4, vertical: 2);
   static const symmSmall = EdgeInsets.symmetric(horizontal: 8, vertical: 4);
+  static const symmMedium = EdgeInsets.symmetric(horizontal: 12, vertical: 6);
   static const symmReg = EdgeInsets.symmetric(horizontal: 16, vertical: 8);
   static const symmSpecial = EdgeInsets.symmetric(horizontal: 4, vertical: 8);
   //Symmetric Horizontal
+  static const symmHorizontalSmall = EdgeInsets.symmetric(horizontal: 8);
   static const symmHorizontalMedium = EdgeInsets.symmetric(horizontal: 12);
   static const symmHorizontalReg = EdgeInsets.symmetric(horizontal: 16);
   static const symmHorizontalBig = EdgeInsets.symmetric(horizontal: 24);
@@ -82,6 +84,9 @@ class AppPaddings {
   //Only top
   static const topSuperSmall = EdgeInsets.only(top: 4);
   static const topSmall = EdgeInsets.only(top: 6);
+  //Only bottom
+  static const bottomSmall = EdgeInsets.only(bottom: 8);
+  static const bottomMedium = EdgeInsets.only(bottom: 12);
 
   //Only top + bottom
   static const topBottom = EdgeInsets.only(top: 4, bottom: 12);
@@ -142,7 +147,6 @@ class AppTextStyles {
     color: AppColors.blackText,
   );
 
- 
   static const smallCardTitle = TextStyle(
     fontFamily: 'Roboto',
     fontSize: 15,

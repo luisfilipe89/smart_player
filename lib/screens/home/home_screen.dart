@@ -171,7 +171,8 @@ class _HomeScreenNewState extends State<HomeScreenNew> {
                               subtitle: 'start_a_game'.tr(),
                               onTap: () {
                                 HapticFeedback.lightImpact();
-                                // TODO: navigate
+                                Navigator.of(context)
+                                    .pushNamed('/organize-game');
                               },
                             ),
                           ),

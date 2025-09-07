@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:move_young/screens/home/home_screen.dart';
 import 'package:move_young/screens/activities/activities_screen.dart';
 import 'package:move_young/screens/agenda/agenda_screen.dart';
+import 'package:move_young/screens/games/game_organize_screen.dart';
 import 'package:easy_localization/easy_localization.dart';
 
 // --- Dummy screens -
@@ -144,6 +145,11 @@ class _HomeFlow extends StatelessWidget {
           case '/activities':
             return MaterialPageRoute(
               builder: (_) => ActivitiesScreen(),
+              settings: settings,
+            );
+          case '/organize-game':
+            return MaterialPageRoute(
+              builder: (_) => const GameOrganizeScreen(),
               settings: settings,
             );
 
