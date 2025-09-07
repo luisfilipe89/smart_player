@@ -121,5 +121,7 @@
     "please_select_date": "Selecteer eerst een datum",
     "choose_time": "Kies Tijd",
     "select_game_time": "Selecteer een tijd voor je spel",
-    "please_select_time": "Selecteer eerst een tijd"
+    "please_select_time": "Selecteer eerst een tijd",
+    "enter_location": "Voer spel locatie in",
+    "enter_description": "Voer spel beschrijving in (optioneel)"
 }

@@ -59,6 +59,12 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
     ];
   }
 
+  bool get _isFormComplete {
+    return _selectedSport != null &&
+        _selectedDate != null &&
+        _selectedTime != null;
+  }
+
   // Get day of week abbreviation (capitalized)
   String _getDayOfWeekAbbr(DateTime date) {
     const days = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
@@ -195,7 +201,7 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
         centerTitle: true,
       ),
       body: SafeArea(
-        child: Padding(
+        child: SingleChildScrollView(
           padding: AppPaddings.symmHorizontalReg.copyWith(
             bottom: AppPaddings.allBig.bottom,
           ),
@@ -223,7 +229,7 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
                 child: GridView.builder(
                   gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                     crossAxisCount: 2,
-                    childAspectRatio: 1.2,
+                    childAspectRatio: 2.0,
                     crossAxisSpacing: AppWidths.regular,
                     mainAxisSpacing: AppHeights.reg,
                   ),
@@ -248,10 +254,11 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
                 ),
               ),
 
-              const SizedBox(height: AppHeights.huge),
+              const SizedBox(height: AppHeights.superHuge),
 
               // Date Selection Section (only show if sport is selected)
               if (_selectedSport != null) ...[
+                const SizedBox(height: AppHeights.reg),
                 Text(
                   'choose_date'.tr(),
                   style: AppTextStyles.title,
@@ -290,7 +297,13 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
                           onTap: () {
                             HapticFeedback.lightImpact();
                             setState(() {
-                              _selectedDate = date;
+                              if (isSelected) {
+                                // If clicking on the already selected date, unselect it
+                                _selectedDate = null;
+                              } else {
+                                // Select the new date
+                                _selectedDate = date;
+                              }
                             });
                           },
                         ),
@@ -316,7 +329,7 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
 
                 // Time Grid
                 SizedBox(
-                  height: 50,
+                  height: 45,
                   child: ListView.builder(
                     scrollDirection: Axis.horizontal,
                     itemCount: _availableTimes.length,
@@ -351,11 +364,11 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  onPressed: _isLoading ? null : _createGame,
+                  onPressed:
+                      _isLoading || !_isFormComplete ? null : _createGame,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: _selectedSport != null
-                        ? AppColors.blue
-                        : AppColors.grey,
+                    backgroundColor:
+                        _isFormComplete ? AppColors.blue : AppColors.grey,
                     foregroundColor: AppColors.white,
                     padding: AppPaddings.symmMedium,
                     shape: RoundedRectangleBorder(
@@ -396,8 +409,10 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
       decoration: BoxDecoration(
         color: AppColors.white,
         borderRadius: BorderRadius.circular(AppRadius.card),
-        boxShadow: AppShadows.md,
-        border: isSelected ? Border.all(color: AppColors.blue, width: 2) : null,
+        border: isSelected
+            ? Border.all(color: AppColors.blue, width: 2)
+            : Border.all(
+                color: AppColors.grey.withValues(alpha: 0.3), width: 1),
       ),
       child: Material(
         color: Colors.transparent,
@@ -406,38 +421,41 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
         child: InkWell(
           onTap: onTap,
           child: Padding(
-            padding: AppPaddings.allSmall,
+            padding: const EdgeInsets.all(6),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                // Sport Icon
-                Container(
-                  width: 30,
-                  height: 30,
-                  decoration: BoxDecoration(
-                    color: isSelected
-                        ? AppColors.blue.withOpacity(0.1)
-                        : (sport['color'] as Color).withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(15),
-                  ),
-                  child: Icon(
-                    sport['icon'] as IconData,
-                    size: 18,
-                    color:
-                        isSelected ? AppColors.blue : sport['color'] as Color,
+                // Sport Icon - larger and fills more space
+                Expanded(
+                  flex: 3,
+                  child: Container(
+                    width: double.infinity,
+                    decoration: BoxDecoration(
+                      color: isSelected
+                          ? AppColors.blue.withValues(alpha: 0.1)
+                          : (sport['color'] as Color).withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Icon(
+                      sport['icon'] as IconData,
+                      size: 28,
+                      color:
+                          isSelected ? AppColors.blue : sport['color'] as Color,
+                    ),
                   ),
                 ),
 
-                const SizedBox(height: AppHeights.small),
+                const SizedBox(height: 4),
 
-                // Sport Name
-                Padding(
-                  padding: AppPaddings.symmSmall,
+                // Sport Name - smaller text
+                Expanded(
+                  flex: 1,
                   child: Text(
                     sport['key'].toString().tr(),
-                    style: AppTextStyles.small.copyWith(
+                    style: AppTextStyles.superSmall.copyWith(
                       color: isSelected ? AppColors.blue : AppColors.blackText,
-                      fontWeight: FontWeight.w500,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 11,
                     ),
                     textAlign: TextAlign.center,
                     maxLines: 1,
@@ -445,14 +463,14 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
                   ),
                 ),
 
-                // Selection indicator
+                // Selection indicator - smaller
                 if (isSelected)
                   const Padding(
-                    padding: EdgeInsets.only(top: 1),
+                    padding: EdgeInsets.only(top: 2),
                     child: Icon(
                       Icons.check_circle,
                       color: AppColors.blue,
-                      size: 12,
+                      size: 10,
                     ),
                   ),
               ],
@@ -473,16 +491,12 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
       width: 50,
       height: 60,
       decoration: BoxDecoration(
-        color: isSelected
-            ? AppColors.blue
-            : isToday
-                ? AppColors.blue.withOpacity(0.1)
-                : AppColors.white,
+        color: AppColors.white,
         borderRadius: BorderRadius.circular(AppRadius.smallCard),
-        boxShadow: AppShadows.md,
-        border: isToday && !isSelected
-            ? Border.all(color: AppColors.blue, width: 1)
-            : null,
+        border: isSelected
+            ? Border.all(color: AppColors.blue, width: 2)
+            : Border.all(
+                color: AppColors.grey.withValues(alpha: 0.3), width: 1),
       ),
       child: Material(
         color: Colors.transparent,
@@ -500,7 +514,7 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
                   _getMonthAbbr(date),
                   style: AppTextStyles.superSmall.copyWith(
                     color: isSelected
-                        ? AppColors.white
+                        ? AppColors.blue
                         : isToday
                             ? AppColors.blue
                             : AppColors.grey,
@@ -512,7 +526,7 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
                 Text(
                   date.day.toString(),
                   style: AppTextStyles.smallCardTitle.copyWith(
-                    color: isSelected ? AppColors.white : AppColors.blackText,
+                    color: isSelected ? AppColors.blue : AppColors.blackText,
                     fontSize: 16,
                     fontWeight: FontWeight.w600,
                   ),
@@ -522,7 +536,7 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
                   _getDayOfWeekAbbr(date),
                   style: AppTextStyles.superSmall.copyWith(
                     color: isSelected
-                        ? AppColors.white
+                        ? AppColors.blue
                         : isToday
                             ? AppColors.blue
                             : AppColors.grey,
@@ -544,15 +558,15 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
     required VoidCallback onTap,
   }) {
     return Container(
-      width: 60,
-      height: 50,
+      width: 80,
+      height: 40,
       decoration: BoxDecoration(
-        color: isSelected ? AppColors.blue : AppColors.white,
+        color: AppColors.white,
         borderRadius: BorderRadius.circular(AppRadius.smallCard),
-        boxShadow: AppShadows.md,
         border: isSelected
-            ? null
-            : Border.all(color: AppColors.grey.withOpacity(0.3)),
+            ? Border.all(color: AppColors.blue, width: 2)
+            : Border.all(
+                color: AppColors.grey.withValues(alpha: 0.3), width: 1),
       ),
       child: Material(
         color: Colors.transparent,
@@ -564,7 +578,7 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
             child: Text(
               time,
               style: AppTextStyles.small.copyWith(
-                color: isSelected ? AppColors.white : AppColors.blackText,
+                color: isSelected ? AppColors.blue : AppColors.blackText,
                 fontWeight: FontWeight.w600,
               ),
             ),

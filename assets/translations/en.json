@@ -121,5 +121,7 @@
     "please_select_date": "Please select a date first",
     "choose_time": "Choose Time",
     "select_game_time": "Select a time for your game",
-    "please_select_time": "Please select a time first"
+    "please_select_time": "Please select a time first",
+    "enter_location": "Enter game location",
+    "enter_description": "Enter game description (optional)"
 }

@@ -485,67 +485,6 @@ class _EventsSkeleton extends StatelessWidget {
   }
 }
 
-class _HomeQuickTile extends StatelessWidget {
-  final String title;
-  final String subtitle;
-  final IconData icon;
-  final VoidCallback onTap;
-
-  const _HomeQuickTile({
-    required this.title,
-    required this.subtitle,
-    required this.icon,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.white,
-        borderRadius: BorderRadius.circular(AppRadius.card),
-        boxShadow: AppShadows.md,
-      ),
-      child: Material(
-        color: Colors.transparent,
-        borderRadius: BorderRadius.circular(AppRadius.card),
-        clipBehavior: Clip.antiAlias,
-        elevation: 4,
-        shadowColor: AppColors.blackShadow,
-        child: InkWell(
-          onTap: onTap,
-          child: Padding(
-            padding: AppPaddings.allMedium,
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Icon(icon, size: 28, color: AppColors.blackIcon),
-                const SizedBox(width: AppWidths.regular),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(title,
-                          style: AppTextStyles.cardTitle,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis),
-                      const SizedBox(height: 2),
-                      Text(subtitle,
-                          style: AppTextStyles.body,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class _HomeImageTile extends StatelessWidget {
   final ImageProvider image;
   final String title;
