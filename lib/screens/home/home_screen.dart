@@ -80,13 +80,6 @@ class _HomeScreenNewState extends State<HomeScreenNew> {
             },
             style: TextButton.styleFrom(foregroundColor: AppColors.blackIcon),
           ),
-          IconButton(
-            tooltip: 'qr_code'.tr(),
-            icon: const Icon(Icons.qr_code),
-            onPressed: () {
-              // TODO: Implement QR code scan
-            },
-          ),
         ],
       ),
       body: SafeArea(
@@ -236,8 +229,8 @@ class _HomeScreenNewState extends State<HomeScreenNew> {
                                     events.isNotEmpty)
                                   TextButton(
                                     style: TextButton.styleFrom(
-                                        padding: const EdgeInsets.symmetric(
-                                            horizontal: 8)),
+                                        padding:
+                                            AppPaddings.symmHorizontalSmall),
                                     onPressed: () {
                                       HapticFeedback.selectionClick();
                                       MainScaffold.maybeOf(context)
@@ -316,8 +309,7 @@ class _HomeScreenNewState extends State<HomeScreenNew> {
                                       child: ListView.separated(
                                         primary: false,
                                         physics: const BouncingScrollPhysics(),
-                                        padding:
-                                            const EdgeInsets.only(bottom: 8),
+                                        padding: AppPaddings.bottomMedium,
                                         itemCount: events.length,
                                         separatorBuilder: (_, __) =>
                                             const Padding(
@@ -596,10 +588,7 @@ class _HomeImageTile extends StatelessWidget {
               Flexible(
                 flex: 1,
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 6,
-                  ),
+                  padding: AppPaddings.symmMedium,
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     crossAxisAlignment: CrossAxisAlignment.start,
