@@ -7,7 +7,8 @@
     <application
         android:label="move_young"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:enableOnBackInvokedCallback="true">
 
         <uses-library
             android:name="org.apache.http.legacy"

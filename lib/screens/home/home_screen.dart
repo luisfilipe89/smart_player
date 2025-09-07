@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart'; // HapticFeedback
 import 'package:move_young/models/event_model.dart';
 import 'package:move_young/services/load_events_from_json.dart';
+import 'package:move_young/services/auth_service.dart';
+import 'package:move_young/screens/welcome/welcome_screen.dart';
 import 'package:move_young/theme/tokens.dart';
 import 'package:move_young/screens/main_scaffold.dart'; // MainScaffold & kTabAgenda
 
@@ -63,6 +65,12 @@ class _HomeScreenNewState extends State<HomeScreenNew> {
         title: const Text('SMARTPLAYER'),
         centerTitle: true,
         actions: [
+          // User menu button (only show if signed in)
+          if (AuthService.isSignedIn)
+            IconButton(
+              icon: const Icon(Icons.person, color: AppColors.primary),
+              onPressed: () => _showUserMenu(context),
+            ),
           TextButton.icon(
             icon: const Icon(Icons.language),
             label: Text(
@@ -436,6 +444,78 @@ class _HomeScreenNewState extends State<HomeScreenNew> {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  void _showUserMenu(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(AppSpacing.lg),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // User info
+            Row(
+              children: [
+                CircleAvatar(
+                  backgroundColor: AppColors.primary,
+                  child: Text(
+                    AuthService.currentUserDisplayName.isNotEmpty
+                        ? AuthService.currentUserDisplayName[0].toUpperCase()
+                        : 'U',
+                    style: AppTextStyles.h3.copyWith(color: Colors.white),
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.md),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        AuthService.currentUserDisplayName,
+                        style: AppTextStyles.h3,
+                      ),
+                      Text(
+                        AuthService.currentUser?.email ?? '',
+                        style: AppTextStyles.body.copyWith(
+                          color: AppColors.grey,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.lg),
+
+            // Sign out button
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () async {
+                  Navigator.of(context).pop();
+                  await AuthService.signOut();
+                  // Navigate back to welcome screen
+                  if (context.mounted) {
+                    Navigator.of(context).pushAndRemoveUntil(
+                      MaterialPageRoute(
+                        builder: (context) => const WelcomeScreen(),
+                      ),
+                      (route) => false,
+                    );
+                  }
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.red,
+                  foregroundColor: Colors.white,
+                ),
+                child: const Text('Sign Out'),
+              ),
+            ),
+          ],
         ),
       ),
     );

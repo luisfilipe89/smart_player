@@ -3,6 +3,8 @@ import 'dart:math';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import 'package:move_young/models/game.dart';
+import 'package:move_young/services/cloud_games_service.dart';
+import 'package:move_young/services/auth_service.dart';
 
 class GamesService {
   static Database? _database;
@@ -18,11 +20,11 @@ class GamesService {
   static Future<Database> _initDatabase() async {
     try {
       String path = join(await getDatabasesPath(), 'games.db');
-      print('Database path: $path');
+      // Database path set
 
       // Check if the directory exists, create if not
-      final dbDir = await getDatabasesPath();
-      print('Database directory: $dbDir');
+      await getDatabasesPath();
+      // Database directory checked
 
       // Try to create the database
       final db = await openDatabase(
@@ -32,16 +34,14 @@ class GamesService {
         onUpgrade: _onUpgrade,
       );
 
-      print('Database opened successfully');
+      // Database opened successfully
       return db;
     } catch (e) {
-      print('Error initializing database: $e');
-      print('Error type: ${e.runtimeType}');
-      print('Error details: ${e.toString()}');
+      // Error initializing database
 
       // Try alternative path
       try {
-        print('Trying alternative database path...');
+        // Trying alternative database path
         final altPath = 'games.db';
         final altDb = await openDatabase(
           altPath,
@@ -49,17 +49,17 @@ class GamesService {
           onCreate: _onCreate,
           onUpgrade: _onUpgrade,
         );
-        print('Alternative database path worked: $altPath');
+        // Alternative database path worked
         return altDb;
       } catch (altE) {
-        print('Alternative database path also failed: $altE');
+        // Alternative database path also failed
         rethrow;
       }
     }
   }
 
   static Future<void> _onCreate(Database db, int version) async {
-    print('Creating database table: $_tableName');
+    // Creating database table
     await db.execute('''
       CREATE TABLE $_tableName(
         id TEXT PRIMARY KEY,
@@ -84,52 +84,98 @@ class GamesService {
         isActive INTEGER DEFAULT 1
       )
     ''');
-    print('Database table created successfully');
+    // Database table created successfully
   }
 
   static Future<void> _onUpgrade(
       Database db, int oldVersion, int newVersion) async {
-    print('Upgrading database from version $oldVersion to $newVersion');
+    // Upgrading database
     if (oldVersion < 2) {
       // Add currentPlayers column
-      print('Adding currentPlayers column');
+      // Adding currentPlayers column
       await db.execute(
           'ALTER TABLE $_tableName ADD COLUMN currentPlayers INTEGER NOT NULL DEFAULT 0');
-      print('currentPlayers column added successfully');
+      // currentPlayers column added successfully
     }
   }
 
-  // Create a new game
+  // Create a new game (local + cloud sync)
   static Future<String> createGame(Game game) async {
     try {
-      print('Starting game creation...');
+      // Starting game creation
       final db = await database;
-      print('Database connection established');
+      // Database connection established
 
       final gameJson = game.toJson();
-      print('Inserting game with JSON: $gameJson');
+      // Inserting game to database
 
-      final result = await db.insert(_tableName, gameJson);
-      print('Game inserted successfully with result: $result');
+      // Save to local database
+      await db.insert(_tableName, gameJson);
+      // Game inserted successfully in local database
+
+      // Sync to cloud if user is authenticated
+      // Checking authentication status
+
+      if (AuthService.isSignedIn) {
+        try {
+          await CloudGamesService.createGame(game);
+          // Game synced to cloud successfully
+        } catch (e) {
+          // Warning: Failed to sync game to cloud
+          // Don't fail the entire operation if cloud sync fails
+        }
+      } else {
+        // User not authenticated, skipping cloud sync
+      }
+
       return game.id;
     } catch (e) {
-      print('Error in GamesService.createGame: $e');
-      print('Error type: ${e.runtimeType}');
-      print('Error stack trace: ${e.toString()}');
+      // Error in GamesService.createGame
       rethrow;
     }
   }
 
-  // Get all games
+  // Get all games (local + cloud)
   static Future<List<Game>> getAllGames() async {
-    final db = await database;
-    final List<Map<String, dynamic>> maps = await db.query(
-      _tableName,
-      where: 'isActive = ?',
-      whereArgs: [1],
-      orderBy: 'dateTime ASC',
-    );
-    return maps.map((map) => Game.fromJson(map)).toList();
+    final List<Game> games = [];
+
+    // Get local games
+    try {
+      final db = await database;
+      final List<Map<String, dynamic>> maps = await db.query(
+        _tableName,
+        where: 'isActive = ?',
+        whereArgs: [1],
+        orderBy: 'dateTime ASC',
+      );
+
+      games.addAll(maps.map((map) => Game.fromJson(map)).toList());
+      // Retrieved games from local database
+    } catch (e) {
+      // Error getting local games
+    }
+
+    // Get cloud games if authenticated
+    if (AuthService.isSignedIn) {
+      try {
+        final cloudGames = await CloudGamesService.getPublicGames();
+        games.addAll(cloudGames);
+        // Retrieved games from cloud
+      } catch (e) {
+        // Error getting cloud games
+      }
+    }
+
+    // Remove duplicates and sort
+    final uniqueGames = <String, Game>{};
+    for (final game in games) {
+      uniqueGames[game.id] = game;
+    }
+
+    final finalGames = uniqueGames.values.toList()
+      ..sort((a, b) => a.dateTime.compareTo(b.dateTime));
+
+    return finalGames;
   }
 
   // Get games by organizer
@@ -182,21 +228,46 @@ class GamesService {
     );
   }
 
-  // Join a game (add player)
+  // Join a game (add player) - local + cloud sync
   static Future<bool> joinGame(
       String gameId, String playerId, String playerName) async {
-    final game = await getGameById(gameId);
-    if (game == null || game.isFull) return false;
+    try {
+      // Try cloud first if authenticated
+      if (AuthService.isSignedIn) {
+        final cloudSuccess =
+            await CloudGamesService.joinGame(gameId, playerId, playerName);
+        if (cloudSuccess) {
+          // Sync to local database
+          final game = await getGameById(gameId);
+          if (game != null) {
+            final players = List<String>.from(game.players);
+            if (!players.contains(playerId)) {
+              players.add(playerId);
+              final updatedGame = game.copyWith(players: players);
+              await updateGame(updatedGame);
+            }
+          }
+          return true;
+        }
+      }
 
-    // Add player to the game
-    final players = List<String>.from(game.players);
-    if (!players.contains(playerId)) {
-      players.add(playerId);
-      final updatedGame = game.copyWith(players: players);
-      await updateGame(updatedGame);
-      return true;
+      // Fallback to local only
+      final game = await getGameById(gameId);
+      if (game == null || game.isFull) return false;
+
+      // Add player to the game
+      final players = List<String>.from(game.players);
+      if (!players.contains(playerId)) {
+        players.add(playerId);
+        final updatedGame = game.copyWith(players: players);
+        await updateGame(updatedGame);
+        return true;
+      }
+      return false;
+    } catch (e) {
+      // Error joining game
+      return false;
     }
-    return false;
   }
 
   // Leave a game (remove player)

@@ -197,9 +197,7 @@ class _ActivitiesScreenState extends State<ActivitiesScreen> {
           IconButton(
             icon: const Icon(Icons.menu, size: 24),
             tooltip: 'menu'.tr(),
-            onPressed: () {
-              // TODO: open drawer or bottom sheet
-            },
+            onPressed: () {},
           ),
         ],
       ),

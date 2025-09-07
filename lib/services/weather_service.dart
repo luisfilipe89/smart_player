@@ -5,18 +5,20 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 class WeatherService {
-  static const _cacheDuration = Duration(hours: 6);
+  static const _cacheDuration =
+      Duration(hours: 2); // Shorter cache for more accurate data
 
-  // OpenWeatherMap API configuration
-  static const String _apiKey =
-      'b34985774d1368cef8b4947bfb8cc7de'; // Replace with your API key
-  static const String _baseUrl = 'https://api.openweathermap.org/data/2.5';
-  static const String _oneCallUrl = '$_baseUrl/onecall';
+  // Open-Meteo API configuration
+  static const String _knmiUrl = 'https://api.open-meteo.com/v1/forecast';
 
   // Weather condition types
   static const String sunny = 'sunny';
   static const String cloudy = 'cloudy';
   static const String rainy = 'rainy';
+  static const String lightRain = 'light_rain';
+  static const String moderateRain = 'moderate_rain';
+  static const String heavyRain = 'heavy_rain';
+  static const String drizzle = 'drizzle';
   static const String night = 'night';
   static const String partlyCloudy = 'partly_cloudy';
   static const String overcast = 'overcast';
@@ -24,63 +26,82 @@ class WeatherService {
   static const String snow = 'snow';
   static const String fog = 'fog';
 
-  // Weather data models
-  static Map<String, dynamic> _parseWeatherCondition(
-      int weatherId, String time) {
+  // Parse KNMI weather data to our conditions
+  static Map<String, dynamic> _parseKNMIWeatherData({
+    required String time,
+    required double precipitation,
+    required double cloudCover,
+    required double temperature,
+    required bool isDaytime,
+  }) {
     final hour = int.parse(time.split(':')[0]);
-    final isNight = hour >= 19 || hour < 7;
+    final isNight = !isDaytime || hour >= 19 || hour < 7;
 
-    // Map OpenWeatherMap condition codes to our conditions
     String condition;
     IconData icon;
     Color color;
 
-    if (weatherId >= 200 && weatherId < 300) {
-      // Thunderstorm
-      condition = thunderstorm;
-      icon = Icons.flash_on;
-      color = const Color(0xFF6A4C93);
-    } else if (weatherId >= 300 && weatherId < 400) {
-      // Drizzle
-      condition = rainy;
-      icon = Icons.grain;
-      color = const Color(0xFF007AFF);
-    } else if (weatherId >= 500 && weatherId < 600) {
-      // Rain
-      condition = rainy;
-      icon = Icons.grain;
-      color = const Color(0xFF007AFF);
-    } else if (weatherId >= 600 && weatherId < 700) {
-      // Snow
-      condition = snow;
-      icon = Icons.ac_unit;
-      color = const Color(0xFF8E8E93);
-    } else if (weatherId >= 700 && weatherId < 800) {
-      // Atmosphere (fog, mist, etc.)
-      condition = fog;
-      icon = Icons.foggy;
-      color = const Color(0xFF8E8E93);
-    } else if (weatherId == 800) {
-      // Clear sky
-      condition = isNight ? night : sunny;
-      icon = isNight ? Icons.nightlight_round : Icons.wb_sunny;
-      color = isNight ? const Color(0xFF5856D6) : const Color(0xFFFF9500);
-    } else if (weatherId == 801) {
-      // Few clouds
+    // Determine condition based on precipitation and cloud cover
+    // Be more conservative about rain detection to avoid "blue suns"
+    if (precipitation > 0.2) {
+      // Increased threshold from 0 to 0.2mm
+      // Rain conditions based on precipitation intensity
+      if (precipitation < 1.0) {
+        // Increased from 0.5
+        condition = drizzle;
+        icon = Icons.grain;
+        color = const Color(0xFF5AC8FA); // Light blue for drizzle
+      } else if (precipitation < 3.0) {
+        // Increased from 2.0
+        condition = lightRain;
+        icon = Icons.grain;
+        color = const Color(0xFF5AC8FA);
+      } else if (precipitation < 7.0) {
+        // Increased from 5.0
+        condition = moderateRain;
+        icon = Icons.umbrella;
+        color = const Color(0xFF007AFF);
+      } else {
+        condition = heavyRain;
+        icon = Icons.umbrella;
+        color = const Color(0xFF0047AB);
+      }
+    } else if (cloudCover > 80) {
+      // Overcast
+      condition = isNight ? night : overcast;
+      icon = isNight ? Icons.nightlight_round : Icons.cloud_queue;
+      color = isNight ? const Color(0xFF5856D6) : const Color(0xFF8E8E93);
+    } else if (cloudCover > 50) {
+      // Cloudy
+      condition = isNight ? night : cloudy;
+      icon = isNight ? Icons.nightlight_round : Icons.cloud;
+      color = isNight ? const Color(0xFF5856D6) : const Color(0xFF8E8E93);
+    } else if (cloudCover > 30) {
+      // Increased from 20 to be more generous with sunny
+      // Partly cloudy
       condition = isNight ? night : partlyCloudy;
       icon = isNight ? Icons.nightlight_round : Icons.wb_cloudy;
       color = isNight ? const Color(0xFF5856D6) : const Color(0xFF8E8E93);
-    } else if (weatherId >= 802 && weatherId <= 804) {
-      // Cloudy to overcast
-      condition = isNight ? night : (weatherId == 804 ? overcast : cloudy);
-      icon = isNight ? Icons.nightlight_round : Icons.cloud;
-      color = isNight ? const Color(0xFF5856D6) : const Color(0xFF8E8E93);
     } else {
-      // Default
+      // Clear/Sunny - be more generous with sunny conditions
       condition = isNight ? night : sunny;
       icon = isNight ? Icons.nightlight_round : Icons.wb_sunny;
-      color = isNight ? const Color(0xFF5856D6) : const Color(0xFFFF9500);
+      color = isNight
+          ? const Color(0xFF5856D6)
+          : const Color(0xFFFF9500); // Orange for sunny
     }
+
+    // Fallback: If we're in daytime hours and have very low precipitation,
+    // default to sunny to avoid "blue suns"
+    if (!isNight && precipitation <= 0.1 && cloudCover <= 40) {
+      condition = sunny;
+      icon = Icons.wb_sunny;
+      color = const Color(0xFFFF9500); // Orange for sunny
+    }
+
+    // Debug logging for weather conditions
+    debugPrint(
+        'Weather parsed - Time: $time, Precip: $precipitation, Clouds: $cloudCover, IsDay: $isDaytime, Condition: $condition, Color: ${color.value.toRadixString(16)}');
 
     return {
       'condition': condition,
@@ -102,10 +123,16 @@ class WeatherService {
         case partlyCloudy:
           return isNight ? Icons.nightlight_round : Icons.wb_cloudy;
         case cloudy:
-        case overcast:
           return isNight ? Icons.nightlight_round : Icons.cloud;
-        case rainy:
+        case overcast:
+          return isNight ? Icons.nightlight_round : Icons.cloud_queue;
+        case lightRain:
+        case drizzle:
           return Icons.grain;
+        case moderateRain:
+        case heavyRain:
+        case rainy:
+          return Icons.umbrella;
         case thunderstorm:
           return Icons.flash_on;
         case snow:
@@ -168,6 +195,14 @@ class WeatherService {
         return const Color(0xFF8E8E93); // iOS grey
       case rainy:
         return const Color(0xFF007AFF); // iOS blue
+      case lightRain:
+        return const Color(0xFF5AC8FA); // Light blue
+      case moderateRain:
+        return const Color(0xFF007AFF); // iOS blue
+      case heavyRain:
+        return const Color(0xFF0047AB); // Dark blue
+      case drizzle:
+        return const Color(0xFF5AC8FA); // Light blue
       case thunderstorm:
         return const Color(0xFF6A4C93); // Purple
       case snow:
@@ -181,7 +216,7 @@ class WeatherService {
     }
   }
 
-  // Fetch weather data for a specific date and location
+  // Fetch weather data for a specific date and location using KNMI
   static Future<Map<String, String>> fetchWeatherForDate({
     required DateTime date,
     required double latitude,
@@ -189,7 +224,7 @@ class WeatherService {
     bool bypassCache = false,
   }) async {
     final cacheKey =
-        'weather_${date.toIso8601String().split('T')[0]}_${latitude}_$longitude';
+        'openmeteo_weather_${date.toIso8601String().split('T')[0]}_${latitude}_$longitude';
 
     if (!bypassCache) {
       final cached = await _getCachedData(cacheKey);
@@ -197,129 +232,131 @@ class WeatherService {
     }
 
     try {
-      // Check if API key is configured
-      if (_apiKey == 'YOUR_API_KEY_HERE') {
-        print('Weather API key not configured. Using fallback data.');
-        return <String, String>{}; // Return empty map instead of dummy data
-      }
+      // Calculate date range for API call
+      final startDate = date.toIso8601String().split('T')[0];
+      final endDate =
+          date.add(const Duration(days: 1)).toIso8601String().split('T')[0];
 
-      print('🌤️ Weather API key found: ${_apiKey.substring(0, 8)}...');
+      // Build Open-Meteo API URL with required parameters
+      final url = Uri.parse(_knmiUrl).replace(queryParameters: {
+        'latitude': latitude.toString(),
+        'longitude': longitude.toString(),
+        'start_date': startDate,
+        'end_date': endDate,
+        'hourly': 'precipitation,cloud_cover,temperature_2m,is_day',
+        'timezone': 'Europe/Amsterdam',
+      });
 
-      // Call OpenWeatherMap One Call API
-      final url =
-          '$_oneCallUrl?lat=$latitude&lon=$longitude&appid=$_apiKey&units=metric&exclude=minutely,alerts';
-      print('🌐 Calling weather API: $url');
+      debugPrint('Fetching Open-Meteo weather data: $url');
 
-      final response = await http.get(Uri.parse(url));
-      print('📡 Weather API response: ${response.statusCode}');
+      final response = await http.get(url);
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         final weatherData = <String, String>{};
 
-        // Get hourly forecast for the selected date
-        final hourlyForecast = data['hourly'] as List<dynamic>;
-        final targetDate = DateTime(date.year, date.month, date.day);
+        // Parse hourly data
+        final hourly = data['hourly'] as Map<String, dynamic>;
+        final times = hourly['time'] as List<dynamic>;
+        final precipitation = hourly['precipitation'] as List<dynamic>;
+        final cloudCover = hourly['cloud_cover'] as List<dynamic>;
+        final temperature = hourly['temperature_2m'] as List<dynamic>;
+        final isDay = hourly['is_day'] as List<dynamic>;
 
-        for (final hourData in hourlyForecast) {
-          final hourDateTime = DateTime.fromMillisecondsSinceEpoch(
-            (hourData['dt'] as int) * 1000,
-          );
+        // Find data for our target date
+        for (int i = 0; i < times.length; i++) {
+          final timeString = times[i] as String;
+          final hourDateTime = DateTime.parse(timeString);
 
           // Check if this hour is on our target date and within our time range (9-21)
-          if (hourDateTime.year == targetDate.year &&
-              hourDateTime.month == targetDate.month &&
-              hourDateTime.day == targetDate.day &&
+          if (hourDateTime.year == date.year &&
+              hourDateTime.month == date.month &&
+              hourDateTime.day == date.day &&
               hourDateTime.hour >= 9 &&
               hourDateTime.hour <= 21) {
             final time = '${hourDateTime.hour.toString().padLeft(2, '0')}:00';
-            final weather = hourData['weather'][0] as Map<String, dynamic>;
-            final weatherId = weather['id'] as int;
+            final precip = (precipitation[i] as num).toDouble();
+            final clouds = (cloudCover[i] as num).toDouble();
+            final temp = (temperature[i] as num).toDouble();
+            final isDaytime = (isDay[i] as num) == 1;
 
-            final parsed = _parseWeatherCondition(weatherId, time);
+            final parsed = _parseKNMIWeatherData(
+              time: time,
+              precipitation: precip,
+              cloudCover: clouds,
+              temperature: temp,
+              isDaytime: isDaytime,
+            );
+
             weatherData[time] = parsed['condition'] as String;
           }
         }
 
-        // If no data found for the date, use current day's data
+        // If no hourly data found, try daily data
         if (weatherData.isEmpty) {
-          final currentDate = DateTime.now();
-          if (date.year == currentDate.year &&
-              date.month == currentDate.month &&
-              date.day == currentDate.day) {
-            // Use today's hourly data
-            for (int i = 0; i < hourlyForecast.length && i < 13; i++) {
-              final hourData = hourlyForecast[i];
-              final hourDateTime = DateTime.fromMillisecondsSinceEpoch(
-                (hourData['dt'] as int) * 1000,
-              );
+          final daily = data['daily'] as Map<String, dynamic>?;
+          if (daily != null) {
+            final dailyTimes = daily['time'] as List<dynamic>;
+            final dailyPrecipitation =
+                daily['precipitation_sum'] as List<dynamic>;
+            final dailyCloudCover = daily['cloud_cover_mean'] as List<dynamic>;
+            final dailyTemperature =
+                daily['temperature_2m_mean'] as List<dynamic>;
 
-              if (hourDateTime.hour >= 9 && hourDateTime.hour <= 21) {
-                final time =
-                    '${hourDateTime.hour.toString().padLeft(2, '0')}:00';
-                final weather = hourData['weather'][0] as Map<String, dynamic>;
-                final weatherId = weather['id'] as int;
+            // Find the day that matches our target date
+            for (int i = 0; i < dailyTimes.length; i++) {
+              final dayTimeString = dailyTimes[i] as String;
+              final dayDateTime = DateTime.parse(dayTimeString);
 
-                final parsed = _parseWeatherCondition(weatherId, time);
-                weatherData[time] = parsed['condition'] as String;
+              if (dayDateTime.year == date.year &&
+                  dayDateTime.month == date.month &&
+                  dayDateTime.day == date.day) {
+                final precip = (dailyPrecipitation[i] as num).toDouble();
+                final clouds = (dailyCloudCover[i] as num).toDouble();
+                final temp = (dailyTemperature[i] as num).toDouble();
+
+                // Create weather data for all hours using daily data
+                for (int hour = 9; hour <= 21; hour++) {
+                  final time = '${hour.toString().padLeft(2, '0')}:00';
+                  final isDaytime = hour >= 7 && hour <= 19;
+
+                  final parsed = _parseKNMIWeatherData(
+                    time: time,
+                    precipitation: precip /
+                        13, // Distribute daily precipitation across hours
+                    cloudCover: clouds,
+                    temperature: temp,
+                    isDaytime: isDaytime,
+                  );
+
+                  weatherData[time] = parsed['condition'] as String;
+                }
+                break;
               }
             }
           }
         }
 
-        // If still no data, return empty
-        if (weatherData.isEmpty) {
-          print('⚠️ No weather data found for selected date');
-          return <String, String>{}; // Return empty map instead of dummy data
-        }
-
-        print(
-            '✅ Weather data parsed successfully: ${weatherData.length} hours');
-        await _cacheData(cacheKey, weatherData);
-        return weatherData;
-      } else {
-        print('One Call API error: ${response.statusCode} - ${response.body}');
-        print('Trying basic weather API as fallback...');
-        return await _getBasicWeatherData(latitude, longitude);
-      }
-    } catch (e) {
-      print('Error fetching weather: $e');
-      return <String, String>{}; // Return empty map instead of dummy data
-    }
-  }
-
-  // Basic weather API fallback when One Call API fails
-  static Future<Map<String, String>> _getBasicWeatherData(
-      double latitude, double longitude) async {
-    try {
-      final response = await http.get(
-        Uri.parse(
-            '$_baseUrl/weather?lat=$latitude&lon=$longitude&appid=$_apiKey&units=metric'),
-      );
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        final weatherId = data['weather'][0]['id'] as int;
-        final conditionData = _parseWeatherCondition(weatherId, '12:00');
-        final condition = conditionData['condition'] as String;
-
-        print('✅ Basic weather API successful: $condition');
-
-        // Create weather data for all hours with the same condition
-        final weatherData = <String, String>{};
-        for (int hour = 9; hour <= 21; hour++) {
-          final time = '${hour.toString().padLeft(2, '0')}:00';
-          weatherData[time] = condition;
+        // Cache and return data
+        if (weatherData.isNotEmpty) {
+          await _cacheData(cacheKey, weatherData);
+          debugPrint(
+              'Open-Meteo weather data fetched successfully: ${weatherData.length} hours');
+          debugPrint('Weather data: $weatherData');
+        } else {
+          debugPrint('No Open-Meteo weather data found for date: $date');
+          debugPrint('API Response: ${response.body}');
         }
 
         return weatherData;
       } else {
-        print('Basic weather API error: ${response.statusCode}');
-        return <String, String>{}; // Return empty map instead of dummy data
+        debugPrint(
+            'Open-Meteo API error: ${response.statusCode} - ${response.body}');
+        return <String, String>{};
       }
     } catch (e) {
-      print('Basic weather API error: $e');
-      return <String, String>{}; // Return empty map instead of dummy data
+      debugPrint('Error fetching Open-Meteo weather data: $e');
+      return <String, String>{};
     }
   }
 

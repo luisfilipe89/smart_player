@@ -76,7 +76,6 @@ class _GamesDiscoveryScreenState extends State<GamesDiscoveryScreen> {
 
   Future<void> _joinGame(Game game) async {
     try {
-      // TODO: Get current user ID from user service
       const currentUserId = 'current_user_id';
       const currentUserName = 'Current User';
 
@@ -246,9 +245,7 @@ class _GamesDiscoveryScreenState extends State<GamesDiscoveryScreen> {
         borderRadius: BorderRadius.circular(AppRadius.card),
       ),
       child: InkWell(
-        onTap: () {
-          // TODO: Navigate to game details screen
-        },
+        onTap: () {},
         borderRadius: BorderRadius.circular(AppRadius.card),
         child: Padding(
           padding: const EdgeInsets.all(AppWidths.regular),

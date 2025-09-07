@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 class AppColors {
   static const white = Color(0xFFFFFFFF);
+  static const background = Color(0xFFF5F5F5);
   static const superlightgrey = Color(0xFFEEEEEE);
   static const lightgrey = Color(0xFFEEEEEE); //Grey[300]
   static const grey = Color(0xFF9E9E9E); //Grey[500]
@@ -13,6 +14,8 @@ class AppColors {
   static const blackShadow = Color(0x33000000);
   static const lightblackShadow = Color(0x26000000);
   static const blackIcon = Color(0xFF000000);
+  static const text = Color(0xFF212121);
+  static const primary = Color(0xFF2196F3);
   static const blue = Color(0xFF2196F3);
   static const red = Color(0xFFF44336);
   static const orange = Color(0xFFFF9800);
@@ -31,6 +34,10 @@ class AppRadius {
 
 class AppSpacing {
   static const content = 12.0; // content padding (inner text, compact tiles)
+  static const sm = 8.0;
+  static const md = 16.0;
+  static const lg = 24.0;
+  static const xl = 32.0;
 }
 
 class AppHeights {
@@ -153,6 +160,24 @@ class AppTextStyles {
     fontWeight: FontWeight.w600,
     letterSpacing: 0.15,
     color: AppColors.blackText,
+  );
+
+  static const h2 = TextStyle(
+    fontSize: 24,
+    fontWeight: FontWeight.w600,
+    color: AppColors.text,
+  );
+
+  static const h3 = TextStyle(
+    fontSize: 18,
+    fontWeight: FontWeight.w500,
+    color: AppColors.text,
+  );
+
+  static const button = TextStyle(
+    fontSize: 16,
+    fontWeight: FontWeight.w600,
+    color: Colors.white,
   );
 
   static const body = TextStyle(
