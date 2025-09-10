@@ -193,14 +193,10 @@ class _ActivitiesScreenState extends State<ActivitiesScreen> {
         leadingWidth: 48,
         leading: const AppBackButton(),
         title: Text('activities'.tr()),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.menu, size: 24),
-            tooltip: 'menu'.tr(),
-            onPressed: () {},
-          ),
-        ],
+        backgroundColor: AppColors.white,
+        elevation: 0,
       ),
+      backgroundColor: AppColors.white,
       body: SafeArea(
         child: Padding(
           padding: AppPaddings.symmHorizontalReg,

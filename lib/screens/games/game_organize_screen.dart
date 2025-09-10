@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:move_young/models/game.dart';
-import 'package:move_young/theme/tokens.dart';
+import 'package:move_young/theme/_theme.dart';
 import 'package:move_young/services/overpass_service.dart';
 import 'package:move_young/services/weather_service.dart';
 import 'package:move_young/services/games_service.dart';
@@ -616,289 +616,344 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        leadingWidth: 48,
+        leading: const AppBackButton(),
         title: Text('organize_game'.tr()),
         backgroundColor: AppColors.white,
         elevation: 0,
       ),
       backgroundColor: AppColors.white,
-      body: Padding(
-        padding: AppPaddings.symmHorizontalReg,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: Container(
-                decoration: BoxDecoration(
-                  color: AppColors.white,
-                  borderRadius: BorderRadius.circular(AppRadius.container),
-                  boxShadow: AppShadows.md,
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(AppRadius.container),
-                  child: SingleChildScrollView(
-                    padding: AppPaddings.allBig,
+      body: SafeArea(
+        child: Padding(
+          padding: AppPaddings.symmHorizontalReg,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: AppColors.white,
+                    borderRadius: BorderRadius.circular(AppRadius.container),
+                    boxShadow: AppShadows.md,
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(AppRadius.container),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // Sport Selection Section
-                        Text('choose_sport'.tr(),
-                            style: AppTextStyles.title
-                                .copyWith(fontWeight: FontWeight.w300)),
-                        const SizedBox(height: AppHeights.reg),
+                        PanelHeader(
+                          'choose_sport'.tr(),
+                        ),
 
                         // Sport Selection - Horizontal Scrollable List
-                        SizedBox(
-                          height: 80,
-                          child: ListView.builder(
-                            scrollDirection: Axis.horizontal,
-                            itemCount: _sports.length,
-                            itemBuilder: (context, index) {
-                              final sport = _sports[index];
-                              final isSelected = _selectedSport == sport['key'];
-
-                              return Padding(
-                                padding: EdgeInsets.only(
-                                  right: index < _sports.length - 1
-                                      ? AppWidths.small
-                                      : 0,
-                                ),
+                        Padding(
+                          padding: AppPaddings.symmHorizontalReg,
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Transform.translate(
+                                offset: const Offset(0, -6),
                                 child: SizedBox(
-                                  width: 70, // Slightly wider for bigger icons
-                                  child: _buildSportCard(
-                                    sport: sport,
-                                    isSelected: isSelected,
-                                    onTap: () {
-                                      HapticFeedback.lightImpact();
-                                      setState(() {
-                                        _selectedSport = sport['key'];
-                                        _selectedField = null;
-                                        _selectedDate = null;
-                                        _selectedTime = null;
-                                        _availableFields = [];
-                                        _weatherData = {};
-                                      });
-                                      _loadFields();
+                                  height: 80,
+                                  child: ListView.builder(
+                                    scrollDirection: Axis.horizontal,
+                                    itemCount: _sports.length,
+                                    itemBuilder: (context, index) {
+                                      final sport = _sports[index];
+                                      final isSelected =
+                                          _selectedSport == sport['key'];
+
+                                      return Padding(
+                                        padding: EdgeInsets.only(
+                                          right: index < _sports.length - 1
+                                              ? AppWidths.small
+                                              : 0,
+                                        ),
+                                        child: SizedBox(
+                                          width:
+                                              70, // Slightly wider for bigger icons
+                                          child: _buildSportCard(
+                                            sport: sport,
+                                            isSelected: isSelected,
+                                            onTap: () {
+                                              HapticFeedback.lightImpact();
+                                              setState(() {
+                                                _selectedSport = sport['key'];
+                                                _selectedField = null;
+                                                _selectedDate = null;
+                                                _selectedTime = null;
+                                                _availableFields = [];
+                                                _weatherData = {};
+                                              });
+                                              _loadFields();
+                                            },
+                                          ),
+                                        ),
+                                      );
                                     },
                                   ),
                                 ),
-                              );
-                            },
+                              ),
+                            ],
                           ),
                         ),
-                        const SizedBox(height: AppHeights.huge),
+                        //const SizedBox(height: AppHeights.reg),
 
                         // Available Fields Section (only show if sport is selected)
                         if (_selectedSport != null) ...[
-                          Text('choose_field'.tr(),
-                              style: AppTextStyles.title
-                                  .copyWith(fontWeight: FontWeight.w300)),
-                          const SizedBox(height: AppHeights.reg),
-                          if (_isLoadingFields)
-                            const Center(child: CircularProgressIndicator())
-                          else if (_availableFields.isEmpty)
-                            Container(
-                              height: 100,
-                              decoration: BoxDecoration(
-                                color: AppColors.grey.withValues(alpha: 0.1),
-                                borderRadius:
-                                    BorderRadius.circular(AppRadius.card),
-                                border: Border.all(
-                                  color: AppColors.grey.withValues(alpha: 0.3),
-                                  width: 1,
-                                ),
-                              ),
-                              child: Center(
-                                child: Text(
-                                  'no_fields_available'.tr(),
-                                  style: AppTextStyles.body
-                                      .copyWith(color: AppColors.grey),
-                                ),
-                              ),
-                            )
-                          else
-                            SizedBox(
-                              height: 120,
-                              child: ListView.builder(
-                                scrollDirection: Axis.horizontal,
-                                itemCount: _availableFields.length,
-                                itemBuilder: (context, index) {
-                                  final field = _availableFields[index];
-                                  final isSelected = _selectedField == field;
+                          PanelHeader(
+                            'choose_field'.tr(),
+                          ),
+                          Padding(
+                            padding: AppPaddings.symmHorizontalReg,
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (_isLoadingFields)
+                                  const Center(
+                                      child: CircularProgressIndicator())
+                                else if (_availableFields.isEmpty)
+                                  Container(
+                                    height: 100,
+                                    decoration: BoxDecoration(
+                                      color:
+                                          AppColors.grey.withValues(alpha: 0.1),
+                                      borderRadius:
+                                          BorderRadius.circular(AppRadius.card),
+                                      border: Border.all(
+                                        color: AppColors.grey
+                                            .withValues(alpha: 0.3),
+                                        width: 1,
+                                      ),
+                                    ),
+                                    child: Center(
+                                      child: Text(
+                                        'no_fields_available'.tr(),
+                                        style: AppTextStyles.body
+                                            .copyWith(color: AppColors.grey),
+                                      ),
+                                    ),
+                                  )
+                                else
+                                  Transform.translate(
+                                    offset: const Offset(0, -6),
+                                    child: SizedBox(
+                                      height: 120,
+                                      child: ListView.builder(
+                                        scrollDirection: Axis.horizontal,
+                                        itemCount: _availableFields.length,
+                                        itemBuilder: (context, index) {
+                                          final field = _availableFields[index];
+                                          final isSelected =
+                                              _selectedField == field;
 
-                                  return Padding(
-                                    padding: EdgeInsets.only(
-                                      right: index < _availableFields.length - 1
-                                          ? AppWidths.regular
-                                          : 0,
+                                          return Padding(
+                                            padding: EdgeInsets.only(
+                                              right: index <
+                                                      _availableFields.length -
+                                                          1
+                                                  ? AppWidths.regular
+                                                  : 0,
+                                            ),
+                                            child: _buildFieldCard(
+                                              field: field,
+                                              isSelected: isSelected,
+                                              onTap: () {
+                                                HapticFeedback.lightImpact();
+                                                setState(() {
+                                                  _selectedField = field;
+                                                });
+                                              },
+                                            ),
+                                          );
+                                        },
+                                      ),
                                     ),
-                                    child: _buildFieldCard(
-                                      field: field,
-                                      isSelected: isSelected,
-                                      onTap: () {
-                                        HapticFeedback.lightImpact();
-                                        setState(() {
-                                          _selectedField = field;
-                                        });
-                                      },
-                                    ),
-                                  );
-                                },
-                              ),
+                                  ),
+                              ],
                             ),
-                          const SizedBox(height: AppHeights.huge),
+                          ),
+                          //const SizedBox(height: AppHeights.huge),
                         ],
 
                         // Date Selection Section (only show if field is selected)
                         if (_selectedField != null) ...[
-                          Text('choose_date'.tr(),
-                              style: AppTextStyles.title
-                                  .copyWith(fontWeight: FontWeight.w300)),
-                          const SizedBox(height: AppHeights.reg),
+                          PanelHeader(
+                            'choose_date'.tr(),
+                          ),
+                          Padding(
+                            padding: AppPaddings.symmHorizontalReg,
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Transform.translate(
+                                  offset: const Offset(0, -6),
+                                  child: SizedBox(
+                                    height: 65,
+                                    child: ListView.builder(
+                                      scrollDirection: Axis.horizontal,
+                                      itemCount: _availableDates.length,
+                                      itemBuilder: (context, index) {
+                                        final date = _availableDates[index];
+                                        final isSelected =
+                                            _selectedDate == date;
+                                        final isToday = date.day ==
+                                                DateTime.now().day &&
+                                            date.month ==
+                                                DateTime.now().month &&
+                                            date.year == DateTime.now().year;
 
-                          // Date Grid
-                          SizedBox(
-                            height: 65,
-                            child: ListView.builder(
-                              scrollDirection: Axis.horizontal,
-                              itemCount: _availableDates.length,
-                              itemBuilder: (context, index) {
-                                final date = _availableDates[index];
-                                final isSelected = _selectedDate == date;
-                                final isToday =
-                                    date.day == DateTime.now().day &&
-                                        date.month == DateTime.now().month &&
-                                        date.year == DateTime.now().year;
-
-                                return Padding(
-                                  padding: EdgeInsets.only(
-                                    right: index < _availableDates.length - 1
-                                        ? AppWidths.regular
-                                        : 0,
+                                        return Padding(
+                                          padding: EdgeInsets.only(
+                                            right: index <
+                                                    _availableDates.length - 1
+                                                ? AppWidths.regular
+                                                : 0,
+                                          ),
+                                          child: _buildDateCard(
+                                            date: date,
+                                            isSelected: isSelected,
+                                            isToday: isToday,
+                                            onTap: () {
+                                              HapticFeedback.lightImpact();
+                                              setState(() {
+                                                if (isSelected) {
+                                                  // If clicking on the already selected date, unselect it
+                                                  _selectedDate = null;
+                                                  _weatherData = {};
+                                                } else {
+                                                  // Select the new date
+                                                  _selectedDate = date;
+                                                }
+                                              });
+                                              // Load weather data for the selected date
+                                              if (_selectedDate != null) {
+                                                _loadWeather();
+                                              }
+                                            },
+                                          ),
+                                        );
+                                      },
+                                    ),
                                   ),
-                                  child: _buildDateCard(
-                                    date: date,
-                                    isSelected: isSelected,
-                                    isToday: isToday,
-                                    onTap: () {
-                                      HapticFeedback.lightImpact();
-                                      setState(() {
-                                        if (isSelected) {
-                                          // If clicking on the already selected date, unselect it
-                                          _selectedDate = null;
-                                          _weatherData = {};
-                                        } else {
-                                          // Select the new date
-                                          _selectedDate = date;
-                                        }
-                                      });
-                                      // Load weather data for the selected date
-                                      if (_selectedDate != null) {
-                                        _loadWeather();
-                                      }
-                                    },
-                                  ),
-                                );
-                              },
+                                ),
+                              ],
                             ),
                           ),
-                          const SizedBox(height: AppHeights.huge),
+                          //const SizedBox(height: AppHeights.huge),
                         ],
 
                         // Time Selection Section (only show if date is selected)
                         if (_selectedDate != null) ...[
-                          Text('choose_time'.tr(),
-                              style: AppTextStyles.title
-                                  .copyWith(fontWeight: FontWeight.w300)),
-                          const SizedBox(height: AppHeights.reg),
+                          PanelHeader(
+                            'choose_time'.tr(),
+                          ),
+                          Padding(
+                            padding: AppPaddings.symmHorizontalReg,
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Transform.translate(
+                                  offset: const Offset(0, -6),
+                                  child: SizedBox(
+                                    height: 80,
+                                    child: ListView.builder(
+                                      scrollDirection: Axis.horizontal,
+                                      itemCount: _availableTimes.length,
+                                      itemBuilder: (context, index) {
+                                        final time = _availableTimes[index];
+                                        final isSelected =
+                                            _selectedTime == time;
+                                        // Only show weather if data is available
+                                        final hasWeatherData =
+                                            _weatherData.isNotEmpty;
+                                        final weatherCondition = hasWeatherData
+                                            ? _weatherData[time]
+                                            : null;
+                                        final weatherIcon = hasWeatherData &&
+                                                weatherCondition != null
+                                            ? WeatherService.getWeatherIcon(
+                                                time, weatherCondition)
+                                            : null;
+                                        final weatherColor = hasWeatherData &&
+                                                weatherCondition != null
+                                            ? WeatherService.getWeatherColor(
+                                                weatherCondition)
+                                            : null;
 
-                          // Time Grid - Weather + Time Cards
-                          SizedBox(
-                            height: 80,
-                            child: ListView.builder(
-                              scrollDirection: Axis.horizontal,
-                              itemCount: _availableTimes.length,
-                              itemBuilder: (context, index) {
-                                final time = _availableTimes[index];
-                                final isSelected = _selectedTime == time;
-                                // Only show weather if data is available
-                                final hasWeatherData = _weatherData.isNotEmpty;
-                                final weatherCondition =
-                                    hasWeatherData ? _weatherData[time] : null;
-                                final weatherIcon =
-                                    hasWeatherData && weatherCondition != null
-                                        ? WeatherService.getWeatherIcon(
-                                            time, weatherCondition)
-                                        : null;
-                                final weatherColor =
-                                    hasWeatherData && weatherCondition != null
-                                        ? WeatherService.getWeatherColor(
-                                            weatherCondition)
-                                        : null;
-
-                                return Padding(
-                                  padding: EdgeInsets.only(
-                                    right: index < _availableTimes.length - 1
-                                        ? AppWidths.regular
-                                        : 0,
+                                        return Padding(
+                                          padding: EdgeInsets.only(
+                                            right: index <
+                                                    _availableTimes.length - 1
+                                                ? AppWidths.regular
+                                                : 0,
+                                          ),
+                                          child: _buildWeatherTimeCard(
+                                            time: time,
+                                            isSelected: isSelected,
+                                            hasWeatherData: hasWeatherData,
+                                            weatherCondition: weatherCondition,
+                                            weatherIcon: weatherIcon,
+                                            weatherColor: weatherColor,
+                                            onTap: () {
+                                              HapticFeedback.lightImpact();
+                                              setState(() {
+                                                _selectedTime = time;
+                                              });
+                                            },
+                                          ),
+                                        );
+                                      },
+                                    ),
                                   ),
-                                  child: _buildWeatherTimeCard(
-                                    time: time,
-                                    isSelected: isSelected,
-                                    hasWeatherData: hasWeatherData,
-                                    weatherCondition: weatherCondition,
-                                    weatherIcon: weatherIcon,
-                                    weatherColor: weatherColor,
-                                    onTap: () {
-                                      HapticFeedback.lightImpact();
-                                      setState(() {
-                                        _selectedTime = time;
-                                      });
-                                    },
-                                  ),
-                                );
-                              },
+                                ),
+                              ],
                             ),
                           ),
-                          const SizedBox(height: AppHeights.huge),
+                          //const SizedBox(height: AppHeights.huge),
                         ],
 
-                        // Create Game Button
-                        SizedBox(
-                          width: double.infinity,
-                          height: 50,
-                          child: ElevatedButton(
-                            onPressed: _isFormComplete && !_isLoading
-                                ? _createGame
-                                : null,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: _isFormComplete
-                                  ? AppColors.blue
-                                  : AppColors.grey,
-                              foregroundColor: Colors.white,
-                              shape: RoundedRectangleBorder(
-                                borderRadius:
-                                    BorderRadius.circular(AppRadius.card),
+                        // Create Game Button (match header width via same padding)
+                        Padding(
+                          padding: AppPaddings.allReg,
+                          child: SizedBox(
+                            width: double.infinity,
+                            height: 50,
+                            child: ElevatedButton(
+                              onPressed: _isFormComplete && !_isLoading
+                                  ? _createGame
+                                  : null,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: _isFormComplete
+                                    ? AppColors.blue
+                                    : AppColors.grey,
+                                foregroundColor: Colors.white,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius:
+                                      BorderRadius.circular(AppRadius.card),
+                                ),
+                                elevation: 0,
                               ),
-                              elevation: 0,
-                            ),
-                            child: _isLoading
-                                ? const SizedBox(
-                                    width: 20,
-                                    height: 20,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      valueColor: AlwaysStoppedAnimation<Color>(
-                                        Colors.white,
+                              child: _isLoading
+                                  ? const SizedBox(
+                                      width: 20,
+                                      height: 20,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        valueColor:
+                                            AlwaysStoppedAnimation<Color>(
+                                          Colors.white,
+                                        ),
+                                      ),
+                                    )
+                                  : Text(
+                                      'create_game'.tr(),
+                                      style: AppTextStyles.cardTitle.copyWith(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w600,
                                       ),
                                     ),
-                                  )
-                                : Text(
-                                    'create_game'.tr(),
-                                    style: AppTextStyles.cardTitle.copyWith(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
+                            ),
                           ),
                         ),
                       ],
@@ -906,8 +961,8 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
                   ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

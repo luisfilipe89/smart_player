@@ -106,6 +106,27 @@ class GamesService {
       final db = await database;
       // Database connection established
 
+      // Enforce one game per user per day
+      try {
+        final startOfDay = DateTime(
+            game.dateTime.year, game.dateTime.month, game.dateTime.day);
+        final endOfDay = startOfDay.add(const Duration(days: 1));
+        final List<Map<String, dynamic>> existing = await db.query(
+          _tableName,
+          where:
+              'organizerId = ? AND dateTime >= ? AND dateTime < ? AND isActive = 1',
+          whereArgs: [
+            game.organizerId,
+            startOfDay.toIso8601String(),
+            endOfDay.toIso8601String(),
+          ],
+          limit: 1,
+        );
+        if (existing.isNotEmpty) {
+          throw Exception('only_one_game_per_day');
+        }
+      } catch (_) {}
+
       final gameJson = game.toJson();
       // Inserting game to database
 

@@ -141,6 +141,8 @@
     "please_select_date": "Please select a date first",
     "please_select_sport": "Please select a sport first",
     "please_select_time": "Please select a time first",
+    "please_sign_in_to_organize": "Please sign in to organize a game",
+    "only_one_game_per_day": "You can only organize one game per day",
     "profile": "Profile",
     "profile_coming_soon": "Profile coming soon!",
     "recurring": "Recurring",

@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:move_young/models/game.dart';
-import 'package:move_young/theme/tokens.dart';
+import 'package:move_young/theme/_theme.dart';
 import 'package:move_young/services/games_service.dart';
 
 class GamesDiscoveryScreen extends StatefulWidget {
@@ -18,13 +18,21 @@ class _GamesDiscoveryScreenState extends State<GamesDiscoveryScreen> {
   bool _isLoading = true;
   String _selectedSport = 'all';
   String _searchQuery = '';
+  late final TextEditingController _searchController;
 
   final List<String> _sports = ['all', 'soccer', 'basketball'];
 
   @override
   void initState() {
     super.initState();
+    _searchController = TextEditingController(text: _searchQuery);
     _loadGames();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadGames() async {
@@ -119,127 +127,174 @@ class _GamesDiscoveryScreenState extends State<GamesDiscoveryScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        leadingWidth: 48,
+        leading: const AppBackButton(),
         title: Text('discover_games'.tr()),
         backgroundColor: AppColors.white,
         elevation: 0,
       ),
       backgroundColor: AppColors.white,
-      body: Column(
-        children: [
-          // Search and Filter Section
-          Container(
-            padding: const EdgeInsets.all(AppWidths.regular),
-            child: Column(
-              children: [
-                // Search Bar
-                TextField(
-                  decoration: InputDecoration(
-                    hintText: 'search_games'.tr(),
-                    prefixIcon: const Icon(Icons.search),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(AppRadius.card),
+      body: SafeArea(
+        child: Padding(
+          padding: AppPaddings.symmHorizontalReg,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: AppColors.white,
+                    borderRadius: BorderRadius.circular(AppRadius.container),
+                    boxShadow: AppShadows.md,
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(AppRadius.container),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        PanelHeader('discover_games'.tr()),
+                        Padding(
+                          padding: AppPaddings.symmHorizontalReg,
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const SizedBox(height: AppHeights.superSmall),
+                              TextField(
+                                controller: _searchController,
+                                textInputAction: TextInputAction.search,
+                                decoration: InputDecoration(
+                                  hintText: 'search_games'.tr(),
+                                  filled: true,
+                                  fillColor: AppColors.lightgrey,
+                                  prefixIcon: const Icon(Icons.search),
+                                  suffixIcon: (_searchQuery.isEmpty)
+                                      ? null
+                                      : IconButton(
+                                          icon: const Icon(Icons.clear),
+                                          onPressed: () {
+                                            _searchController.clear();
+                                            setState(() {
+                                              _searchQuery = '';
+                                            });
+                                            _loadGames();
+                                          },
+                                        ),
+                                  border: OutlineInputBorder(
+                                    borderRadius:
+                                        BorderRadius.circular(AppRadius.image),
+                                    borderSide: BorderSide.none,
+                                  ),
+                                ),
+                                onChanged: (value) {
+                                  setState(() => _searchQuery = value);
+                                  _loadGames();
+                                },
+                              ),
+                              const SizedBox(height: AppHeights.reg),
+                              SizedBox(
+                                height: 40,
+                                child: ListView.builder(
+                                  scrollDirection: Axis.horizontal,
+                                  itemCount: _sports.length,
+                                  itemBuilder: (context, index) {
+                                    final sport = _sports[index];
+                                    final isSelected = _selectedSport == sport;
+
+                                    return Padding(
+                                      padding: EdgeInsets.only(
+                                        right: index < _sports.length - 1
+                                            ? AppWidths.regular
+                                            : 0,
+                                      ),
+                                      child: FilterChip(
+                                        label: Text(sport == 'all'
+                                            ? 'all_sports'.tr()
+                                            : sport.tr()),
+                                        selected: isSelected,
+                                        onSelected: (selected) {
+                                          setState(
+                                              () => _selectedSport = sport);
+                                          _loadGames();
+                                        },
+                                        selectedColor: AppColors.blue
+                                            .withValues(alpha: 0.2),
+                                        checkmarkColor: AppColors.blue,
+                                      ),
+                                    );
+                                  },
+                                ),
+                              ),
+                              const SizedBox(height: AppHeights.reg),
+                            ],
+                          ),
+                        ),
+                        Expanded(
+                          child: Padding(
+                            padding: AppPaddings.symmHorizontalReg,
+                            child: _isLoading
+                                ? const Center(
+                                    child: CircularProgressIndicator())
+                                : _games.isEmpty
+                                    ? Center(
+                                        child: Column(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.center,
+                                          children: [
+                                            Icon(
+                                              Icons.sports_soccer,
+                                              size: 64,
+                                              color: AppColors.grey,
+                                            ),
+                                            const SizedBox(
+                                                height: AppHeights.reg),
+                                            Text(
+                                              'no_games_found'.tr(),
+                                              style:
+                                                  AppTextStyles.title.copyWith(
+                                                color: AppColors.grey,
+                                              ),
+                                            ),
+                                            const SizedBox(
+                                                height: AppHeights.small),
+                                            Text(
+                                              'no_games_found_description'.tr(),
+                                              style:
+                                                  AppTextStyles.body.copyWith(
+                                                color: AppColors.grey,
+                                              ),
+                                              textAlign: TextAlign.center,
+                                            ),
+                                          ],
+                                        ),
+                                      )
+                                    : RefreshIndicator(
+                                        onRefresh: _loadGames,
+                                        child: ListView.builder(
+                                          padding: EdgeInsets.zero,
+                                          itemCount: _games.length,
+                                          itemBuilder: (context, index) {
+                                            final game = _games[index];
+                                            return _buildGameCard(game);
+                                          },
+                                        ),
+                                      ),
+                          ),
+                        ),
+                      ],
                     ),
-                    filled: true,
-                    fillColor: AppColors.superlightgrey,
-                  ),
-                  onChanged: (value) {
-                    setState(() {
-                      _searchQuery = value;
-                    });
-                    _loadGames();
-                  },
-                ),
-                const SizedBox(height: AppHeights.reg),
-
-                // Sport Filter
-                SizedBox(
-                  height: 40,
-                  child: ListView.builder(
-                    scrollDirection: Axis.horizontal,
-                    itemCount: _sports.length,
-                    itemBuilder: (context, index) {
-                      final sport = _sports[index];
-                      final isSelected = _selectedSport == sport;
-
-                      return Padding(
-                        padding: EdgeInsets.only(
-                          right: index < _sports.length - 1
-                              ? AppWidths.regular
-                              : 0,
-                        ),
-                        child: FilterChip(
-                          label: Text(
-                              sport == 'all' ? 'all_sports'.tr() : sport.tr()),
-                          selected: isSelected,
-                          onSelected: (selected) {
-                            setState(() {
-                              _selectedSport = sport;
-                            });
-                            _loadGames();
-                          },
-                          selectedColor: AppColors.blue.withValues(alpha: 0.2),
-                          checkmarkColor: AppColors.blue,
-                        ),
-                      );
-                    },
                   ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
-
-          // Games List
-          Expanded(
-            child: _isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : _games.isEmpty
-                    ? Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              Icons.sports_soccer,
-                              size: 64,
-                              color: AppColors.grey,
-                            ),
-                            const SizedBox(height: AppHeights.reg),
-                            Text(
-                              'no_games_found'.tr(),
-                              style: AppTextStyles.title.copyWith(
-                                color: AppColors.grey,
-                              ),
-                            ),
-                            const SizedBox(height: AppHeights.small),
-                            Text(
-                              'no_games_found_description'.tr(),
-                              style: AppTextStyles.body.copyWith(
-                                color: AppColors.grey,
-                              ),
-                              textAlign: TextAlign.center,
-                            ),
-                          ],
-                        ),
-                      )
-                    : RefreshIndicator(
-                        onRefresh: _loadGames,
-                        child: ListView.builder(
-                          padding: const EdgeInsets.all(AppWidths.regular),
-                          itemCount: _games.length,
-                          itemBuilder: (context, index) {
-                            final game = _games[index];
-                            return _buildGameCard(game);
-                          },
-                        ),
-                      ),
-          ),
-        ],
+        ),
       ),
     );
   }
 
   Widget _buildGameCard(Game game) {
     return Card(
-      margin: const EdgeInsets.only(bottom: AppHeights.reg),
+      margin: const EdgeInsets.only(bottom: AppHeights.superbig),
       elevation: 2,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppRadius.card),

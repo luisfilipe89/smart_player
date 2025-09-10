@@ -129,7 +129,7 @@ class _HomeScreenNewState extends State<HomeScreenNew> {
                       borderRadius: BorderRadius.circular(AppRadius.container),
                       boxShadow: AppShadows.md,
                     ),
-                    padding: AppPaddings.allBig.copyWith(top: 0),
+                    padding: AppPaddings.allBig.copyWith(top: 10),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -209,6 +209,11 @@ class _HomeScreenNewState extends State<HomeScreenNew> {
                                   subtitle: 'start_a_game'.tr(),
                                   onTap: () {
                                     HapticFeedback.lightImpact();
+                                    if (!AuthService.isSignedIn) {
+                                      _showUserBottomSheet(context,
+                                          showSignInPrompt: true);
+                                      return;
+                                    }
                                     Navigator.of(context)
                                         .pushNamed('/organize-game');
                                   },
@@ -509,7 +514,8 @@ class _HomeScreenNewState extends State<HomeScreenNew> {
     _showUserBottomSheet(context);
   }
 
-  void _showUserBottomSheet(BuildContext context) {
+  void _showUserBottomSheet(BuildContext context,
+      {bool showSignInPrompt = false}) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -536,6 +542,26 @@ class _HomeScreenNewState extends State<HomeScreenNew> {
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
+
+              // Optional prompt (shown above header)
+              if (showSignInPrompt)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8, left: 24, right: 24),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.info_outline, color: AppColors.red),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'please_sign_in_to_organize'.tr(),
+                          style: AppTextStyles.body.copyWith(
+                            color: AppColors.red,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
 
               // User Header
               if (AuthService.isSignedIn) ...[
