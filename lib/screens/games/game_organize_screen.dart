@@ -6,9 +6,11 @@ import 'package:move_young/theme/_theme.dart';
 import 'package:move_young/services/overpass_service.dart';
 import 'package:move_young/services/weather_service.dart';
 import 'package:move_young/services/games_service.dart';
+import 'package:move_young/services/auth_service.dart';
 
 class GameOrganizeScreen extends StatefulWidget {
-  const GameOrganizeScreen({super.key});
+  final Game? initialGame;
+  const GameOrganizeScreen({super.key, this.initialGame});
 
   @override
   State<GameOrganizeScreen> createState() => _GameOrganizeScreenState();
@@ -27,6 +29,8 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
 
   // Weather data
   Map<String, String> _weatherData = {};
+  // Booked times for selected field/date
+  final Set<String> _bookedTimes = {};
 
   // Available sports with their icons
   final List<Map<String, dynamic>> _sports = [
@@ -190,6 +194,29 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
     }
   }
 
+  Future<void> _loadBookedSlots() async {
+    if (_selectedField == null || _selectedDate == null) return;
+    try {
+      final name = (_selectedField?['name'] as String?) ?? '';
+      if (name.isEmpty) return;
+      final games =
+          await GamesService.getGamesForFieldOnDate(name, _selectedDate!);
+      final times = <String>{};
+      for (final g in games) {
+        final hh = g.dateTime.hour.toString().padLeft(2, '0');
+        final mm = g.dateTime.minute.toString().padLeft(2, '0');
+        times.add('$hh:$mm');
+      }
+      if (mounted) {
+        setState(() {
+          _bookedTimes
+            ..clear()
+            ..addAll(times);
+        });
+      }
+    } catch (_) {}
+  }
+
   // Localized day of week and month abbreviations
   String _getDayOfWeekAbbr(DateTime date) {
     // EEE => Mon, Tue (localized). Some locales add a trailing '.' → strip it
@@ -252,6 +279,9 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
       );
 
       // Create a game object with selected field data
+      final organizerId = AuthService.currentUserId ?? 'anonymous';
+      final organizerName = AuthService.currentUserDisplayName;
+
       final game = Game(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
         sport: _selectedSport!,
@@ -262,10 +292,11 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
         longitude: _selectedField?['longitude']?.toDouble(),
         maxPlayers: 10, // Default max players
         description: 'Game organized by user',
-        organizerId: 'current_user_id', // TODO: Get from user service
-        organizerName: 'Current User', // TODO: Get from user service
+        organizerId: organizerId,
+        organizerName: organizerName,
         createdAt: DateTime.now(),
-        players: [], // Start with empty players list
+        currentPlayers: 1,
+        players: [organizerId], // Creator is counted as the first player
       );
 
       // Save game to SQLite database
@@ -614,6 +645,20 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Pre-fill form if initial game provided and fields not set yet
+    if (widget.initialGame != null && _selectedSport == null) {
+      final g = widget.initialGame!;
+      _selectedSport = g.sport;
+      _selectedDate =
+          DateTime(g.dateTime.year, g.dateTime.month, g.dateTime.day);
+      _selectedTime = g.formattedTime;
+      _selectedField = {
+        'name': g.location,
+        'address': g.address,
+        'latitude': g.latitude,
+        'longitude': g.longitude,
+      };
+    }
     return Scaffold(
       appBar: AppBar(
         leadingWidth: 48,
@@ -826,9 +871,10 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
                                                   _selectedDate = date;
                                                 }
                                               });
-                                              // Load weather data for the selected date
+                                              // Load weather + booked slots
                                               if (_selectedDate != null) {
                                                 _loadWeather();
+                                                _loadBookedSlots();
                                               }
                                             },
                                           ),
@@ -864,6 +910,8 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
                                         final time = _availableTimes[index];
                                         final isSelected =
                                             _selectedTime == time;
+                                        final isBooked =
+                                            _bookedTimes.contains(time);
                                         // Only show weather if data is available
                                         final hasWeatherData =
                                             _weatherData.isNotEmpty;
@@ -896,6 +944,7 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
                                             weatherIcon: weatherIcon,
                                             weatherColor: weatherColor,
                                             onTap: () {
+                                              if (isBooked) return;
                                               HapticFeedback.lightImpact();
                                               setState(() {
                                                 _selectedTime = time;

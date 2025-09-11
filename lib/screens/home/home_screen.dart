@@ -742,7 +742,8 @@ class _HomeScreenNewState extends State<HomeScreenNew> {
                           Navigator.of(context).pop();
                           await AuthService.signOut();
                           if (context.mounted) {
-                            Navigator.of(context).pushAndRemoveUntil(
+                            Navigator.of(context, rootNavigator: true)
+                                .pushAndRemoveUntil(
                               MaterialPageRoute(
                                 builder: (context) => const WelcomeScreen(),
                               ),

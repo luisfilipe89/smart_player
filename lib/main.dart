@@ -16,14 +16,11 @@ void main() async {
     // Firebase initialization failed
   }
 
-  // Force white system bars (status + nav)
+  // Status bar styling only; avoid forcing Android nav bar appearance
   SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
-    statusBarColor: Colors.transparent, // transparent status bar
+    statusBarColor: Colors.transparent,
     statusBarIconBrightness: Brightness.dark,
-    statusBarBrightness: Brightness.light, // for iOS
-    systemNavigationBarColor: Colors.white, // force white nav bar
-    systemNavigationBarIconBrightness: Brightness.dark,
-    systemNavigationBarDividerColor: Colors.transparent,
+    statusBarBrightness: Brightness.light,
   ));
 
   runApp(

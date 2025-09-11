@@ -1,10 +1,13 @@
 // lib/screens/games/games_discovery_screen.dart
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+// Haptic already imported above in other files when needed
 import 'package:easy_localization/easy_localization.dart';
 import 'package:move_young/models/game.dart';
 import 'package:move_young/theme/_theme.dart';
 import 'package:move_young/services/games_service.dart';
+import 'package:move_young/services/cloud_games_service.dart';
+import 'package:move_young/services/auth_service.dart';
+import 'package:flutter/services.dart';
 
 class GamesDiscoveryScreen extends StatefulWidget {
   const GamesDiscoveryScreen({super.key});
@@ -19,6 +22,7 @@ class _GamesDiscoveryScreenState extends State<GamesDiscoveryScreen> {
   String _selectedSport = 'all';
   String _searchQuery = '';
   late final TextEditingController _searchController;
+  static const String _adminEmail = 'luisfccfigueiredo@gmail.com';
 
   final List<String> _sports = ['all', 'soccer', 'basketball'];
 
@@ -84,8 +88,17 @@ class _GamesDiscoveryScreenState extends State<GamesDiscoveryScreen> {
 
   Future<void> _joinGame(Game game) async {
     try {
-      const currentUserId = 'current_user_id';
-      const currentUserName = 'Current User';
+      final currentUserId = AuthService.currentUserId ?? '';
+      final currentUserName = AuthService.currentUserDisplayName;
+      if (currentUserId.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('please_sign_in_to_organize'.tr()),
+            backgroundColor: AppColors.red,
+          ),
+        );
+        return;
+      }
 
       final success =
           await GamesService.joinGame(game.id, currentUserId, currentUserName);
@@ -123,6 +136,54 @@ class _GamesDiscoveryScreenState extends State<GamesDiscoveryScreen> {
     }
   }
 
+  Future<void> _cancelGame(Game game) async {
+    final isOwner =
+        AuthService.isSignedIn && AuthService.currentUserId == game.organizerId;
+    if (!isOwner) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('cancel'.tr()),
+        content: Text('are_you_sure'.tr()),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: Text('cancel'.tr())),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: Text('ok'.tr())),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    try {
+      if (AuthService.isSignedIn) {
+        await CloudGamesService.deleteGame(game.id);
+      }
+      await GamesService.cancelGame(game.id);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('game_cancelled_successfully'.tr()),
+            backgroundColor: AppColors.green,
+          ),
+        );
+      }
+      await _loadGames();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('game_creation_failed'.tr()),
+            backgroundColor: AppColors.red,
+          ),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -152,7 +213,7 @@ class _GamesDiscoveryScreenState extends State<GamesDiscoveryScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        PanelHeader('discover_games'.tr()),
+                        PanelHeader('find_games'.tr()),
                         Padding(
                           padding: AppPaddings.symmHorizontalReg,
                           child: Column(
@@ -371,6 +432,18 @@ class _GamesDiscoveryScreenState extends State<GamesDiscoveryScreen> {
                       ),
                     ),
                   ),
+                  const SizedBox(width: 6),
+                  if (AuthService.isSignedIn &&
+                      (AuthService.currentUser?.email?.toLowerCase() ==
+                          _adminEmail))
+                    IconButton(
+                      icon: const Icon(Icons.close, size: 18),
+                      color: AppColors.red,
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                      tooltip: 'cancel'.tr(),
+                      onPressed: () => _cancelGame(game),
+                    ),
                 ],
               ),
 
@@ -387,7 +460,7 @@ class _GamesDiscoveryScreenState extends State<GamesDiscoveryScreen> {
                 const SizedBox(height: AppHeights.reg),
               ],
 
-              // Organizer Info
+              // Organizer Info + Edit (if owner)
               Row(
                 children: [
                   Icon(
@@ -396,38 +469,84 @@ class _GamesDiscoveryScreenState extends State<GamesDiscoveryScreen> {
                     color: AppColors.grey,
                   ),
                   const SizedBox(width: 4),
-                  Text(
-                    'Organized by ${game.organizerName}',
-                    style: AppTextStyles.small.copyWith(
-                      color: AppColors.grey,
+                  Expanded(
+                    child: Text(
+                      'Organized by ${game.organizerName}',
+                      style: AppTextStyles.small.copyWith(
+                        color: AppColors.grey,
+                      ),
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
+                  const SizedBox(width: AppWidths.regular),
+                  if (AuthService.isSignedIn &&
+                      AuthService.currentUser?.uid == game.organizerId)
+                    TextButton.icon(
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 4),
+                        minimumSize: const Size(0, 0),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      onPressed: () {
+                        HapticFeedback.selectionClick();
+                        Navigator.of(context).pushNamed(
+                          '/organize-game',
+                          arguments: game,
+                        );
+                      },
+                      icon: const Icon(Icons.edit, size: 16),
+                      label: Text('edit'.tr(), style: AppTextStyles.small),
+                    ),
                 ],
               ),
 
               const SizedBox(height: AppHeights.reg),
 
-              // Join Button
+              // Join or Cancel Button
               SizedBox(
                 width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: game.hasSpace ? () => _joinGame(game) : null,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor:
-                        game.hasSpace ? AppColors.blue : AppColors.grey,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(AppRadius.card),
+                child: Builder(builder: (context) {
+                  final isOwner = AuthService.isSignedIn &&
+                      AuthService.currentUserId == game.organizerId;
+                  if (isOwner) {
+                    return ElevatedButton(
+                      onPressed: () => _cancelGame(game),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.red,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(AppRadius.card),
+                        ),
+                        elevation: 0,
+                      ),
+                      child: Text(
+                        'cancel_game'.tr(),
+                        style: AppTextStyles.cardTitle.copyWith(
+                          color: Colors.white,
+                        ),
+                      ),
+                    );
+                  }
+                  return ElevatedButton(
+                    onPressed: game.hasSpace ? () => _joinGame(game) : null,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor:
+                          game.hasSpace ? AppColors.blue : AppColors.grey,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(AppRadius.card),
+                      ),
+                      elevation: 0,
                     ),
-                    elevation: 0,
-                  ),
-                  child: Text(
-                    game.hasSpace ? 'join_game'.tr() : 'game_full'.tr(),
-                    style: AppTextStyles.cardTitle.copyWith(
-                      color: Colors.white,
+                    child: Text(
+                      game.hasSpace ? 'join_game'.tr() : 'game_full'.tr(),
+                      style: AppTextStyles.cardTitle.copyWith(
+                        color: Colors.white,
+                      ),
                     ),
-                  ),
-                ),
+                  );
+                }),
               ),
             ],
           ),

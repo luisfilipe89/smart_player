@@ -138,13 +138,12 @@ class GamesService {
       // Checking authentication status
 
       if (AuthService.isSignedIn) {
-        try {
-          await CloudGamesService.createGame(game);
-          // Game synced to cloud successfully
-        } catch (e) {
-          // Warning: Failed to sync game to cloud
-          // Don't fail the entire operation if cloud sync fails
-        }
+        // Fire-and-forget cloud sync so UI isn't blocked
+        // Errors are intentionally ignored to avoid impacting local UX
+        // The user can still see their game locally immediately
+        // and cloud sync can complete in the background
+        // (consider adding a background sync/retry later)
+        CloudGamesService.createGame(game).onError((_, __) => game.id);
       } else {
         // User not authenticated, skipping cloud sync
       }
@@ -236,6 +235,26 @@ class GamesService {
       return Game.fromJson(maps.first);
     }
     return null;
+  }
+
+  // Get games for a specific field (by location name) on a specific date
+  static Future<List<Game>> getGamesForFieldOnDate(
+      String locationName, DateTime date) async {
+    final db = await database;
+    final startOfDay = DateTime(date.year, date.month, date.day);
+    final endOfDay = startOfDay.add(const Duration(days: 1));
+    final List<Map<String, dynamic>> maps = await db.query(
+      _tableName,
+      where: 'location = ? AND dateTime >= ? AND dateTime < ? AND isActive = ?',
+      whereArgs: [
+        locationName,
+        startOfDay.toIso8601String(),
+        endOfDay.toIso8601String(),
+        1,
+      ],
+      orderBy: 'dateTime ASC',
+    );
+    return maps.map((map) => Game.fromJson(map)).toList();
   }
 
   // Update game
