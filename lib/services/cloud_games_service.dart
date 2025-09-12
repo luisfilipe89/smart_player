@@ -4,8 +4,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:move_young/models/game.dart';
 
 class CloudGamesService {
-  static final FirebaseDatabase _database = FirebaseDatabase.instance;
-  static final FirebaseAuth _auth = FirebaseAuth.instance;
+  static FirebaseDatabase get _database => FirebaseDatabase.instance;
+  static FirebaseAuth get _auth => FirebaseAuth.instance;
 
   // Database references
   static DatabaseReference get _gamesRef => _database.ref('games');

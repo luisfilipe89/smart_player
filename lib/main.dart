@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:move_young/screens/welcome/welcome_screen.dart';
 import 'package:move_young/theme/_theme.dart';
 
@@ -12,8 +13,23 @@ void main() async {
   // Initialize Firebase
   try {
     await Firebase.initializeApp();
+    // ignore: avoid_print
+    print('Firebase initialized successfully');
   } catch (e) {
     // Firebase initialization failed
+    // ignore: avoid_print
+    print('Firebase init failed: $e');
+  }
+
+  // Initialize Firebase App Check
+  try {
+    await FirebaseAppCheck.instance.activate(
+      androidProvider: AndroidProvider.playIntegrity,
+      appleProvider: AppleProvider.deviceCheck,
+      webProvider: ReCaptchaV3Provider('auto'),
+    );
+  } catch (e) {
+    // App Check initialization failed; safe to proceed in dev
   }
 
   // Status bar styling only; avoid forcing Android nav bar appearance

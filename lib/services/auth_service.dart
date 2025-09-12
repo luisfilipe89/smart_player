@@ -1,8 +1,10 @@
 // lib/services/auth_service.dart
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:google_sign_in/google_sign_in.dart';
 
 class AuthService {
-  static final FirebaseAuth _auth = FirebaseAuth.instance;
+  static FirebaseAuth get _auth => FirebaseAuth.instance;
 
   // Get current user
   static User? get currentUser => _auth.currentUser;
@@ -57,8 +59,33 @@ class AuthService {
   // Sign in with Google (simplified - requires google_sign_in package)
   static Future<UserCredential?> signInWithGoogle() async {
     try {
-      // Google Sign-In not implemented yet
-      return null;
+      // Web uses Firebase Auth popup provider
+      if (kIsWeb) {
+        final provider = GoogleAuthProvider();
+        provider.addScope('email');
+        final credential = await _auth.signInWithPopup(provider);
+        await _auth.currentUser?.reload();
+        return credential;
+      }
+
+      // Mobile (Android/iOS) uses google_sign_in
+      final GoogleSignInAccount? googleUser = await GoogleSignIn().signIn();
+      if (googleUser == null) {
+        // User aborted the sign-in flow
+        return null;
+      }
+
+      final GoogleSignInAuthentication googleAuth =
+          await googleUser.authentication;
+
+      final oauthCredential = GoogleAuthProvider.credential(
+        accessToken: googleAuth.accessToken,
+        idToken: googleAuth.idToken,
+      );
+
+      final userCredential = await _auth.signInWithCredential(oauthCredential);
+      await _auth.currentUser?.reload();
+      return userCredential;
     } catch (e) {
       // Error signing in with Google
       return null;
