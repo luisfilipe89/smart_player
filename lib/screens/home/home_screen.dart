@@ -8,6 +8,9 @@ import 'package:move_young/screens/welcome/welcome_screen.dart';
 import 'package:move_young/screens/auth/auth_screen.dart';
 import 'package:move_young/theme/tokens.dart';
 import 'package:move_young/screens/main_scaffold.dart'; // MainScaffold & kTabAgenda
+import 'package:move_young/screens/settings/settings_screen.dart';
+import 'package:move_young/screens/help/help_screen.dart';
+import 'package:move_young/screens/profile/profile_screen.dart';
 
 // Loading state for events
 enum _LoadState { idle, loading, success, error }
@@ -674,10 +677,9 @@ class _HomeScreenNewState extends State<HomeScreenNew> {
                         label: 'profile'.tr(),
                         onTap: () {
                           Navigator.of(context).pop();
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('profile_coming_soon'.tr()),
-                              backgroundColor: AppColors.primary,
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => const ProfileScreen(),
                             ),
                           );
                         },
@@ -713,10 +715,9 @@ class _HomeScreenNewState extends State<HomeScreenNew> {
                         label: 'settings'.tr(),
                         onTap: () {
                           Navigator.of(context).pop();
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('settings_coming_soon'.tr()),
-                              backgroundColor: AppColors.primary,
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => const SettingsScreen(),
                             ),
                           );
                         },
@@ -726,10 +727,9 @@ class _HomeScreenNewState extends State<HomeScreenNew> {
                         label: 'help'.tr(),
                         onTap: () {
                           Navigator.of(context).pop();
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('help_coming_soon'.tr()),
-                              backgroundColor: AppColors.primary,
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => const HelpScreen(),
                             ),
                           );
                         },

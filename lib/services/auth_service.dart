@@ -1,5 +1,6 @@
 // lib/services/auth_service.dart
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:google_sign_in/google_sign_in.dart';
 
@@ -240,6 +241,133 @@ class AuthService {
     } catch (e) {
       // Error deleting account
       return false;
+    }
+  }
+
+  // ----- Account management helpers -----
+
+  // Whether the current user has a password provider linked
+  static bool get hasPasswordProvider {
+    final providers =
+        _auth.currentUser?.providerData.map((p) => p.providerId).toList() ??
+            const [];
+    return providers.contains('password');
+  }
+
+  // Change password for email/password users (requires re-auth)
+  static Future<void> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    final user = _auth.currentUser;
+    if (user == null) throw Exception('Not signed in');
+    final email = user.email;
+    if (email == null || email.isEmpty) {
+      throw Exception('No email on account');
+    }
+
+    try {
+      final cred = EmailAuthProvider.credential(
+        email: email,
+        password: currentPassword,
+      );
+      await user.reauthenticateWithCredential(cred);
+      await user.updatePassword(newPassword);
+      await user.reload();
+    } on FirebaseAuthException catch (e) {
+      switch (e.code) {
+        case 'wrong-password':
+          throw Exception('Current password is incorrect');
+        case 'weak-password':
+          throw Exception('New password is too weak');
+        case 'requires-recent-login':
+          throw Exception('Please sign in again and retry');
+        default:
+          throw Exception('Could not change password (${e.code})');
+      }
+    }
+  }
+
+  // Send password reset email
+  static Future<void> sendPasswordResetEmail(String email) async {
+    try {
+      await _auth.sendPasswordResetEmail(email: email);
+    } on FirebaseAuthException catch (e) {
+      switch (e.code) {
+        case 'invalid-email':
+          throw Exception('Invalid email');
+        case 'user-not-found':
+          throw Exception('No account found for this email');
+        default:
+          throw Exception('Could not send reset email (${e.code})');
+      }
+    }
+  }
+
+  // Change email (email/password users). Uses re-auth with current password then verifies new email.
+  static Future<void> changeEmail({
+    required String currentPassword,
+    required String newEmail,
+  }) async {
+    final user = _auth.currentUser;
+    if (user == null) throw Exception('Not signed in');
+    final existingEmail = user.email;
+    if (existingEmail == null || existingEmail.isEmpty) {
+      throw Exception('No email on account');
+    }
+
+    try {
+      // Enforce cooldown between email change requests
+      final uid = user.uid;
+      final DatabaseReference metaRef =
+          FirebaseDatabase.instance.ref('users/$uid/metadata');
+      const int cooldownHours = 24; // adjust policy as needed
+      final cooldownMs = Duration(hours: cooldownHours).inMilliseconds;
+      final metaSnapshot = await metaRef.child('emailChangeRequestedAt').get();
+      if (metaSnapshot.exists) {
+        final lastMs = int.tryParse(metaSnapshot.value.toString()) ?? 0;
+        final nowMs = DateTime.now().millisecondsSinceEpoch;
+        if (lastMs > 0 && (nowMs - lastMs) < cooldownMs) {
+          final remainingMs = cooldownMs - (nowMs - lastMs);
+          final remainingHours = (remainingMs / (1000 * 60 * 60)).ceil();
+          throw Exception(
+              'You can change your email again in ~$remainingHours hour(s).');
+        }
+      }
+
+      // Re-authenticate with current password
+      final cred = EmailAuthProvider.credential(
+        email: existingEmail,
+        password: currentPassword,
+      );
+      await user.reauthenticateWithCredential(cred);
+
+      // Prefer verifyBeforeUpdateEmail if available, else updateEmail
+      try {
+        await user.verifyBeforeUpdateEmail(newEmail);
+      } on NoSuchMethodError {
+        await user.updateEmail(newEmail);
+      }
+
+      await user.reload();
+
+      // Record request time to enforce cooldown
+      await metaRef.update({
+        'emailChangeRequestedAt': DateTime.now().millisecondsSinceEpoch,
+      });
+    } on FirebaseAuthException catch (e) {
+      switch (e.code) {
+        case 'invalid-email':
+          throw Exception('Invalid email');
+        case 'email-already-in-use':
+          throw Exception('Email already in use');
+        case 'wrong-password':
+          throw Exception('Current password is incorrect');
+        case 'requires-recent-login':
+          throw Exception('Please sign in again and retry');
+        default:
+          throw Exception('Could not change email (${e.code})');
+      }
     }
   }
 }

@@ -241,9 +241,11 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
 
   void _continueAnonymously(BuildContext context) async {
     setState(() => _loadingAnon = true);
+    bool navigated = false;
     try {
       await AuthService.signInAnonymously();
       if (context.mounted) {
+        navigated = true;
         _navigateToMainApp(context);
       }
     } catch (e) {
@@ -256,15 +258,17 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
         );
       }
     } finally {
-      if (mounted) setState(() => _loadingAnon = false);
+      if (!navigated && mounted) setState(() => _loadingAnon = false);
     }
   }
 
   void _continueWithGoogle(BuildContext context) async {
     setState(() => _loadingGoogle = true);
+    bool navigated = false;
     try {
       final credential = await AuthService.signInWithGoogle();
       if (credential != null && context.mounted) {
+        navigated = true;
         _navigateToMainApp(context);
         return;
       }
@@ -286,14 +290,16 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
         );
       }
     } finally {
-      if (mounted) setState(() => _loadingGoogle = false);
+      if (!navigated && mounted) setState(() => _loadingGoogle = false);
     }
   }
 
   void _navigateToMainApp(BuildContext context) {
     Navigator.of(context).pushReplacement(
-      MaterialPageRoute(
-        builder: (context) => const MainScaffold(),
+      PageRouteBuilder(
+        pageBuilder: (_, __, ___) => const MainScaffold(),
+        transitionDuration: Duration.zero,
+        reverseTransitionDuration: Duration.zero,
       ),
     );
   }
