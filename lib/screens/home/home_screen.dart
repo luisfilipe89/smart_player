@@ -11,6 +11,7 @@ import 'package:move_young/screens/main_scaffold.dart'; // MainScaffold & kTabAg
 import 'package:move_young/screens/settings/settings_screen.dart';
 import 'package:move_young/screens/help/help_screen.dart';
 import 'package:move_young/screens/profile/profile_screen.dart';
+import 'package:move_young/screens/friends/friends_screen.dart';
 
 // Loading state for events
 enum _LoadState { idle, loading, success, error }
@@ -689,10 +690,9 @@ class _HomeScreenNewState extends State<HomeScreenNew> {
                         label: 'friends'.tr(),
                         onTap: () {
                           Navigator.of(context).pop();
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('friends_coming_soon'.tr()),
-                              backgroundColor: AppColors.primary,
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => const FriendsScreen(),
                             ),
                           );
                         },

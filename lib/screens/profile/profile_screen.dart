@@ -139,12 +139,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
       final uid = AuthService.currentUserId;
       if (uid == null) throw Exception('Not signed in');
 
-      final storageRef =
-          FirebaseStorage.instance.ref().child('users/$uid/profile.jpg');
+      final storage = FirebaseStorage.instanceFor(
+          bucket: 'gs://moveyoung-55b5d.appspot.com');
+      final storageRef = storage.ref().child('users/$uid/profile.jpg');
       final file = File(picked.path);
-      await storageRef.putFile(
+      final task = await storageRef.putFile(
           file, SettableMetadata(contentType: 'image/jpeg'));
-      final downloadUrl = await storageRef.getDownloadURL();
+      String downloadUrl;
+      try {
+        downloadUrl = await task.ref.getDownloadURL();
+      } catch (_) {
+        await Future.delayed(const Duration(milliseconds: 300));
+        downloadUrl = await task.ref.getDownloadURL();
+      }
 
       await AuthService.updateProfile(photoURL: downloadUrl);
 
@@ -315,8 +322,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
       setState(() => _uploading = true);
       final uid = AuthService.currentUserId;
       if (uid != null) {
-        final ref =
-            FirebaseStorage.instance.ref().child('users/$uid/profile.jpg');
+        final storage = FirebaseStorage.instanceFor(
+            bucket: 'gs://moveyoung-55b5d.appspot.com');
+        final ref = storage.ref().child('users/$uid/profile.jpg');
         try {
           await ref.delete();
         } catch (_) {
@@ -352,6 +360,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
       firstDate: DateTime(1900),
       lastDate: now,
       helpText: 'profile_date_of_birth'.tr(),
+      builder: (context, child) {
+        // Force a neutral theme to avoid any pinkish accent from platform/theme
+        final theme = Theme.of(context);
+        return Theme(
+          data: theme.copyWith(
+            colorScheme: theme.colorScheme.copyWith(
+              primary: AppColors.primary,
+              onPrimary: Colors.white,
+              surface: AppColors.white,
+              onSurface: AppColors.text,
+            ),
+            dialogBackgroundColor: AppColors.white,
+          ),
+          child: child ?? const SizedBox.shrink(),
+        );
+      },
     );
     if (picked != null) {
       setState(() => _dateOfBirth = picked);

@@ -134,7 +134,14 @@ class _AuthScreenState extends State<AuthScreen> {
       }
 
       if (mounted) {
-        Navigator.of(context).pop(true); // Return success
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('already_signed_in'.tr()),
+            backgroundColor: AppColors.primary,
+          ),
+        );
+        await Future.delayed(const Duration(milliseconds: 500));
+        if (mounted) Navigator.of(context).pop(true); // Return success
       }
     } catch (e) {
       if (mounted) {
@@ -324,6 +331,48 @@ class _AuthScreenState extends State<AuthScreen> {
                   },
                 ),
                 const SizedBox(height: AppSpacing.lg),
+
+                // Forgot password (only for login)
+                if (_isLogin) ...[
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton(
+                      onPressed: _isLoading
+                          ? null
+                          : () async {
+                              final email = _emailController.text.trim();
+                              if (email.isEmpty || !email.contains('@')) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text('auth_email_invalid'.tr()),
+                                  ),
+                                );
+                                return;
+                              }
+                              try {
+                                await AuthService.sendPasswordResetEmail(email);
+                                if (!mounted) return;
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      tr('settings_reset_email_sent',
+                                          args: [email]),
+                                    ),
+                                  ),
+                                );
+                              } catch (e) {
+                                if (!mounted) return;
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text('error_generic_signin'.tr()),
+                                  ),
+                                );
+                              }
+                            },
+                      child: Text('auth_forgot_password'.tr()),
+                    ),
+                  ),
+                ],
 
                 // Auth button
                 ElevatedButton(

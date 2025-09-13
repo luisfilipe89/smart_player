@@ -3,6 +3,7 @@ import 'package:move_young/services/auth_service.dart';
 import 'package:move_young/theme/tokens.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:move_young/theme/app_back_button.dart';
+import 'package:move_young/services/friends_service.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -18,6 +19,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final _confirmCtrl = TextEditingController();
   final _emailCurrentPassCtrl = TextEditingController();
   final _newEmailCtrl = TextEditingController();
+  bool _showPwd1 = false;
+  bool _showPwd2 = false;
+  bool _showPwd3 = false;
+  bool _showEmailPwd = false;
 
   bool _haptics = true;
 
@@ -212,129 +217,41 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   if (isPasswordUser) ...[
-                    TextField(
-                      controller: _currentCtrl,
-                      obscureText: true,
-                      decoration: InputDecoration(
-                        labelText: 'settings_current_password'.tr(),
-                        border: const OutlineInputBorder(),
-                      ),
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.lock_outline,
+                          color: AppColors.primary),
+                      title: Text('settings_change_password'.tr()),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: _showChangePasswordDialog,
                     ),
-                    const SizedBox(height: AppSpacing.sm),
-                    TextField(
-                      controller: _newCtrl,
-                      obscureText: true,
-                      decoration: InputDecoration(
-                        labelText: 'settings_new_password'.tr(),
-                        border: const OutlineInputBorder(),
-                      ),
-                    ),
-                    const SizedBox(height: AppSpacing.sm),
-                    TextField(
-                      controller: _confirmCtrl,
-                      obscureText: true,
-                      decoration: InputDecoration(
-                        labelText: 'settings_confirm_new_password'.tr(),
-                        border: const OutlineInputBorder(),
-                      ),
-                    ),
-                    const SizedBox(height: AppSpacing.md),
-                    SizedBox(
-                      width: double.infinity,
-                      height: 48,
-                      child: ElevatedButton(
-                        onPressed: _submitting ? null : _changePassword,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.primary,
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(AppRadius.card),
-                          ),
-                        ),
-                        child: _submitting
-                            ? const SizedBox(
-                                width: 18,
-                                height: 18,
-                                child:
-                                    CircularProgressIndicator(strokeWidth: 2),
-                              )
-                            : Text('settings_change_password'.tr()),
-                      ),
+                    const Divider(height: 1, color: AppColors.lightgrey),
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.mail_outline,
+                          color: AppColors.primary),
+                      title: Text('settings_change_email'.tr()),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: _showChangeEmailDialog,
                     ),
                   ] else ...[
-                    Text('settings_google_account_hint'.tr(),
-                        style: AppTextStyles.body),
-                    const SizedBox(height: AppSpacing.md),
-                    SizedBox(
-                      width: double.infinity,
-                      height: 48,
-                      child: OutlinedButton.icon(
-                        onPressed: _submitting ? null : _sendResetEmail,
-                        icon: const Icon(Icons.email_outlined),
-                        label: _submitting
-                            ? const SizedBox(
-                                width: 18,
-                                height: 18,
-                                child:
-                                    CircularProgressIndicator(strokeWidth: 2),
-                              )
-                            : Text('settings_send_reset_email'.tr()),
-                      ),
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Text('settings_google_account_hint'.tr(),
+                          style: AppTextStyles.body),
+                    ),
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.email_outlined,
+                          color: AppColors.primary),
+                      title: Text('settings_send_reset_email'.tr()),
+                      onTap: _submitting ? null : _sendResetEmail,
                     ),
                   ],
                 ],
               ),
             ),
-            if (isPasswordUser) ...[
-              const SizedBox(height: AppSpacing.lg),
-              _buildSectionCard(
-                title: 'settings_change_email'.tr(),
-                child: Column(
-                  children: [
-                    TextField(
-                      controller: _newEmailCtrl,
-                      keyboardType: TextInputType.emailAddress,
-                      decoration: InputDecoration(
-                        labelText: 'settings_new_email'.tr(),
-                        border: const OutlineInputBorder(),
-                      ),
-                    ),
-                    const SizedBox(height: AppSpacing.sm),
-                    TextField(
-                      controller: _emailCurrentPassCtrl,
-                      obscureText: true,
-                      decoration: InputDecoration(
-                        labelText: 'settings_current_password'.tr(),
-                        border: const OutlineInputBorder(),
-                      ),
-                    ),
-                    const SizedBox(height: AppSpacing.md),
-                    SizedBox(
-                      width: double.infinity,
-                      height: 48,
-                      child: ElevatedButton(
-                        onPressed: _submitting ? null : _changeEmail,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.primary,
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(AppRadius.card),
-                          ),
-                        ),
-                        child: _submitting
-                            ? const SizedBox(
-                                width: 18,
-                                height: 18,
-                                child:
-                                    CircularProgressIndicator(strokeWidth: 2),
-                              )
-                            : Text('settings_change_email'.tr()),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
+            // change email moved into action tile above
             const SizedBox(height: AppSpacing.lg),
             _buildSectionCard(
               title: 'settings_preferences'.tr(),
@@ -346,6 +263,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     title: Text('settings_haptics'.tr()),
                     contentPadding: EdgeInsets.zero,
                   ),
+                  const Divider(height: 1, color: AppColors.lightgrey),
+                  _AllowRequestsTile(),
                 ],
               ),
             ),
@@ -366,9 +285,165 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
               ),
             ),
+            const SizedBox(height: AppSpacing.lg),
+            _buildSectionCard(
+              title: 'settings_blocked_users'.tr(),
+              child: _BlockedUsersPanel(),
+            ),
           ],
         ),
       ),
+    );
+  }
+
+  Future<void> _showChangePasswordDialog() async {
+    _currentCtrl.clear();
+    _newCtrl.clear();
+    _confirmCtrl.clear();
+    _showPwd1 = _showPwd2 = _showPwd3 = false;
+    await showDialog<void>(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(builder: (context, setStateDialog) {
+          return AlertDialog(
+            title: Text('settings_change_password'.tr()),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: _currentCtrl,
+                  obscureText: !_showPwd1,
+                  decoration: InputDecoration(
+                    labelText: 'settings_current_password'.tr(),
+                    suffixIcon: IconButton(
+                      icon: Icon(
+                          _showPwd1 ? Icons.visibility : Icons.visibility_off),
+                      onPressed: () =>
+                          setStateDialog(() => _showPwd1 = !_showPwd1),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.sm),
+                TextField(
+                  controller: _newCtrl,
+                  obscureText: !_showPwd2,
+                  decoration: InputDecoration(
+                    labelText: 'settings_new_password'.tr(),
+                    suffixIcon: IconButton(
+                      icon: Icon(
+                          _showPwd2 ? Icons.visibility : Icons.visibility_off),
+                      onPressed: () =>
+                          setStateDialog(() => _showPwd2 = !_showPwd2),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.sm),
+                TextField(
+                  controller: _confirmCtrl,
+                  obscureText: !_showPwd3,
+                  decoration: InputDecoration(
+                    labelText: 'settings_confirm_new_password'.tr(),
+                    suffixIcon: IconButton(
+                      icon: Icon(
+                          _showPwd3 ? Icons.visibility : Icons.visibility_off),
+                      onPressed: () =>
+                          setStateDialog(() => _showPwd3 = !_showPwd3),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: Text('cancel'.tr()),
+              ),
+              ElevatedButton(
+                onPressed: _submitting
+                    ? null
+                    : () async {
+                        await _changePassword();
+                        if (mounted) Navigator.pop(context);
+                      },
+                style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.white),
+                child: _submitting
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2))
+                    : Text('settings_change_password'.tr()),
+              ),
+            ],
+          );
+        });
+      },
+    );
+  }
+
+  Future<void> _showChangeEmailDialog() async {
+    _newEmailCtrl.clear();
+    _emailCurrentPassCtrl.clear();
+    _showEmailPwd = false;
+    await showDialog<void>(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(builder: (context, setStateDialog) {
+          return AlertDialog(
+            title: Text('settings_change_email'.tr()),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: _newEmailCtrl,
+                  keyboardType: TextInputType.emailAddress,
+                  decoration:
+                      InputDecoration(labelText: 'settings_new_email'.tr()),
+                ),
+                const SizedBox(height: AppSpacing.sm),
+                TextField(
+                  controller: _emailCurrentPassCtrl,
+                  obscureText: !_showEmailPwd,
+                  decoration: InputDecoration(
+                    labelText: 'settings_current_password'.tr(),
+                    suffixIcon: IconButton(
+                      icon: Icon(_showEmailPwd
+                          ? Icons.visibility
+                          : Icons.visibility_off),
+                      onPressed: () =>
+                          setStateDialog(() => _showEmailPwd = !_showEmailPwd),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: Text('cancel'.tr()),
+              ),
+              ElevatedButton(
+                onPressed: _submitting
+                    ? null
+                    : () async {
+                        await _changeEmail();
+                        if (mounted) Navigator.pop(context);
+                      },
+                style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.white),
+                child: _submitting
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2))
+                    : Text('settings_change_email'.tr()),
+              ),
+            ],
+          );
+        });
+      },
     );
   }
 
@@ -388,6 +463,83 @@ class _SettingsScreenState extends State<SettingsScreen> {
           child,
         ],
       ),
+    );
+  }
+}
+
+class _BlockedUsersPanel extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final uid = AuthService.currentUserId;
+    if (uid == null) {
+      return Text('guest_user'.tr(), style: AppTextStyles.smallMuted);
+    }
+    return StreamBuilder<List<String>>(
+      stream: FriendsService.blockedUsersStream(uid),
+      builder: (context, snapshot) {
+        final blocked = snapshot.data ?? const <String>[];
+        if (blocked.isEmpty) {
+          return Text('settings_no_blocked_users'.tr(),
+              style: AppTextStyles.smallMuted);
+        }
+        return ListView.separated(
+          shrinkWrap: true,
+          primary: false,
+          itemCount: blocked.length,
+          separatorBuilder: (_, __) =>
+              const Divider(height: 1, color: AppColors.lightgrey),
+          itemBuilder: (context, i) {
+            final otherUid = blocked[i];
+            return FutureBuilder<Map<String, String?>>(
+              future: FriendsService.fetchMinimalProfile(otherUid),
+              builder: (context, snap) {
+                final data = snap.data ??
+                    const {'displayName': 'User', 'photoURL': null};
+                final name = data['displayName'] ?? 'User';
+                final photo = data['photoURL'];
+                return ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: CircleAvatar(
+                    backgroundColor: AppColors.superlightgrey,
+                    foregroundColor: AppColors.primary,
+                    backgroundImage: (photo != null && photo.isNotEmpty)
+                        ? NetworkImage(photo)
+                        : null,
+                    child: (photo == null || photo.isEmpty)
+                        ? Text(name[0].toUpperCase())
+                        : null,
+                  ),
+                  title: Text(name),
+                  trailing: TextButton(
+                    onPressed: () => FriendsService.unblockUser(otherUid),
+                    child: Text('settings_unblock'.tr()),
+                  ),
+                );
+              },
+            );
+          },
+        );
+      },
+    );
+  }
+}
+
+class _AllowRequestsTile extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final uid = AuthService.currentUserId;
+    if (uid == null) return const SizedBox.shrink();
+    return StreamBuilder<bool>(
+      stream: FriendsService.allowRequestsStream(uid),
+      builder: (context, snapshot) {
+        final allow = snapshot.data ?? true;
+        return SwitchListTile(
+          value: allow,
+          onChanged: (v) => FriendsService.setAllowRequests(v),
+          title: Text('settings_allow_requests'.tr()),
+          contentPadding: EdgeInsets.zero,
+        );
+      },
     );
   }
 }

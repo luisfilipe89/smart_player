@@ -111,12 +111,7 @@ class _HelpScreenState extends State<HelpScreen> {
                     trailingChevron: true,
                   ),
                   const Divider(height: 1, color: AppColors.lightgrey),
-                  _buildLinkTile(
-                    icon: Icons.bug_report_outlined,
-                    title: 'help_report_problem'.tr(),
-                    onTap: () =>
-                        _emailSupport(subject: 'SmartPlayer Bug Report'),
-                  ),
+                  // Removed report a problem per request
                 ],
               ),
             ),
