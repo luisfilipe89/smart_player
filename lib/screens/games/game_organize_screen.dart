@@ -168,7 +168,6 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
     setState(() {
       _isLoadingFields = true;
       _availableFields = [];
-      _selectedField = null;
     });
 
     try {
@@ -183,6 +182,20 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
       setState(() {
         _availableFields = fields;
         _isLoadingFields = false;
+
+        // If a field was preselected (e.g., editing a game), map it to the
+        // corresponding instance from the freshly loaded list so identity
+        // comparison (_selectedField == field) works for highlighting.
+        if (_selectedField != null) {
+          final String selName = (_selectedField?['name'] as String?) ?? '';
+          final match = fields.firstWhere(
+            (f) => (f['name'] as String?) == selName,
+            orElse: () => {},
+          );
+          if (match.isNotEmpty) {
+            _selectedField = match;
+          }
+        }
       });
     } catch (e) {
       setState(() {
@@ -317,7 +330,7 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
         latitude: _selectedField?['latitude']?.toDouble(),
         longitude: _selectedField?['longitude']?.toDouble(),
         maxPlayers: _maxPlayers,
-        description: 'Game organized by user',
+        description: '',
         organizerId: organizerId,
         organizerName: organizerName,
         createdAt: DateTime.now(),
@@ -532,11 +545,13 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
     required VoidCallback onTap,
   }) {
     return Container(
-      width: 70,
-      height: 55, // Reduced height
+      width: 60,
+      height: 60,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(AppRadius.smallCard),
-        color: AppColors.white,
+        color: isSelected
+            ? AppColors.blue.withValues(alpha: 0.06)
+            : AppColors.white,
         border: isSelected
             ? Border.all(color: AppColors.blue, width: 2)
             : Border.all(
@@ -919,8 +934,11 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
 
                             // Date Selection Section (only show if field is selected)
                             //const SizedBox(height: AppHeights.reg),
-                            PanelHeader(
-                              'choose_date'.tr(),
+                            Transform.translate(
+                              offset: const Offset(0, -8),
+                              child: PanelHeader(
+                                'choose_date'.tr(),
+                              ),
                             ),
                             Padding(
                               padding: AppPaddings.symmHorizontalReg,

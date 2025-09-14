@@ -327,7 +327,7 @@ class _GamesDiscoveryScreenState extends State<GamesDiscoveryScreen> {
     return Scaffold(
       appBar: AppBar(
         leadingWidth: 48,
-        leading: const AppBackButton(),
+        leading: const AppBackButton(goHome: true),
         title: Text('join_a_game'.tr()),
         backgroundColor: AppColors.white,
         elevation: 0,

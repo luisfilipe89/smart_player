@@ -469,6 +469,7 @@ class _AgendaScreenState extends State<AgendaScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        leading: const AppBackButton(goHome: true),
         title: Text('agenda'.tr()),
       ),
       body: Padding(

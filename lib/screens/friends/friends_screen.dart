@@ -21,9 +21,9 @@ class FriendsScreen extends StatefulWidget {
 
 class _FriendsScreenState extends State<FriendsScreen>
     with SingleTickerProviderStateMixin {
-  late final TabController _tabController;
   String? _myToken;
   bool _generating = false;
+  late final TabController _tabController;
 
   @override
   void initState() {
@@ -48,7 +48,7 @@ class _FriendsScreenState extends State<FriendsScreen>
         backgroundColor: AppColors.white,
         elevation: 0,
         leadingWidth: 48,
-        leading: const AppBackButton(),
+        leading: const AppBackButton(goHome: true),
         title: _FriendsAppBarTitle(uid: uid),
         actions: [
           IconButton(
@@ -65,22 +65,8 @@ class _FriendsScreenState extends State<FriendsScreen>
           unselectedLabelColor: AppColors.grey,
           indicatorColor: AppColors.primary,
           tabs: [
-            if (uid == null)
-              Tab(text: 'friends_tab_friends'.tr())
-            else
-              _TabWithBadge(
-                label: 'friends_tab_friends'.tr(),
-                countStream:
-                    FriendsService.friendsStream(uid).map((e) => e.length),
-              ),
-            if (uid == null)
-              Tab(text: 'friends_tab_requests'.tr())
-            else
-              _TabWithBadge(
-                label: 'friends_tab_requests'.tr(),
-                countStream: FriendsService.receivedRequestsStream(uid)
-                    .map((e) => e.length),
-              ),
+            Tab(text: 'friends_tab_friends'.tr()),
+            Tab(text: 'friends_tab_requests'.tr()),
           ],
         ),
       ),
@@ -91,6 +77,7 @@ class _FriendsScreenState extends State<FriendsScreen>
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              const SizedBox(height: 12),
               Expanded(
                 child: Container(
                   decoration: BoxDecoration(
@@ -514,6 +501,7 @@ class _FriendsList extends StatelessWidget {
                                 const {'displayName': 'User', 'photoURL': null};
                             final name = data['displayName'] ?? 'User';
                             final photo = data['photoURL'];
+
                             return ListTile(
                               contentPadding: EdgeInsets.zero,
                               leading: CircleAvatar(
@@ -876,40 +864,4 @@ class _FriendsAppBarTitle extends StatelessWidget {
   }
 }
 
-class _TabWithBadge extends StatelessWidget {
-  final String label;
-  final Stream<int> countStream;
-  const _TabWithBadge({required this.label, required this.countStream});
-
-  @override
-  Widget build(BuildContext context) {
-    return StreamBuilder<int>(
-      stream: countStream,
-      builder: (context, snapshot) {
-        final count = snapshot.data ?? 0;
-        return Tab(
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(label),
-              if (count > 0) ...[
-                const SizedBox(width: 6),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: AppColors.primary,
-                    borderRadius: BorderRadius.circular(999),
-                  ),
-                  child: Text('$count',
-                      style:
-                          const TextStyle(color: Colors.white, fontSize: 12)),
-                )
-              ]
-            ],
-          ),
-        );
-      },
-    );
-  }
-}
+// (Old TabWithBadge removed as we now use a body segmented control)
