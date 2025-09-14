@@ -246,7 +246,7 @@ class _HomeScreenNewState extends State<HomeScreenNew> {
 
                         const SizedBox(height: AppHeights.huge),
 
-                        // --- Upcoming Events card ---
+                        // --- Upcoming Events card with light grey background ---
                         Container(
                           decoration: BoxDecoration(
                             color: AppColors.white,
@@ -542,7 +542,7 @@ class _HomeScreenNewState extends State<HomeScreenNew> {
                 height: 4,
                 margin: const EdgeInsets.symmetric(vertical: 12),
                 decoration: BoxDecoration(
-                  color: AppColors.grey.withOpacity(0.3),
+                  color: AppColors.grey.withValues(alpha: 0.3),
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
@@ -693,19 +693,6 @@ class _HomeScreenNewState extends State<HomeScreenNew> {
                           Navigator.of(context).push(
                             MaterialPageRoute(
                               builder: (_) => const FriendsScreen(),
-                            ),
-                          );
-                        },
-                      ),
-                      _buildBottomSheetButton(
-                        icon: Icons.favorite_outline,
-                        label: 'favorites'.tr(),
-                        onTap: () {
-                          Navigator.of(context).pop();
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('favorites_coming_soon'.tr()),
-                              backgroundColor: AppColors.primary,
                             ),
                           );
                         },

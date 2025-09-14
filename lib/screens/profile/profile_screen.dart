@@ -371,7 +371,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
               surface: AppColors.white,
               onSurface: AppColors.text,
             ),
-            dialogBackgroundColor: AppColors.white,
+            dialogTheme: DialogThemeData(
+              backgroundColor: AppColors.white,
+            ),
           ),
           child: child ?? const SizedBox.shrink(),
         );

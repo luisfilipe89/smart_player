@@ -87,7 +87,7 @@ class _AuthScreenState extends State<AuthScreen> {
         // If user has no display name yet, prompt for first name once
         final user = AuthService.currentUser;
         final hasName = (user?.displayName?.trim().isNotEmpty ?? false);
-        if (!hasName) {
+        if (!hasName && mounted) {
           final suggested = _emailController.text.trim().split('@').first;
           final controller = TextEditingController(text: suggested);
           final entered = await showDialog<String>(
@@ -118,7 +118,7 @@ class _AuthScreenState extends State<AuthScreen> {
               ],
             ),
           );
-          if (entered != null && entered.length >= 2) {
+          if (entered != null && entered.length >= 2 && mounted) {
             await AuthService.updateDisplayName(entered);
           }
         }
@@ -140,8 +140,10 @@ class _AuthScreenState extends State<AuthScreen> {
             backgroundColor: AppColors.primary,
           ),
         );
-        await Future.delayed(const Duration(milliseconds: 500));
-        if (mounted) Navigator.of(context).pop(true); // Return success
+        // Use a timer instead of await to avoid context usage across async gaps
+        Future.delayed(const Duration(milliseconds: 500), () {
+          if (mounted) Navigator.of(context).pop(true);
+        });
       }
     } catch (e) {
       if (mounted) {
@@ -153,8 +155,10 @@ class _AuthScreenState extends State<AuthScreen> {
               backgroundColor: AppColors.primary,
             ),
           );
-          await Future.delayed(const Duration(milliseconds: 400));
-          if (mounted) Navigator.of(context).pop(true);
+          // Use a timer instead of await to avoid context usage across async gaps
+          Future.delayed(const Duration(milliseconds: 400), () {
+            if (mounted) Navigator.of(context).pop(true);
+          });
           return;
         }
         String raw = e.toString();
@@ -349,10 +353,12 @@ class _AuthScreenState extends State<AuthScreen> {
                                 );
                                 return;
                               }
+                              final scaffoldMessenger =
+                                  ScaffoldMessenger.of(context);
                               try {
                                 await AuthService.sendPasswordResetEmail(email);
                                 if (!mounted) return;
-                                ScaffoldMessenger.of(context).showSnackBar(
+                                scaffoldMessenger.showSnackBar(
                                   SnackBar(
                                     content: Text(
                                       tr('settings_reset_email_sent',
@@ -362,7 +368,7 @@ class _AuthScreenState extends State<AuthScreen> {
                                 );
                               } catch (e) {
                                 if (!mounted) return;
-                                ScaffoldMessenger.of(context).showSnackBar(
+                                scaffoldMessenger.showSnackBar(
                                   SnackBar(
                                     content: Text('error_generic_signin'.tr()),
                                   ),

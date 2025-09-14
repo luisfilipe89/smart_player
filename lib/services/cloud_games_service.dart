@@ -2,6 +2,7 @@
 import 'package:firebase_database/firebase_database.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:move_young/models/game.dart';
+import 'dart:convert';
 
 class CloudGamesService {
   static FirebaseDatabase get _database => FirebaseDatabase.instance;
@@ -28,6 +29,14 @@ class CloudGamesService {
         'updatedAt': DateTime.now().millisecondsSinceEpoch,
       };
 
+      // Auto-enroll organizer as a player
+      final organizerUid = _currentUserId ?? game.organizerId;
+      final initialPlayers =
+          organizerUid.isNotEmpty ? [organizerUid] : <String>[];
+      gameData['organizerId'] = organizerUid;
+      gameData['players'] = jsonEncode(initialPlayers);
+      gameData['currentPlayers'] = initialPlayers.length;
+
       await gameRef.set(gameData);
 
       // Add game to user's created games
@@ -35,6 +44,13 @@ class CloudGamesService {
         await _usersRef
             .child(_currentUserId!)
             .child('createdGames')
+            .child(gameId)
+            .set(true);
+
+        // Also add to joined games for organizer
+        await _usersRef
+            .child(_currentUserId!)
+            .child('joinedGames')
             .child(gameId)
             .set(true);
       }
@@ -45,6 +61,26 @@ class CloudGamesService {
       // Error creating game in cloud
       rethrow;
     }
+  }
+
+  // Invite players to a game (organizer only)
+  static Future<void> invitePlayers(String gameId, List<String> userIds,
+      {String? sport, DateTime? dateTime}) async {
+    final organizerId = _currentUserId;
+    if (organizerId == null || userIds.isEmpty) return;
+    final Map<String, Object?> updates = {};
+    final ts = DateTime.now().millisecondsSinceEpoch;
+    for (final uid in userIds) {
+      updates['games/$gameId/invites/$uid'] = 'pending';
+      updates['users/$uid/gameInvites/$gameId'] = {
+        'status': 'pending',
+        'organizerId': organizerId,
+        if (sport != null) 'sport': sport,
+        if (dateTime != null) 'dateTime': dateTime.toIso8601String(),
+        'ts': ts,
+      };
+    }
+    await _database.ref().update(updates);
   }
 
   // Update an existing game

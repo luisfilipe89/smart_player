@@ -175,15 +175,13 @@ class GamesService {
       // Error getting local games
     }
 
-    // Get cloud games if authenticated
-    if (AuthService.isSignedIn) {
-      try {
-        final cloudGames = await CloudGamesService.getPublicGames();
-        games.addAll(cloudGames);
-        // Retrieved games from cloud
-      } catch (e) {
-        // Error getting cloud games
-      }
+    // Always fetch cloud games (public) regardless of auth state
+    try {
+      final cloudGames = await CloudGamesService.getPublicGames();
+      games.addAll(cloudGames);
+      // Retrieved games from cloud
+    } catch (e) {
+      // Error getting cloud games
     }
 
     // Remove duplicates and sort

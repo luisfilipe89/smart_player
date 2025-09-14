@@ -1,7 +1,7 @@
 // lib/services/auth_service.dart
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_database/firebase_database.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
 import 'package:google_sign_in/google_sign_in.dart';
 
 class AuthService {
@@ -197,7 +197,7 @@ class AuthService {
         // Display name updated successfully
       }
     } catch (e) {
-      print('Error updating display name: $e');
+      debugPrint('Error updating display name: $e');
       // Error updating display name
     }
   }
@@ -342,12 +342,8 @@ class AuthService {
       );
       await user.reauthenticateWithCredential(cred);
 
-      // Prefer verifyBeforeUpdateEmail if available, else updateEmail
-      try {
-        await user.verifyBeforeUpdateEmail(newEmail);
-      } on NoSuchMethodError {
-        await user.updateEmail(newEmail);
-      }
+      // Use verifyBeforeUpdateEmail to update email with verification
+      await user.verifyBeforeUpdateEmail(newEmail);
 
       await user.reload();
 

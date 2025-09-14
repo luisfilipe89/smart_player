@@ -101,7 +101,7 @@ class WeatherService {
 
     // Debug logging for weather conditions
     debugPrint(
-        'Weather parsed - Time: $time, Precip: $precipitation, Clouds: $cloudCover, IsDay: $isDaytime, Condition: $condition, Color: ${color.value.toRadixString(16)}');
+        'Weather parsed - Time: $time, Precip: $precipitation, Clouds: $cloudCover, IsDay: $isDaytime, Condition: $condition, Color: ${color.toARGB32().toRadixString(16)}');
 
     return {
       'condition': condition,

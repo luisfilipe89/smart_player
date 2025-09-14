@@ -5,6 +5,7 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:flutter_contacts/flutter_contacts.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import 'package:move_young/services/auth_service.dart';
 import 'package:move_young/services/friends_service.dart';
@@ -49,6 +50,14 @@ class _FriendsScreenState extends State<FriendsScreen>
         leadingWidth: 48,
         leading: const AppBackButton(),
         title: _FriendsAppBarTitle(uid: uid),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.person_add),
+            color: AppColors.primary,
+            onPressed: _showAddFriendSheet,
+            tooltip: 'friends_add_title'.tr(),
+          ),
+        ],
         centerTitle: true,
         bottom: TabBar(
           controller: _tabController,
@@ -75,20 +84,39 @@ class _FriendsScreenState extends State<FriendsScreen>
           ],
         ),
       ),
-      floatingActionButton: FloatingActionButton(
-        backgroundColor: AppColors.primary,
-        onPressed: _showAddFriendSheet,
-        child: const Icon(Icons.person_add, color: Colors.white),
+      // FAB removed in favor of AppBar action for cleaner UI
+      body: SafeArea(
+        child: Padding(
+          padding: AppPaddings.symmHorizontalReg,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: AppColors.white,
+                    borderRadius: BorderRadius.circular(AppRadius.container),
+                    boxShadow: AppShadows.md,
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(AppRadius.container),
+                    child: uid == null
+                        ? const SizedBox.shrink()
+                        : TabBarView(
+                            controller: _tabController,
+                            children: [
+                              _FriendsList(
+                                  uid: uid, onAddFriend: _showAddFriendSheet),
+                              _RequestsList(uid: uid),
+                            ],
+                          ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
-      body: uid == null
-          ? const SizedBox.shrink()
-          : TabBarView(
-              controller: _tabController,
-              children: [
-                _FriendsList(uid: uid, onAddFriend: _showAddFriendSheet),
-                _RequestsList(uid: uid),
-              ],
-            ),
     );
   }
 
@@ -120,7 +148,7 @@ class _FriendsScreenState extends State<FriendsScreen>
                       height: 4,
                       margin: const EdgeInsets.only(bottom: 12),
                       decoration: BoxDecoration(
-                        color: AppColors.grey.withOpacity(0.3),
+                        color: AppColors.grey.withValues(alpha: 0.3),
                         borderRadius: BorderRadius.circular(2),
                       ),
                     ),
@@ -213,46 +241,58 @@ class _FriendsScreenState extends State<FriendsScreen>
   }
 
   Future<void> _scanQr() async {
+    final currentContext = context;
+    final scaffoldMessenger = ScaffoldMessenger.of(currentContext);
     // Request camera permission
     final camStatus = await Permission.camera.request();
     if (!camStatus.isGranted) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      scaffoldMessenger.showSnackBar(
           SnackBar(content: Text('permission_camera_denied'.tr())));
       return;
     }
 
     String? scanned;
-    await showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: Text('friends_scan_qr'.tr()),
-          content: SizedBox(
-            width: 260,
-            height: 260,
-            child: MobileScanner(
-              onDetect: (capture) {
-                final barcodes = capture.barcodes;
-                if (barcodes.isNotEmpty) {
-                  scanned = barcodes.first.rawValue;
-                  Navigator.of(context).pop();
-                }
-              },
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: Text('cancel'.tr()),
-            )
-          ],
+    try {
+      if (currentContext.mounted) {
+        scanned = await showDialog<String>(
+          context: currentContext,
+          builder: (context) {
+            return AlertDialog(
+              title: Text('friends_scan_qr'.tr()),
+              content: SizedBox(
+                width: 260,
+                height: 260,
+                child: MobileScanner(
+                  onDetect: (capture) {
+                    final barcodes = capture.barcodes;
+                    if (barcodes.isNotEmpty) {
+                      scanned = barcodes.first.rawValue;
+                      Navigator.of(context).pop();
+                    }
+                  },
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: Text('cancel'.tr()),
+                )
+              ],
+            );
+          },
         );
-      },
-    );
+      }
+    } catch (e) {
+      // Dialog was dismissed or error occurred
+      scanned = null;
+    }
 
-    if (!mounted || scanned == null || scanned!.isEmpty) return;
-    final ok = await FriendsService.consumeFriendToken(scanned!);
+    if (scanned == null || scanned!.isEmpty) return;
+    // Defensive: trim whitespace and handle QR payloads with URLs
+    final payload = scanned!.trim();
+    final ok = await FriendsService.consumeFriendToken(payload);
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
           content:
@@ -261,13 +301,42 @@ class _FriendsScreenState extends State<FriendsScreen>
   }
 
   Future<void> _importContacts() async {
-    // Ask permission
-    final perm = await FlutterContacts.requestPermission(readonly: true);
-    if (!perm) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('permission_contacts_denied'.tr())));
-      return;
+    // Check/request contacts permission with graceful fallback
+    var status = await Permission.contacts.status;
+    if (!status.isGranted) {
+      final res = await Permission.contacts.request();
+      if (!res.isGranted) {
+        if (res.isPermanentlyDenied) {
+          if (!mounted) return;
+          final go = await showDialog<bool>(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              title: Text('permission_required'.tr()),
+              content: Text('permission_contacts_denied'.tr()),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx, false),
+                  child: Text('cancel'.tr()),
+                ),
+                TextButton(
+                  onPressed: () async {
+                    Navigator.pop(ctx, true);
+                    await openAppSettings();
+                  },
+                  child: Text('open_settings'.tr()),
+                ),
+              ],
+            ),
+          );
+          if (go != true) return;
+        } else {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('permission_contacts_denied'.tr())),
+          );
+          return;
+        }
+      }
     }
 
     final contacts = await FlutterContacts.getContacts(withProperties: true);
@@ -306,18 +375,20 @@ class _FriendsScreenState extends State<FriendsScreen>
                   trailing: TextButton(
                     child: Text('friends_send_request'.tr()),
                     onPressed: () async {
+                      final navigator = Navigator.of(context);
+                      final scaffoldMessenger = ScaffoldMessenger.of(context);
                       final uid = await FriendsService.searchUidByEmail(email);
                       if (uid == null) {
                         if (!mounted) return;
-                        ScaffoldMessenger.of(context).showSnackBar(
+                        scaffoldMessenger.showSnackBar(
                           SnackBar(content: Text('friends_not_on_app'.tr())),
                         );
                         return;
                       }
                       await FriendsService.sendFriendRequestToUid(uid);
                       if (!mounted) return;
-                      Navigator.of(context).pop();
-                      ScaffoldMessenger.of(context).showSnackBar(
+                      navigator.pop();
+                      scaffoldMessenger.showSnackBar(
                         SnackBar(content: Text('friends_request_sent'.tr())),
                       );
                     },
@@ -360,17 +431,31 @@ class _FriendsScreenState extends State<FriendsScreen>
     if (email.isEmpty) return;
     final uid = await FriendsService.searchUidByEmail(email);
     if (uid == null) {
+      await _launchEmailInvite(email);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('friends_not_on_app'.tr())),
+        const SnackBar(content: Text('Opening email app...')),
       );
-      return;
+    } else {
+      await FriendsService.sendFriendRequestToUid(uid);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('friends_request_sent'.tr())),
+      );
     }
-    await FriendsService.sendFriendRequestToUid(uid);
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('friends_request_sent'.tr())),
-    );
+  }
+
+  Future<void> _launchEmailInvite(String toEmail) async {
+    final subject = Uri.encodeComponent('Join Move Young');
+    const playUrl =
+        'https://play.google.com/store/apps/details?id=com.example.move_young';
+    const iosUrl = 'https://apps.apple.com/';
+    final body = Uri.encodeComponent(
+        'Hey! Join me on Move Young to play and organize games together.\n\nAndroid: $playUrl\niPhone: $iosUrl');
+    final uri = Uri.parse('mailto:$toEmail?subject=$subject&body=$body');
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
   }
 }
 
@@ -459,9 +544,10 @@ class _FriendsList extends StatelessWidget {
                               trailing: IconButton(
                                 icon: const Icon(Icons.more_vert),
                                 onPressed: () async {
+                                  final currentContext = context;
                                   final action =
                                       await showModalBottomSheet<String>(
-                                    context: context,
+                                    context: currentContext,
                                     backgroundColor: Colors.transparent,
                                     builder: (context) {
                                       return Container(
@@ -505,50 +591,54 @@ class _FriendsList extends StatelessWidget {
                                     },
                                   );
                                   if (action == 'remove') {
-                                    final ok = await showDialog<bool>(
-                                          context: context,
-                                          builder: (ctx) => AlertDialog(
-                                            title: Text('are_you_sure'.tr()),
-                                            content: Text(
-                                                'friends_confirm_remove'.tr()),
-                                            actions: [
-                                              TextButton(
-                                                  onPressed: () =>
-                                                      Navigator.pop(ctx, false),
-                                                  child: Text('cancel'.tr())),
-                                              TextButton(
-                                                  onPressed: () =>
-                                                      Navigator.pop(ctx, true),
-                                                  child: Text('ok'.tr())),
-                                            ],
-                                          ),
-                                        ) ??
-                                        false;
-                                    if (ok) {
+                                    bool? ok;
+                                    if (currentContext.mounted) {
+                                      ok = await showDialog<bool>(
+                                        context: currentContext,
+                                        builder: (ctx) => AlertDialog(
+                                          title: Text('are_you_sure'.tr()),
+                                          content: Text(
+                                              'friends_confirm_remove'.tr()),
+                                          actions: [
+                                            TextButton(
+                                                onPressed: () =>
+                                                    Navigator.pop(ctx, false),
+                                                child: Text('cancel'.tr())),
+                                            TextButton(
+                                                onPressed: () =>
+                                                    Navigator.pop(ctx, true),
+                                                child: Text('ok'.tr())),
+                                          ],
+                                        ),
+                                      );
+                                    }
+                                    if (ok == true) {
                                       await FriendsService.removeFriend(
                                           friendUid);
                                     }
                                   } else if (action == 'block') {
-                                    final ok = await showDialog<bool>(
-                                          context: context,
-                                          builder: (ctx) => AlertDialog(
-                                            title: Text('are_you_sure'.tr()),
-                                            content: Text(
-                                                'friends_confirm_block'.tr()),
-                                            actions: [
-                                              TextButton(
-                                                  onPressed: () =>
-                                                      Navigator.pop(ctx, false),
-                                                  child: Text('cancel'.tr())),
-                                              TextButton(
-                                                  onPressed: () =>
-                                                      Navigator.pop(ctx, true),
-                                                  child: Text('ok'.tr())),
-                                            ],
-                                          ),
-                                        ) ??
-                                        false;
-                                    if (ok) {
+                                    bool? ok;
+                                    if (currentContext.mounted) {
+                                      ok = await showDialog<bool>(
+                                        context: currentContext,
+                                        builder: (ctx) => AlertDialog(
+                                          title: Text('are_you_sure'.tr()),
+                                          content: Text(
+                                              'friends_confirm_block'.tr()),
+                                          actions: [
+                                            TextButton(
+                                                onPressed: () =>
+                                                    Navigator.pop(ctx, false),
+                                                child: Text('cancel'.tr())),
+                                            TextButton(
+                                                onPressed: () =>
+                                                    Navigator.pop(ctx, true),
+                                                child: Text('ok'.tr())),
+                                          ],
+                                        ),
+                                      );
+                                    }
+                                    if (ok == true) {
                                       await FriendsService.blockUser(friendUid);
                                     }
                                   }

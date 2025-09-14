@@ -4,6 +4,7 @@ import 'package:move_young/theme/tokens.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:move_young/theme/app_back_button.dart';
 import 'package:move_young/services/friends_service.dart';
+import 'package:move_young/services/notification_service.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -142,13 +143,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
     try {
       final ok = await AuthService.deleteAccount();
       if (!mounted) return;
+      final scaffoldMessenger = ScaffoldMessenger.of(context);
+      final navigator = Navigator.of(context);
       if (ok) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        scaffoldMessenger.showSnackBar(
           SnackBar(content: Text('settings_account_deleted'.tr())),
         );
-        Navigator.of(context).pop();
+        navigator.pop();
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
+        scaffoldMessenger.showSnackBar(
           SnackBar(
               content: Text('settings_account_delete_failed'.tr()),
               backgroundColor: Colors.red),
@@ -265,6 +268,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                   const Divider(height: 1, color: AppColors.lightgrey),
                   _AllowRequestsTile(),
+                  const Divider(height: 1, color: AppColors.lightgrey),
+                  _NotifPrefs(),
                 ],
               ),
             ),
@@ -362,8 +367,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 onPressed: _submitting
                     ? null
                     : () async {
+                        final navigator = Navigator.of(context);
                         await _changePassword();
-                        if (mounted) Navigator.pop(context);
+                        if (mounted) navigator.pop();
                       },
                 style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.primary,
@@ -427,8 +433,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 onPressed: _submitting
                     ? null
                     : () async {
+                        final navigator = Navigator.of(context);
                         await _changeEmail();
-                        if (mounted) Navigator.pop(context);
+                        if (mounted) navigator.pop();
                       },
                 style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.primary,
@@ -537,6 +544,53 @@ class _AllowRequestsTile extends StatelessWidget {
           value: allow,
           onChanged: (v) => FriendsService.setAllowRequests(v),
           title: Text('settings_allow_requests'.tr()),
+          contentPadding: EdgeInsets.zero,
+        );
+      },
+    );
+  }
+}
+
+class _NotifPrefs extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final uid = AuthService.currentUserId;
+    if (uid == null) return const SizedBox.shrink();
+    return Column(
+      children: [
+        _NotifSwitch(
+          title: 'settings_notif_friends'.tr(),
+          keyName: 'friends',
+        ),
+        _NotifSwitch(
+          title: 'settings_notif_games'.tr(),
+          keyName: 'games',
+        ),
+        _NotifSwitch(
+          title: 'settings_notif_reminders'.tr(),
+          keyName: 'reminders',
+        ),
+      ],
+    );
+  }
+}
+
+class _NotifSwitch extends StatelessWidget {
+  final String title;
+  final String keyName;
+  const _NotifSwitch({required this.title, required this.keyName});
+
+  @override
+  Widget build(BuildContext context) {
+    final uid = AuthService.currentUserId!;
+    return StreamBuilder<bool>(
+      stream: NotificationService.prefStream(uid, keyName),
+      builder: (context, snapshot) {
+        final on = snapshot.data ?? true;
+        return SwitchListTile(
+          value: on,
+          onChanged: (v) => NotificationService.setPref(keyName, v),
+          title: Text(title),
           contentPadding: EdgeInsets.zero,
         );
       },

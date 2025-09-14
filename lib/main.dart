@@ -5,6 +5,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:move_young/screens/welcome/welcome_screen.dart';
 import 'package:move_young/theme/_theme.dart';
+import 'package:move_young/services/notification_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -31,6 +32,11 @@ void main() async {
   } catch (e) {
     // App Check initialization failed; safe to proceed in dev
   }
+
+  // Notifications
+  try {
+    await NotificationService.initialize();
+  } catch (_) {}
 
   // Status bar styling only; avoid forcing Android nav bar appearance
   SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(

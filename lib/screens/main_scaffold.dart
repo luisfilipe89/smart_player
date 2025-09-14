@@ -4,21 +4,10 @@ import 'package:move_young/screens/activities/activities_screen.dart';
 import 'package:move_young/screens/agenda/agenda_screen.dart';
 import 'package:move_young/screens/games/game_organize_screen.dart';
 import 'package:move_young/models/game.dart';
-import 'package:move_young/screens/games/games_discovery_screen.dart';
+import 'package:move_young/screens/games/games_join_screen.dart';
 import 'package:easy_localization/easy_localization.dart';
 
 // --- Dummy screens -
-class FavoritesScreen extends StatelessWidget {
-  const FavoritesScreen({super.key});
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Favorites')),
-      body: const Center(child: Text('Your favorites will appear here')),
-    );
-  }
-}
-
 class WalletScreen extends StatelessWidget {
   const WalletScreen({super.key});
   @override
@@ -33,9 +22,8 @@ class WalletScreen extends StatelessWidget {
 // ---------------------------- Main Scaffold ----------------------------
 // Tab indices (match your BottomNav order)
 const int kTabHome = 0;
-const int kTabFavorites = 1;
-const int kTabAgenda = 2;
-const int kTabWallet = 3;
+const int kTabAgenda = 1;
+const int kTabWallet = 2;
 
 class MainScaffold extends StatefulWidget {
   const MainScaffold({super.key});
@@ -52,7 +40,6 @@ class MainScaffoldState extends State<MainScaffold> {
   int _currentIndex = 0;
 
   final _homeKey = GlobalKey<NavigatorState>();
-  final _favoritesKey = GlobalKey<NavigatorState>();
   final _agendaKey = GlobalKey<NavigatorState>();
   final _walletKey = GlobalKey<NavigatorState>();
 
@@ -65,8 +52,6 @@ class MainScaffoldState extends State<MainScaffold> {
     switch (_currentIndex) {
       case kTabHome:
         return _homeKey.currentState;
-      case kTabFavorites:
-        return _favoritesKey.currentState;
       case kTabAgenda:
         return _agendaKey.currentState;
       case kTabWallet:
@@ -76,7 +61,7 @@ class MainScaffoldState extends State<MainScaffold> {
   }
 
   void _popToRoot(int index) {
-    final keys = [_homeKey, _favoritesKey, _agendaKey, _walletKey];
+    final keys = [_homeKey, _agendaKey, _walletKey];
     keys[index].currentState?.popUntil((r) => r.isFirst);
   }
 
@@ -102,9 +87,6 @@ class MainScaffoldState extends State<MainScaffold> {
             HeroMode(
                 enabled: _currentIndex == kTabHome,
                 child: _HomeFlow(navigatorKey: _homeKey)),
-            HeroMode(
-                enabled: _currentIndex == kTabFavorites,
-                child: _FavoritesFlow(navigatorKey: _favoritesKey)),
             HeroMode(
                 enabled: _currentIndex == kTabAgenda,
                 child: _AgendaFlow(navigatorKey: _agendaKey)),
@@ -177,24 +159,6 @@ class _HomeFlow extends StatelessWidget {
   }
 }
 
-class _FavoritesFlow extends StatelessWidget {
-  const _FavoritesFlow({required this.navigatorKey});
-  final GlobalKey<NavigatorState> navigatorKey;
-
-  @override
-  Widget build(BuildContext context) {
-    return Navigator(
-      key: navigatorKey,
-      onGenerateRoute: (settings) {
-        return MaterialPageRoute(
-          builder: (_) => const FavoritesScreen(),
-          settings: settings,
-        );
-      },
-    );
-  }
-}
-
 class _AgendaFlow extends StatelessWidget {
   const _AgendaFlow({required this.navigatorKey});
   final GlobalKey<NavigatorState> navigatorKey;
@@ -247,8 +211,6 @@ class _BottomBar extends StatelessWidget {
       type: BottomNavigationBarType.fixed,
       items: [
         BottomNavigationBarItem(icon: Icon(Icons.home), label: 'home'.tr()),
-        BottomNavigationBarItem(
-            icon: Icon(Icons.favorite), label: 'favorites'.tr()),
         BottomNavigationBarItem(icon: Icon(Icons.event), label: 'agenda'.tr()),
         BottomNavigationBarItem(icon: Icon(Icons.map), label: 'map'.tr()),
       ],

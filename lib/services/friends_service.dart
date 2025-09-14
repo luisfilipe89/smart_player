@@ -287,7 +287,9 @@ class FriendsService {
   static Future<bool> consumeFriendToken(String token) async {
     final user = _auth.currentUser;
     if (user == null) return false;
-    final DatabaseReference tokenRef = _db.ref('friendTokens/$token');
+    // Normalize token in case a full URL or text was scanned
+    final String normalized = _normalizeToken(token);
+    final DatabaseReference tokenRef = _db.ref('friendTokens/$normalized');
     final DataSnapshot snap = await tokenRef.get();
     if (!snap.exists) return false;
     final Map data = (snap.value as Map);
@@ -306,6 +308,26 @@ class FriendsService {
       await tokenRef.remove();
     }
     return ok;
+  }
+
+  // Extract UUID token from arbitrary strings like
+  // "moveyoung://friend?token=<uuid>" or plain <uuid>
+  static String _normalizeToken(String raw) {
+    final RegExp uuidPattern = RegExp(
+        r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}");
+    final match = uuidPattern.firstMatch(raw);
+    if (match != null) return match.group(0)!;
+    // Try query param token=
+    final uri = Uri.tryParse(raw);
+    if (uri != null) {
+      final t = uri.queryParameters['token'];
+      if (t != null && t.isNotEmpty) {
+        final m = uuidPattern.firstMatch(t);
+        if (m != null) return m.group(0)!;
+        return t;
+      }
+    }
+    return raw.trim();
   }
 
   // Helpers to read minimal profile for a uid
