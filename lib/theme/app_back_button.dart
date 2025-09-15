@@ -7,6 +7,36 @@ class AppBackButton extends StatelessWidget {
   const AppBackButton(
       {super.key, this.onPressed, this.size = 20, this.goHome = false});
 
+  void _switchToHomeTab(BuildContext context) {
+    bool switched = false;
+
+    // Walk up the ancestor tree and try to call `switchToTab(0, popToRoot: true)`
+    context.visitAncestorElements((element) {
+      final state = element is StatefulElement ? element.state : null;
+      if (state != null) {
+        try {
+          // Dynamic call on any ancestor State that exposes switchToTab
+          (state as dynamic).switchToTab(0, {'popToRoot': true});
+          switched = true;
+          return false; // stop visiting
+        } catch (_) {
+          try {
+            // Some dynamic invocations require named args as normal named
+            (state as dynamic).switchToTab(0, popToRoot: true);
+            switched = true;
+            return false;
+          } catch (_) {}
+        }
+      }
+      return true; // continue visiting
+    });
+
+    if (!switched) {
+      // Fallback to a safe maybePop
+      Navigator.maybePop(context);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return IconButton(
@@ -15,22 +45,7 @@ class AppBackButton extends StatelessWidget {
       onPressed: onPressed ??
           () {
             if (goHome) {
-              // Switch to Home tab if available
-              // Import kept local to avoid circular deps; using dynamic lookup
-              // Weakly-typed lookup to avoid direct dependency on MainScaffold
-              final state =
-                  context.findAncestorStateOfType<State<StatefulWidget>>();
-              bool switched = false;
-              if (state != null) {
-                final dynamic dyn = state;
-                try {
-                  dyn.switchToTab(0, popToRoot: true);
-                  switched = true;
-                } catch (_) {}
-              }
-              if (!switched) {
-                Navigator.maybePop(context);
-              }
+              _switchToHomeTab(context);
             } else {
               Navigator.maybePop(context);
             }

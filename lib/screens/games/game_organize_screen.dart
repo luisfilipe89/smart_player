@@ -38,6 +38,13 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
   // Booked times for selected field/date
   final Set<String> _bookedTimes = {};
 
+  // Original values for change detection when editing
+  String? _originalSport;
+  DateTime? _originalDate;
+  String? _originalTime;
+  int _originalMaxPlayers = 10;
+  Map<String, dynamic>? _originalField;
+
   @override
   void dispose() {
     _scrollController.dispose();
@@ -159,6 +166,17 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
         _selectedField != null &&
         _selectedDate != null &&
         _selectedTime != null;
+  }
+
+  // Check if any changes have been made to the game
+  bool get _hasChanges {
+    if (widget.initialGame == null) return false;
+    
+    return _selectedSport != _originalSport ||
+        _selectedDate != _originalDate ||
+        _selectedTime != _originalTime ||
+        _maxPlayers != _originalMaxPlayers ||
+        _selectedField?['name'] != _originalField?['name'];
   }
 
   // Load fields for the selected sport
@@ -699,12 +717,26 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
       _selectedDate =
           DateTime(g.dateTime.year, g.dateTime.month, g.dateTime.day);
       _selectedTime = g.formattedTime;
+      _maxPlayers = g.maxPlayers;
       _selectedField = {
         'name': g.location,
         'address': g.address,
         'latitude': g.latitude,
         'longitude': g.longitude,
       };
+      
+      // Store original values for change detection
+      _originalSport = g.sport;
+      _originalDate = DateTime(g.dateTime.year, g.dateTime.month, g.dateTime.day);
+      _originalTime = g.formattedTime;
+      _originalMaxPlayers = g.maxPlayers;
+      _originalField = {
+        'name': g.location,
+        'address': g.address,
+        'latitude': g.latitude,
+        'longitude': g.longitude,
+      };
+      
       // Load fields for the selected sport
       _loadFields();
     }
@@ -1094,7 +1126,7 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: _isFormComplete
                                       ? (widget.initialGame != null
-                                          ? Colors.orange
+                                          ? (_hasChanges ? Colors.orange : AppColors.green)
                                           : AppColors.blue)
                                       : AppColors.grey,
                                   foregroundColor: Colors.white,
@@ -1118,7 +1150,7 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
                                       )
                                     : Text(
                                         widget.initialGame != null
-                                            ? 'change_game'.tr()
+                                            ? (_hasChanges ? 'change_game'.tr() : 'confirm_game'.tr())
                                             : 'create_game'.tr(),
                                         style: AppTextStyles.cardTitle.copyWith(
                                           color: Colors.white,

@@ -168,7 +168,7 @@ class _FriendsScreenState extends State<FriendsScreen>
                   ),
                   _ActionTile(
                     icon: Icons.alternate_email,
-                    title: 'friends_search_email'.tr(),
+                    title: 'friends_invite_email'.tr(),
                     onTap: () async {
                       Navigator.of(context).pop();
                       await _promptSearchByEmail();
@@ -395,7 +395,7 @@ class _FriendsScreenState extends State<FriendsScreen>
       context: context,
       builder: (context) {
         return AlertDialog(
-          title: Text('friends_search_email'.tr()),
+          title: Text('friends_invite_email'.tr()),
           content: TextField(
             controller: controller,
             decoration: InputDecoration(hintText: 'auth_email'.tr()),
@@ -416,12 +416,31 @@ class _FriendsScreenState extends State<FriendsScreen>
     if (ok != true) return;
     final email = controller.text.trim();
     if (email.isEmpty) return;
+    // Prevent self-invite
+    final myEmail = AuthService.currentUser?.email?.trim().toLowerCase();
+    if (myEmail != null &&
+        myEmail.isNotEmpty &&
+        email.toLowerCase() == myEmail) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('friends_cannot_invite_self'.tr())),
+      );
+      return;
+    }
     final uid = await FriendsService.searchUidByEmail(email);
     if (uid == null) {
       await _launchEmailInvite(email);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Opening email app...')),
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: Text('friends_invite_email'.tr()),
+          content: Text('friends_email_app_opened'.tr()),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx), child: Text('ok'.tr())),
+          ],
+        ),
       );
     } else {
       await FriendsService.sendFriendRequestToUid(uid);

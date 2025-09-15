@@ -29,7 +29,7 @@ class _GamesDiscoveryScreenState extends State<GamesDiscoveryScreen> {
   final Map<String, GlobalKey> _itemKeys = {};
   String? _highlightId;
 
-  final List<String> _sports = ['all', 'soccer', 'basketball'];
+  final List<String> _sports = ['all', 'soccer', 'basketball', 'tennis', 'volleyball', 'badminton', 'table_tennis'];
 
   @override
   void initState() {

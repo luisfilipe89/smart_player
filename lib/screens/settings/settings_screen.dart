@@ -257,7 +257,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
             // change email moved into action tile above
             const SizedBox(height: AppSpacing.lg),
             _buildSectionCard(
-              title: 'settings_preferences'.tr(),
+              title: 'settings_friends_preferences'.tr(),
+              child: Column(
+                children: [
+                  _AllowRequestsTile(),
+                  const Divider(height: 1, color: AppColors.lightgrey),
+                  _FriendsNotifPrefs(),
+                ],
+              ),
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            _buildSectionCard(
+              title: 'settings_games_preferences'.tr(),
               child: Column(
                 children: [
                   SwitchListTile(
@@ -267,9 +278,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     contentPadding: EdgeInsets.zero,
                   ),
                   const Divider(height: 1, color: AppColors.lightgrey),
-                  _AllowRequestsTile(),
-                  const Divider(height: 1, color: AppColors.lightgrey),
-                  _NotifPrefs(),
+                  _GamesNotifPrefs(),
                 ],
               ),
             ),
@@ -551,7 +560,7 @@ class _AllowRequestsTile extends StatelessWidget {
   }
 }
 
-class _NotifPrefs extends StatelessWidget {
+class _FriendsNotifPrefs extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final uid = AuthService.currentUserId;
@@ -562,6 +571,18 @@ class _NotifPrefs extends StatelessWidget {
           title: 'settings_notif_friends'.tr(),
           keyName: 'friends',
         ),
+      ],
+    );
+  }
+}
+
+class _GamesNotifPrefs extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final uid = AuthService.currentUserId;
+    if (uid == null) return const SizedBox.shrink();
+    return Column(
+      children: [
         _NotifSwitch(
           title: 'settings_notif_games'.tr(),
           keyName: 'games',
