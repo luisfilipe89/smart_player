@@ -22,6 +22,15 @@ class AppColors {
   static const green = Color(0xFF4CAF50);
   static const lightamber = Color(0xFFFFE082);
   static const amber = Color(0xFFFFC107);
+
+  // High contrast colors
+  static const highContrastBackground = Color(0xFF000000);
+  static const highContrastSurface = Color(0xFF1A1A1A);
+  static const highContrastText = Color(0xFFFFFFFF);
+  static const highContrastPrimary = Color(0xFFFFD700);
+  static const highContrastSecondary = Color(0xFF00FFFF);
+  static const highContrastError = Color(0xFFFF0000);
+  static const highContrastBorder = Color(0xFFFFFFFF);
 }
 
 class AppRadius {

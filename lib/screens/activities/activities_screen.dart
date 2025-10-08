@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:move_young/services/haptics_service.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:move_young/models/activity.dart';

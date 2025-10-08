@@ -1,8 +1,11 @@
 // lib/services/auth_service.dart
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_database/firebase_database.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
 import 'package:google_sign_in/google_sign_in.dart';
+import 'dart:convert' show jsonDecode, jsonEncode, utf8;
+import 'package:crypto/crypto.dart' as crypto;
 
 class AuthService {
   static FirebaseAuth get _auth => FirebaseAuth.instance;
@@ -270,12 +273,221 @@ class AuthService {
       final user = _auth.currentUser;
       if (user == null) return false;
 
+      final String uid = user.uid;
+      final String? email = user.email;
+
+      // Best-effort cleanup of database and storage before deleting auth user
+      try {
+        await _cleanupUserData(uid: uid, email: email);
+      } catch (e) {
+        debugPrint('Cleanup before delete failed: $e');
+      }
+
+      // Attempt to delete auth account last (may require recent login)
       await user.delete();
-      // Account deleted successfully
       return true;
-    } catch (e) {
-      // Error deleting account
+    } on FirebaseAuthException catch (e) {
+      debugPrint('Auth delete failed: ${e.code}');
       return false;
+    } catch (e) {
+      debugPrint('Delete account failed: $e');
+      return false;
+    }
+  }
+
+  // Remove user data and cross-references from Realtime Database and Storage
+  static Future<void> _cleanupUserData({
+    required String uid,
+    String? email,
+  }) async {
+    final DatabaseReference root = FirebaseDatabase.instance.ref();
+
+    // Build a batch of updates to remove references
+    final Map<String, Object?> updates = {};
+
+    // 1) Remove email hash index if present
+    if (email != null && email.trim().isNotEmpty) {
+      final String emailLower = email.trim().toLowerCase();
+      final String emailHash =
+          crypto.sha256.convert(utf8.encode(emailLower)).toString();
+      updates['usersByEmailHash/$emailHash'] = null;
+    }
+
+    // 2) Gather current relationships and requests to clean up cross refs
+    final DataSnapshot friendsSnap =
+        await root.child('users/$uid/friends').get();
+    if (friendsSnap.exists && friendsSnap.value is Map) {
+      final Map data = friendsSnap.value as Map;
+      for (final dynamic k in data.keys) {
+        final String otherUid = k.toString();
+        updates['users/$uid/friends/$otherUid'] = null;
+        updates['users/$otherUid/friends/$uid'] = null;
+      }
+    }
+
+    final DataSnapshot sentReqSnap =
+        await root.child('users/$uid/friendRequests/sent').get();
+    if (sentReqSnap.exists && sentReqSnap.value is Map) {
+      final Map data = sentReqSnap.value as Map;
+      for (final dynamic k in data.keys) {
+        final String toUid = k.toString();
+        updates['users/$uid/friendRequests/sent/$toUid'] = null;
+        updates['users/$toUid/friendRequests/received/$uid'] = null;
+      }
+    }
+
+    final DataSnapshot recvReqSnap =
+        await root.child('users/$uid/friendRequests/received').get();
+    if (recvReqSnap.exists && recvReqSnap.value is Map) {
+      final Map data = recvReqSnap.value as Map;
+      for (final dynamic k in data.keys) {
+        final String fromUid = k.toString();
+        updates['users/$uid/friendRequests/received/$fromUid'] = null;
+        updates['users/$fromUid/friendRequests/sent/$uid'] = null;
+      }
+    }
+
+    // 3) Remove game invites for this user
+    final DataSnapshot myInvitesSnap =
+        await root.child('users/$uid/gameInvites').get();
+    if (myInvitesSnap.exists && myInvitesSnap.value is Map) {
+      final Map data = myInvitesSnap.value as Map;
+      for (final dynamic k in data.keys) {
+        final String gameId = k.toString();
+        updates['games/$gameId/invites/$uid'] = null;
+        updates['users/$uid/gameInvites/$gameId'] =
+            null; // redundant due to full user delete
+      }
+    }
+
+    // 4) Remove joined games entry for this user and update game players lists
+    final DataSnapshot joinedSnap =
+        await root.child('users/$uid/joinedGames').get();
+    if (joinedSnap.exists && joinedSnap.value is Map) {
+      final Map data = joinedSnap.value as Map;
+      for (final dynamic k in data.keys) {
+        final String gameId = k.toString();
+        try {
+          final DataSnapshot playersSnap =
+              await root.child('games/$gameId/players').get();
+          List<String> players = <String>[];
+          bool originalWasString = false;
+          if (playersSnap.exists) {
+            final dynamic val = playersSnap.value;
+            if (val is List) {
+              players = val.map((e) => e.toString()).toList();
+            } else if (val is String) {
+              originalWasString = true;
+              try {
+                final decoded = jsonDecode(val);
+                if (decoded is List) {
+                  players = decoded.map((e) => e.toString()).toList();
+                }
+              } catch (_) {}
+            }
+          }
+          if (players.contains(uid)) {
+            players = players.where((p) => p != uid).toList();
+            updates['games/$gameId/players'] =
+                originalWasString ? jsonEncode(players) : players;
+            updates['games/$gameId/currentPlayers'] = players.length;
+          }
+          updates['users/$uid/joinedGames/$gameId'] = null;
+        } catch (e) {
+          debugPrint('Failed to update players for game $gameId: $e');
+        }
+      }
+    }
+
+    // 5) Delete games organized by this user and clean participant references
+    try {
+      final Query myGamesQuery =
+          root.child('games').orderByChild('organizerId').equalTo(uid);
+      final DataSnapshot myGamesSnap = await myGamesQuery.get();
+      if (myGamesSnap.exists && myGamesSnap.value is Map) {
+        final Map gamesMap = myGamesSnap.value as Map;
+        for (final dynamic gk in gamesMap.keys) {
+          final String gameId = gk.toString();
+          // Clean joinedGames of participants
+          try {
+            final DataSnapshot playersSnap =
+                await root.child('games/$gameId/players').get();
+            List<String> players = <String>[];
+            if (playersSnap.exists) {
+              final dynamic val = playersSnap.value;
+              if (val is List) {
+                players = val.map((e) => e.toString()).toList();
+              } else if (val is String) {
+                try {
+                  final decoded = jsonDecode(val);
+                  if (decoded is List) {
+                    players = decoded.map((e) => e.toString()).toList();
+                  }
+                } catch (_) {}
+              }
+            }
+            for (final String pid in players) {
+              updates['users/$pid/joinedGames/$gameId'] = null;
+            }
+          } catch (e) {
+            debugPrint('Failed cleaning joinedGames for $gameId: $e');
+          }
+
+          // Clean invites mapping for this game across users
+          try {
+            final DataSnapshot invitesSnap =
+                await root.child('games/$gameId/invites').get();
+            if (invitesSnap.exists && invitesSnap.value is Map) {
+              final Map inv = invitesSnap.value as Map;
+              for (final dynamic uk in inv.keys) {
+                final String invitee = uk.toString();
+                updates['users/$invitee/gameInvites/$gameId'] = null;
+              }
+            }
+          } catch (e) {
+            debugPrint('Failed cleaning invites for $gameId: $e');
+          }
+
+          // Remove game node
+          updates['games/$gameId'] = null;
+          // Also remove from my createdGames index (redundant when removing entire user)
+          updates['users/$uid/createdGames/$gameId'] = null;
+        }
+      }
+    } catch (e) {
+      debugPrint('Organizer games cleanup failed: $e');
+    }
+
+    // 6) Remove any friendTokens owned by this user
+    try {
+      final Query myTokensQuery =
+          root.child('friendTokens').orderByChild('ownerUid').equalTo(uid);
+      final DataSnapshot tokensSnap = await myTokensQuery.get();
+      if (tokensSnap.exists && tokensSnap.value is Map) {
+        final Map tokens = tokensSnap.value as Map;
+        for (final dynamic tk in tokens.keys) {
+          final String tokenId = tk.toString();
+          updates['friendTokens/$tokenId'] = null;
+        }
+      }
+    } catch (e) {
+      debugPrint('Friend token cleanup failed: $e');
+    }
+
+    // 7) Finally, remove the entire user subtree
+    updates['users/$uid'] = null;
+
+    if (updates.isNotEmpty) {
+      await root.update(updates);
+    }
+
+    // 8) Delete user profile image from Storage (best-effort)
+    try {
+      final Reference profileRef =
+          FirebaseStorage.instance.ref().child('users/$uid/profile.jpg');
+      await profileRef.delete();
+    } catch (e) {
+      // Ignore if file does not exist or deletion fails
     }
   }
 

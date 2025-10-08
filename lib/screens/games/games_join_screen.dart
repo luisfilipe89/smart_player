@@ -8,7 +8,6 @@ import 'package:move_young/services/games_service.dart';
 import 'package:move_young/services/cloud_games_service.dart';
 import 'package:move_young/services/friends_service.dart' as friends;
 import 'package:move_young/services/auth_service.dart';
-import 'package:flutter/services.dart';
 import 'package:move_young/services/haptics_service.dart';
 
 class GamesDiscoveryScreen extends StatefulWidget {

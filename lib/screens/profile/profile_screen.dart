@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:image_cropper/image_cropper.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:move_young/services/auth_service.dart';
 import 'package:move_young/utils/profanity.dart';
 import 'package:move_young/utils/country_data.dart';
@@ -161,6 +162,27 @@ class _ProfileScreenState extends State<ProfileScreen> {
       if (source == 'remove') {
         await _removePhoto();
         return;
+      }
+
+      // Request permissions based on source
+      if (source == ImageSource.camera) {
+        final cameraStatus = await Permission.camera.request();
+        if (!cameraStatus.isGranted) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('permission_camera_denied'.tr())),
+          );
+          return;
+        }
+      } else {
+        final storageStatus = await Permission.storage.request();
+        if (!storageStatus.isGranted) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('permission_storage_denied'.tr())),
+          );
+          return;
+        }
       }
 
       final picker = ImagePicker();
@@ -655,14 +677,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       }
 
                       setState(() => isSubmitting = true);
+                      final navigator = Navigator.of(context);
+                      final messenger = ScaffoldMessenger.of(context);
                       try {
                         await AuthService.changePassword(
                           currentPassword: current,
                           newPassword: newPassword,
                         );
                         if (!mounted) return;
-                        Navigator.of(context).pop();
-                        ScaffoldMessenger.of(context).showSnackBar(
+                        navigator.pop();
+                        messenger.showSnackBar(
                           SnackBar(
                             content: Text('settings_password_changed'.tr()),
                             backgroundColor: AppColors.primary,
@@ -688,7 +712,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           errorMessage = 'settings_no_email_on_account'.tr();
                         }
 
-                        ScaffoldMessenger.of(context).showSnackBar(
+                        messenger.showSnackBar(
                           SnackBar(
                             content: Text(errorMessage),
                             backgroundColor: Colors.red,
@@ -749,67 +773,187 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final currentEmail = AuthService.currentUser?.email ?? '';
     if (currentEmail.isEmpty) return;
 
+    final bool hasPassword = AuthService.hasPasswordProvider;
     final newEmailController = TextEditingController(text: currentEmail);
+    final currentPasswordController = TextEditingController();
+    bool showPassword = false;
+    bool isSubmitting = false;
 
-    final result = await showDialog<String>(
+    final submitted = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text('profile_change_email'.tr()),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('profile_change_email_description'.tr()),
-            const SizedBox(height: AppSpacing.md),
-            TextField(
-              controller: newEmailController,
-              keyboardType: TextInputType.emailAddress,
-              decoration: InputDecoration(
-                labelText: 'profile_new_email'.tr(),
-                border: const OutlineInputBorder(),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: Text('profile_change_email'.tr()),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'profile_change_email_description'.tr(),
+                  style: AppTextStyles.small,
+                ),
+                const SizedBox(height: AppSpacing.md),
+                if (hasPassword) ...[
+                  TextField(
+                    controller: currentPasswordController,
+                    obscureText: !showPassword,
+                    decoration: InputDecoration(
+                      labelText: 'settings_current_password'.tr(),
+                      border: const OutlineInputBorder(),
+                      suffixIcon: IconButton(
+                        icon: Icon(
+                          showPassword
+                              ? Icons.visibility
+                              : Icons.visibility_off,
+                        ),
+                        onPressed: () => setState(() {
+                          showPassword = !showPassword;
+                        }),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                ] else ...[
+                  Text(
+                    'settings_google_account_hint'.tr(),
+                    style: AppTextStyles.smallMuted,
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                ],
+                TextField(
+                  controller: newEmailController,
+                  keyboardType: TextInputType.emailAddress,
+                  decoration: InputDecoration(
+                    labelText: 'profile_new_email'.tr(),
+                    border: const OutlineInputBorder(),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            if (!hasPassword)
+              TextButton(
+                onPressed: isSubmitting
+                    ? null
+                    : () async {
+                        // Allow social users to set a password via reset email
+                        try {
+                          setState(() => isSubmitting = true);
+                          await AuthService.sendPasswordResetEmail(
+                              currentEmail);
+                          if (!mounted) return;
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('settings_reset_email_sent'.tr()),
+                              backgroundColor: AppColors.primary,
+                            ),
+                          );
+                        } catch (e) {
+                          if (!mounted) return;
+                          final msg = e
+                              .toString()
+                              .replaceFirst(RegExp(r'^Exception:\s*'), '');
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                                content: Text(msg),
+                                backgroundColor: Colors.red),
+                          );
+                        } finally {
+                          if (mounted) setState(() => isSubmitting = false);
+                        }
+                      },
+                child: Text('settings_send_reset_email'.tr()),
               ),
+            TextButton(
+              onPressed:
+                  isSubmitting ? null : () => Navigator.of(context).pop(false),
+              child: Text('cancel'.tr()),
+            ),
+            ElevatedButton(
+              onPressed: isSubmitting
+                  ? null
+                  : () async {
+                      final newEmail = newEmailController.text.trim();
+                      if (newEmail.isEmpty || newEmail == currentEmail) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('auth_email_invalid'.tr())),
+                        );
+                        return;
+                      }
+
+                      setState(() => isSubmitting = true);
+                      try {
+                        if (hasPassword) {
+                          final currentPw =
+                              currentPasswordController.text.trim();
+                          if (currentPw.isEmpty) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                  content: Text('form_fill_all_fields'.tr())),
+                            );
+                            setState(() => isSubmitting = false);
+                            return;
+                          }
+                          await AuthService.changeEmail(
+                            currentPassword: currentPw,
+                            newEmail: newEmail,
+                          );
+                        } else {
+                          await AuthService.updateEmail(newEmail);
+                        }
+
+                        if (!mounted) return;
+                        Navigator.of(context).pop(true);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('profile_email_changed'.tr()),
+                            backgroundColor: AppColors.primary,
+                          ),
+                        );
+                      } catch (e) {
+                        if (!mounted) return;
+                        String errorMessage = e
+                            .toString()
+                            .replaceFirst(RegExp(r'^Exception:\s*'), '');
+
+                        if (errorMessage.contains('Invalid email')) {
+                          errorMessage = 'auth_email_invalid'.tr();
+                        } else if (errorMessage.contains('already in use')) {
+                          errorMessage = 'error_email_in_use'.tr();
+                        } else if (errorMessage
+                            .contains('Current password is incorrect')) {
+                          errorMessage = 'settings_wrong_current_password'.tr();
+                        } else if (errorMessage
+                            .contains('Please sign in again')) {
+                          errorMessage = 'settings_requires_recent_login'.tr();
+                        }
+
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(errorMessage),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                      } finally {
+                        if (mounted) setState(() => isSubmitting = false);
+                      }
+                    },
+              child: isSubmitting
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : Text('profile_change_email'.tr()),
             ),
           ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: Text('cancel'.tr()),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              final newEmail = newEmailController.text.trim();
-              if (newEmail.isNotEmpty && newEmail != currentEmail) {
-                Navigator.of(context).pop(newEmail);
-              }
-            },
-            child: Text('profile_change_email'.tr()),
-          ),
-        ],
       ),
     );
 
-    if (result != null && result != currentEmail) {
-      setState(() => _changingEmail = true);
-      try {
-        await AuthService.updateEmail(result);
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('profile_email_changed'.tr()),
-            backgroundColor: AppColors.primary,
-          ),
-        );
-      } catch (e) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error: ${e.toString()}'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      } finally {
-        if (mounted) setState(() => _changingEmail = false);
-      }
+    if (submitted == true) {
+      setState(() => _changingEmail = false);
     }
   }
 

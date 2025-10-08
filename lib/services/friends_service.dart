@@ -184,6 +184,32 @@ class FriendsService {
     return true;
   }
 
+  // --- Privacy helpers ---
+  static Future<String> _getVisibility(String uid) async {
+    final DataSnapshot v =
+        await _db.ref('users/$uid/settings/profile/visibility').get();
+    final String vis = v.value?.toString() ?? 'public';
+    if (vis != 'public' && vis != 'friends' && vis != 'private') {
+      return 'public';
+    }
+    return vis;
+  }
+
+  static Future<bool> _isProfileVisibleTo({
+    required String viewerUid,
+    required String targetUid,
+    required String visibility,
+  }) async {
+    if (viewerUid == targetUid || visibility == 'public') return true;
+    if (visibility == 'private') return false;
+    // friends-only → check friendship
+    final snaps = await Future.wait([
+      _db.ref('users/$viewerUid/friends/$targetUid').get(),
+      _db.ref('users/$targetUid/friends/$viewerUid').get(),
+    ]);
+    return snaps.any((s) => s.exists);
+  }
+
   // Blocking
   static Future<void> blockUser(String otherUid) async {
     final user = _auth.currentUser;
@@ -273,7 +299,15 @@ class FriendsService {
     final DataSnapshot snap =
         await _db.ref('usersByEmailHash/$emailHash').get();
     if (!snap.exists) return null;
-    return snap.value?.toString();
+    final String targetUid = snap.value?.toString() ?? '';
+    if (targetUid.isEmpty) return null;
+    // Enforce privacy for private profiles in search (hide from others)
+    final String? viewer = _auth.currentUser?.uid;
+    final String visibility = await _getVisibility(targetUid);
+    if (visibility == 'private' && viewer != targetUid) {
+      return null;
+    }
+    return targetUid;
   }
 
   // QR token flow
@@ -357,6 +391,16 @@ class FriendsService {
   }
 
   static Future<Map<String, String?>> fetchMinimalProfile(String uid) async {
+    // Enforce profile visibility
+    final String viewer = _auth.currentUser?.uid ?? '';
+    final String visibility = await _getVisibility(uid);
+    final bool allowed = await _isProfileVisibleTo(
+        viewerUid: viewer, targetUid: uid, visibility: visibility);
+
+    if (!allowed) {
+      return {'displayName': 'User', 'photoURL': null};
+    }
+
     final DataSnapshot snap = await _db.ref('users/$uid/profile').get();
     if (!snap.exists || snap.value is! Map) {
       return {'displayName': 'User', 'photoURL': null};

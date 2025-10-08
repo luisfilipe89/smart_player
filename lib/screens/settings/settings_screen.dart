@@ -80,6 +80,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await _deleteAccount();
   }
 
+  Future<void> _saveSettings() async {
+    setState(() => _submitting = true);
+    try {
+      await HapticsService.setEnabled(_haptics);
+      final uid = AuthService.currentUserId;
+      if (uid != null) {
+        await ProfileSettingsService.setVisibility(_visibility);
+      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('settings_prefs_saved'.tr())),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+            content: Text('loading_error'.tr()), backgroundColor: Colors.red),
+      );
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     // ensure we reflect persisted state once available
@@ -93,6 +116,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
         title: Text('settings'.tr()),
         backgroundColor: AppColors.white,
         elevation: 0,
+        actions: [
+          TextButton(
+            onPressed: _submitting ? null : _saveSettings,
+            style: TextButton.styleFrom(
+              foregroundColor: AppColors.primary,
+              disabledForegroundColor: AppColors.grey,
+            ),
+            child: _submitting
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2))
+                : const Text('Save'),
+          ),
+        ],
       ),
       body: SafeArea(
         child: ListView(
@@ -121,10 +159,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           title: Text('settings_profile_visibility'.tr()),
                           subtitle: Text(
                             value == 'friends'
-                                ? 'settings_profile_friends'.tr()
+                                ? 'settings_profile_friends_desc'.tr()
                                 : value == 'private'
-                                    ? 'settings_profile_private'.tr()
-                                    : 'settings_profile_public'.tr(),
+                                    ? 'settings_profile_private_desc'.tr()
+                                    : 'settings_profile_public_desc'.tr(),
                           ),
                         ),
                         RadioListTile<String>(
@@ -156,6 +194,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   },
                 );
               }),
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            _buildSectionCard(
+              title: 'settings_notifications_tba'.tr(),
+              child: Text(
+                '',
+                style: AppTextStyles.smallMuted,
+              ),
             ),
             const SizedBox(height: AppSpacing.lg),
             _buildSectionCard(

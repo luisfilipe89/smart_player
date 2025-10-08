@@ -69,7 +69,6 @@ class EmailService {
 
       return true;
     } catch (e) {
-      print('Error sending friend invite email: $e');
       return false;
     }
   }
@@ -197,7 +196,6 @@ If you don't want to receive these emails, you can ignore this message.
 
       return true;
     } catch (e) {
-      print('Error checking invite rate limit: $e');
       return true; // Allow on error
     }
   }

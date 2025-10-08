@@ -45,7 +45,7 @@ driver.add_cookie({
 # Now load the actual activities page
 driver.get("https://www.aanbod.s-port.nl/activiteiten?gemeente%5B0%5D=40&sort=name&order=asc")
 
-print("✅ Page loaded, scrolling...")
+# Page loaded, scrolling...
 
 
 
@@ -58,7 +58,7 @@ WebDriverWait(driver, 15).until(
 )
 
 cards = driver.find_elements(By.CSS_SELECTOR, ".activity")
-print(f"🔗 Found {len(cards[:20])} event cards")
+# Found event cards
 
 events = []
 
@@ -130,7 +130,7 @@ for idx, card in enumerate(cards[:20]):
             "date_time": "-"
         }
 
-    print(f"\n➡️ Event {idx+1}: {title}")
+    # Processing event
 
     events.append({
         "title": title,
@@ -152,5 +152,5 @@ with open(static_path, "w", encoding="utf-8") as f:
     json.dump(events, f, ensure_ascii=False, indent=2)
 
 
-print("\n✅ Clean and structured data saved to:", output_path)
+# Clean and structured data saved
 driver.quit()
