@@ -20,7 +20,7 @@
             android:value="AIzaSyCKTVN_ZX07XJEZvxDQ4ZOLGJYWLPNuh5A" />
 
         <activity
-            android:name=".MainActivity"
+            android:name="com.example.sportappdenbosch.MainActivity"
             android:exported="true"
             android:launchMode="singleTop"
             android:taskAffinity=""

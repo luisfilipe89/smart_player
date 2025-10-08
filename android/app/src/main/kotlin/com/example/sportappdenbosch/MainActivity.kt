@@ -1,5 +1,7 @@
-package com.example.move_young
+package com.example.sportappdenbosch
 
 import io.flutter.embedding.android.FlutterActivity
 
 class MainActivity : FlutterActivity()
+
+

@@ -5,10 +5,10 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:flutter_contacts/flutter_contacts.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import 'package:move_young/services/auth_service.dart';
 import 'package:move_young/services/friends_service.dart';
+import 'package:move_young/services/email_service.dart';
 import 'package:move_young/theme/tokens.dart';
 import 'package:move_young/theme/app_back_button.dart';
 
@@ -416,6 +416,7 @@ class _FriendsScreenState extends State<FriendsScreen>
     if (ok != true) return;
     final email = controller.text.trim();
     if (email.isEmpty) return;
+
     // Prevent self-invite
     final myEmail = AuthService.currentUser?.email?.trim().toLowerCase();
     if (myEmail != null &&
@@ -427,22 +428,39 @@ class _FriendsScreenState extends State<FriendsScreen>
       );
       return;
     }
+
+    // Check rate limiting
+    final canSend = await EmailService.canSendInviteToEmail(email);
+    if (!canSend) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('friends_invite_rate_limited'.tr())),
+      );
+      return;
+    }
+
+    // Check if user is already on the app
     final uid = await FriendsService.searchUidByEmail(email);
     if (uid == null) {
-      await _launchEmailInvite(email);
-      if (!mounted) return;
-      await showDialog<void>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: Text('friends_invite_email'.tr()),
-          content: Text('friends_email_app_opened'.tr()),
-          actions: [
-            TextButton(
-                onPressed: () => Navigator.pop(ctx), child: Text('ok'.tr())),
-          ],
-        ),
+      // User not on app - send email invite via backend
+      final recipientName = _deriveNameFromEmail(email);
+      final success = await EmailService.sendFriendInviteEmail(
+        recipientEmail: email,
+        recipientName: recipientName,
       );
+
+      if (!mounted) return;
+      if (success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('friends_invite_email_sent'.tr())),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('friends_invite_email_failed'.tr())),
+        );
+      }
     } else {
+      // User is on app - send friend request directly
       await FriendsService.sendFriendRequestToUid(uid);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -451,17 +469,11 @@ class _FriendsScreenState extends State<FriendsScreen>
     }
   }
 
-  Future<void> _launchEmailInvite(String toEmail) async {
-    final subject = Uri.encodeComponent('Join Move Young');
-    const playUrl =
-        'https://play.google.com/store/apps/details?id=com.example.move_young';
-    const iosUrl = 'https://apps.apple.com/';
-    final body = Uri.encodeComponent(
-        'Hey! Join me on Move Young to play and organize games together.\n\nAndroid: $playUrl\niPhone: $iosUrl');
-    final uri = Uri.parse('mailto:$toEmail?subject=$subject&body=$body');
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    }
+  String _deriveNameFromEmail(String email) {
+    final String prefix = email.split('@').first;
+    final String cleaned = prefix.replaceAll(RegExp(r"[^A-Za-z]"), '');
+    if (cleaned.isEmpty) return prefix;
+    return cleaned[0].toUpperCase() + cleaned.substring(1);
   }
 }
 

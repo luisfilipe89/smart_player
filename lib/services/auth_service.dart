@@ -73,11 +73,19 @@ class AuthService {
       final GoogleSignInAccount? googleUser = await GoogleSignIn().signIn();
       if (googleUser == null) {
         // User aborted the sign-in flow
+        debugPrint('Google Sign-In: User cancelled');
         return null;
       }
 
+      debugPrint('Google Sign-In: User selected: ${googleUser.email}');
+
       final GoogleSignInAuthentication googleAuth =
           await googleUser.authentication;
+
+      if (googleAuth.accessToken == null || googleAuth.idToken == null) {
+        debugPrint('Google Sign-In: Missing tokens');
+        return null;
+      }
 
       final oauthCredential = GoogleAuthProvider.credential(
         accessToken: googleAuth.accessToken,
@@ -86,9 +94,11 @@ class AuthService {
 
       final userCredential = await _auth.signInWithCredential(oauthCredential);
       await _auth.currentUser?.reload();
+      debugPrint('Google Sign-In: Success');
       return userCredential;
     } catch (e) {
       // Error signing in with Google
+      debugPrint('Google Sign-In Error: $e');
       return null;
     }
   }
@@ -210,6 +220,14 @@ class AuthService {
         return 'error_email_in_use';
       case 'invalid-email':
         return 'auth_email_invalid';
+      case 'invalid-credential':
+        // Newer SDK often returns this for wrong email/password
+        return 'wrong_password';
+      case 'invalid-login-credentials':
+        // Alias observed on some platforms
+        return 'wrong_password';
+      case 'missing-password':
+        return 'auth_password_required';
       case 'weak-password':
         return 'auth_password_too_short';
       case 'user-not-found':
@@ -292,15 +310,24 @@ class AuthService {
   static Future<void> sendPasswordResetEmail(String email) async {
     try {
       await _auth.sendPasswordResetEmail(email: email);
+      debugPrint('Password reset email sent to: $email');
     } on FirebaseAuthException catch (e) {
+      debugPrint('Firebase Auth Error: ${e.code} - ${e.message}');
       switch (e.code) {
         case 'invalid-email':
-          throw Exception('Invalid email');
+          throw Exception('auth_email_invalid');
         case 'user-not-found':
-          throw Exception('No account found for this email');
+          throw Exception('user_not_found');
+        case 'too-many-requests':
+          throw Exception('too_many_requests');
+        case 'quota-exceeded':
+          throw Exception('quota_exceeded');
         default:
           throw Exception('Could not send reset email (${e.code})');
       }
+    } catch (e) {
+      debugPrint('General error sending reset email: $e');
+      rethrow;
     }
   }
 

@@ -22,15 +22,16 @@ void main() async {
     print('Firebase init failed: $e');
   }
 
-  // Initialize Firebase App Check
+  // Initialize Firebase App Check (optional for development)
   try {
     await FirebaseAppCheck.instance.activate(
-      androidProvider: AndroidProvider.playIntegrity,
-      appleProvider: AppleProvider.deviceCheck,
+      androidProvider: AndroidProvider.debug,
+      appleProvider: AppleProvider.debug,
       webProvider: ReCaptchaV3Provider('auto'),
     );
   } catch (e) {
     // App Check initialization failed; safe to proceed in dev
+    print('App Check not configured: $e');
   }
 
   // Notifications

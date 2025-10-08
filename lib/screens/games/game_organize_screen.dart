@@ -171,7 +171,7 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
   // Check if any changes have been made to the game
   bool get _hasChanges {
     if (widget.initialGame == null) return false;
-    
+
     return _selectedSport != _originalSport ||
         _selectedDate != _originalDate ||
         _selectedTime != _originalTime ||
@@ -724,10 +724,11 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
         'latitude': g.latitude,
         'longitude': g.longitude,
       };
-      
+
       // Store original values for change detection
       _originalSport = g.sport;
-      _originalDate = DateTime(g.dateTime.year, g.dateTime.month, g.dateTime.day);
+      _originalDate =
+          DateTime(g.dateTime.year, g.dateTime.month, g.dateTime.day);
       _originalTime = g.formattedTime;
       _originalMaxPlayers = g.maxPlayers;
       _originalField = {
@@ -736,7 +737,7 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
         'latitude': g.latitude,
         'longitude': g.longitude,
       };
-      
+
       // Load fields for the selected sport
       _loadFields();
     }
@@ -1126,7 +1127,9 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: _isFormComplete
                                       ? (widget.initialGame != null
-                                          ? (_hasChanges ? Colors.orange : AppColors.green)
+                                          ? (_hasChanges
+                                              ? Colors.orange
+                                              : AppColors.green)
                                           : AppColors.blue)
                                       : AppColors.grey,
                                   foregroundColor: Colors.white,
@@ -1150,7 +1153,9 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
                                       )
                                     : Text(
                                         widget.initialGame != null
-                                            ? (_hasChanges ? 'change_game'.tr() : 'confirm_game'.tr())
+                                            ? (_hasChanges
+                                                ? 'change_game'.tr()
+                                                : 'confirm_game'.tr())
                                             : 'create_game'.tr(),
                                         style: AppTextStyles.cardTitle.copyWith(
                                           color: Colors.white,

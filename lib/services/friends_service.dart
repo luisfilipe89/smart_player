@@ -26,10 +26,10 @@ class FriendsService {
     final String? email = user.email?.trim();
     if (email != null && email.isNotEmpty) {
       final String emailLower = email.toLowerCase();
-      updates['usersByEmail/$emailLower'] = uid;
-      // Optional hashed index to avoid plain email matching at rest
-      final String emailHash =
-          crypto.sha256.convert(utf8.encode(emailLower)).toString();
+      // Use hashed index to avoid invalid chars and storing raw email as key
+      final String emailHash = crypto.sha256
+          .convert(utf8.encode(emailLower))
+          .toString();
       updates['usersByEmailHash/$emailHash'] = uid;
     }
 
@@ -92,8 +92,9 @@ class FriendsService {
     final String fromUid = user.uid;
     if (fromUid == toUid) return false;
     // Respect privacy toggle: if receiver disallows requests, block
-    final allowSnap =
-        await _db.ref('users/$toUid/settings/allowRequests').get();
+    final allowSnap = await _db
+        .ref('users/$toUid/settings/allowRequests')
+        .get();
     if (allowSnap.exists && allowSnap.value == false) {
       return false;
     }
@@ -116,8 +117,10 @@ class FriendsService {
     return true;
   }
 
-  static Future<bool> _canSendRequest(
-      {required String fromUid, required String toUid}) async {
+  static Future<bool> _canSendRequest({
+    required String fromUid,
+    required String toUid,
+  }) async {
     final refs = [
       _db.ref('users/$fromUid/friends/$toUid'),
       _db.ref('users/$fromUid/friendRequests/sent/$toUid'),
@@ -141,8 +144,10 @@ class FriendsService {
       final key = 'friends_req_times_$uid';
       final now = DateTime.now().millisecondsSinceEpoch;
       final List<String> raw = prefs.getStringList(key) ?? <String>[];
-      final List<int> times =
-          raw.map((e) => int.tryParse(e) ?? 0).where((t) => t > 0).toList();
+      final List<int> times = raw
+          .map((e) => int.tryParse(e) ?? 0)
+          .where((t) => t > 0)
+          .toList();
       // purge old
       final cutoff = now - _rateLimitWindowMs;
       final recent = times.where((t) => t >= cutoff).toList();
@@ -229,8 +234,10 @@ class FriendsService {
   }
 
   // Report user audit trail
-  static Future<void> reportUser(
-      {required String targetUid, required String reason}) async {
+  static Future<void> reportUser({
+    required String targetUid,
+    required String reason,
+  }) async {
     final reporter = _auth.currentUser?.uid;
     if (reporter == null || reporter == targetUid) return;
     final id = const Uuid().v4();
@@ -263,16 +270,22 @@ class FriendsService {
   }
 
   static Future<String?> searchUidByEmail(String email) async {
-    final String key = email.trim().toLowerCase();
-    if (key.isEmpty) return null;
-    final DataSnapshot snap = await _db.ref('usersByEmail/$key').get();
+    final String emailLower = email.trim().toLowerCase();
+    if (emailLower.isEmpty) return null;
+    final String emailHash = crypto.sha256
+        .convert(utf8.encode(emailLower))
+        .toString();
+    final DataSnapshot snap = await _db
+        .ref('usersByEmailHash/$emailHash')
+        .get();
     if (!snap.exists) return null;
     return snap.value?.toString();
   }
 
   // QR token flow
-  static Future<String?> generateFriendToken(
-      {Duration ttl = const Duration(minutes: 10)}) async {
+  static Future<String?> generateFriendToken({
+    Duration ttl = const Duration(minutes: 10),
+  }) async {
     final user = _auth.currentUser;
     if (user == null) return null;
     final String token = const Uuid().v4();
@@ -314,7 +327,8 @@ class FriendsService {
   // "moveyoung://friend?token=<uuid>" or plain <uuid>
   static String _normalizeToken(String raw) {
     final RegExp uuidPattern = RegExp(
-        r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}");
+      r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}",
+    );
     final match = uuidPattern.firstMatch(raw);
     if (match != null) return match.group(0)!;
     // Try query param token=
@@ -332,8 +346,9 @@ class FriendsService {
 
   // Helpers to read minimal profile for a uid
   static Future<String> fetchDisplayName(String uid) async {
-    final DataSnapshot snap =
-        await _db.ref('users/$uid/profile/displayName').get();
+    final DataSnapshot snap = await _db
+        .ref('users/$uid/profile/displayName')
+        .get();
     if (!snap.exists) return 'User';
     final String name = snap.value?.toString() ?? 'User';
     if (name.trim().isEmpty) return 'User';
@@ -341,8 +356,9 @@ class FriendsService {
   }
 
   static Future<String?> fetchPhotoURL(String uid) async {
-    final DataSnapshot snap =
-        await _db.ref('users/$uid/profile/photoURL').get();
+    final DataSnapshot snap = await _db
+        .ref('users/$uid/profile/photoURL')
+        .get();
     if (!snap.exists) return null;
     final String url = snap.value?.toString() ?? '';
     return url.isEmpty ? null : url;

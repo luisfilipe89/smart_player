@@ -368,9 +368,16 @@ class _AuthScreenState extends State<AuthScreen> {
                                 );
                               } catch (e) {
                                 if (!mounted) return;
+                                String errorMessage = e.toString().replaceFirst(
+                                    RegExp(r'^Exception:\s*'), '');
+                                String localizedError = tr(errorMessage);
+                                if (localizedError == errorMessage) {
+                                  localizedError = tr('error_generic_reset');
+                                }
                                 scaffoldMessenger.showSnackBar(
                                   SnackBar(
-                                    content: Text('error_generic_signin'.tr()),
+                                    content: Text(localizedError),
+                                    backgroundColor: Colors.red,
                                   ),
                                 );
                               }

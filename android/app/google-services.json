@@ -1,34 +1,42 @@
 {
   "project_info": {
-    "project_number": "689376569732",
-    "firebase_url": "https://moveyoung-55b5d-default-rtdb.europe-west1.firebasedatabase.app",
-    "project_id": "moveyoung-55b5d",
-    "storage_bucket": "moveyoung-55b5d.appspot.com"
+    "project_number": "822195810915",
+    "firebase_url": "https://sportappdenbosch-default-rtdb.europe-west1.firebasedatabase.app",
+    "project_id": "sportappdenbosch",
+    "storage_bucket": "sportappdenbosch.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:689376569732:android:60011e08a3739940e355d1",
+        "mobilesdk_app_id": "1:822195810915:android:465910113a9069b1f1fe56",
         "android_client_info": {
-          "package_name": "com.example.move_young"
+          "package_name": "com.example.sportappdenbosch"
         }
       },
       "oauth_client": [
         {
-          "client_id": "689376569732-9a4tdta1v7rlah4dn85do8io0gksr45c.apps.googleusercontent.com",
+          "client_id": "822195810915-ec6447mt34gdls6qbfjla7ena9oj3psf.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.sportappdenbosch",
+            "certificate_hash": "9a145bbe385148c58454c0b7b9daeb1a8089b5ee"
+          }
+        },
+        {
+          "client_id": "822195810915-1ge9tba84s6065aohkhlkp8d8jl8e32s.apps.googleusercontent.com",
           "client_type": 3
         }
       ],
       "api_key": [
         {
-          "current_key": "AIzaSyAc_ldVIWc7iC8IkpVAzH0Bb0flaSBX4VE"
+          "current_key": "AIzaSyDpxx5BxFbE0VDPhUT_i9At11G4yjyYjRg"
         }
       ],
       "services": {
         "appinvite_service": {
           "other_platform_oauth_client": [
             {
-              "client_id": "689376569732-9a4tdta1v7rlah4dn85do8io0gksr45c.apps.googleusercontent.com",
+              "client_id": "822195810915-1ei1hfsnlogi0fgi2nl29438t209gpmt.apps.googleusercontent.com",
               "client_type": 3
             }
           ]
