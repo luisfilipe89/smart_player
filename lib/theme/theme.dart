@@ -6,8 +6,15 @@ import 'package:move_young/theme/tokens.dart';
 
 class AppTheme {
   static ThemeData minimal() {
+    final colorScheme = ColorScheme.fromSeed(
+      seedColor: AppColors.primary,
+      brightness: Brightness.light,
+    );
+
     final base = ThemeData(
       useMaterial3: true,
+      colorScheme: colorScheme,
+      primaryColor: AppColors.primary,
       fontFamily: 'Poppins',
       scaffoldBackgroundColor: AppColors.white,
       appBarTheme: const AppBarTheme(
@@ -26,6 +33,26 @@ class AppTheme {
           statusBarColor: AppColors.white, // ← force white
           statusBarIconBrightness: Brightness.dark, // Android icons dark
           statusBarBrightness: Brightness.light, // iOS status bar
+        ),
+      ),
+      progressIndicatorTheme: const ProgressIndicatorThemeData(
+        color: AppColors.primary,
+      ),
+      snackBarTheme: const SnackBarThemeData(
+        backgroundColor: AppColors.primary,
+        contentTextStyle: TextStyle(color: Colors.white),
+        behavior: SnackBarBehavior.floating,
+      ),
+      inputDecorationTheme: InputDecorationTheme(
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(AppRadius.card),
+          borderSide: const BorderSide(color: AppColors.primary, width: 2),
+        ),
+      ),
+      elevatedButtonTheme: ElevatedButtonThemeData(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: AppColors.primary,
+          foregroundColor: Colors.white,
         ),
       ),
     );

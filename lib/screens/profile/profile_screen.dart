@@ -23,6 +23,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool _uploading = false;
   File? _localImage;
   bool _loadingDetails = true;
+  bool _changingEmail = false;
 
   @override
   void initState() {
@@ -139,9 +140,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
       final uid = AuthService.currentUserId;
       if (uid == null) throw Exception('Not signed in');
 
-      final storage = FirebaseStorage.instanceFor(
-          bucket: 'gs://moveyoung-55b5d.appspot.com');
-      final storageRef = storage.ref().child('users/$uid/profile.jpg');
+      final storageRef =
+          FirebaseStorage.instance.ref().child('users/$uid/profile.jpg');
       final file = File(picked.path);
       final task = await storageRef.putFile(
           file, SettableMetadata(contentType: 'image/jpeg'));
@@ -200,114 +200,138 @@ class _ProfileScreenState extends State<ProfileScreen> {
         child: _loadingDetails
             ? const Center(child: CircularProgressIndicator())
             : ListView(
-                padding: const EdgeInsets.all(AppSpacing.lg),
+                padding: AppPaddings.symmHorizontalReg.copyWith(
+                  top: AppSpacing.lg,
+                  bottom: AppSpacing.lg,
+                ),
                 children: [
-                  Center(
-                    child: Stack(
+                  // Profile Photo Section
+                  _buildSectionCard(
+                    child: Column(
                       children: [
-                        Container(
-                          padding: const EdgeInsets.all(3),
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            border:
-                                Border.all(color: AppColors.primary, width: 2),
-                          ),
-                          child: CircleAvatar(
-                            radius: 52,
-                            backgroundColor: AppColors.lightgrey,
-                            backgroundImage: _localImage != null
-                                ? FileImage(_localImage!)
-                                : (photoUrl != null
-                                    ? NetworkImage(photoUrl)
-                                    : null) as ImageProvider?,
-                            child: (photoUrl == null && _localImage == null)
-                                ? const Icon(Icons.person,
-                                    size: 52, color: Colors.white)
-                                : null,
+                        Center(
+                          child: Stack(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(3),
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                      color: AppColors.primary, width: 2),
+                                ),
+                                child: CircleAvatar(
+                                  radius: 52,
+                                  backgroundColor: AppColors.lightgrey,
+                                  backgroundImage: _localImage != null
+                                      ? FileImage(_localImage!)
+                                      : (photoUrl != null
+                                          ? NetworkImage(photoUrl)
+                                          : null) as ImageProvider?,
+                                  child:
+                                      (photoUrl == null && _localImage == null)
+                                          ? const Icon(Icons.person,
+                                              size: 52, color: Colors.white)
+                                          : null,
+                                ),
+                              ),
+                              Positioned(
+                                right: 0,
+                                bottom: 0,
+                                child: Material(
+                                  color: AppColors.white,
+                                  shape: const CircleBorder(),
+                                  elevation: 2,
+                                  child: IconButton(
+                                    icon: _uploading
+                                        ? const SizedBox(
+                                            width: 18,
+                                            height: 18,
+                                            child: CircularProgressIndicator(
+                                                strokeWidth: 2))
+                                        : const Icon(Icons.camera_alt,
+                                            size: 20),
+                                    onPressed:
+                                        _uploading ? null : _pickAndUploadPhoto,
+                                    tooltip: 'profile_change_photo'.tr(),
+                                  ),
+                                ),
+                              )
+                            ],
                           ),
                         ),
-                        Positioned(
-                          right: 0,
-                          bottom: 0,
-                          child: Material(
-                            color: AppColors.white,
-                            shape: const CircleBorder(),
-                            elevation: 2,
-                            child: IconButton(
-                              icon: _uploading
-                                  ? const SizedBox(
-                                      width: 18,
-                                      height: 18,
-                                      child: CircularProgressIndicator(
-                                          strokeWidth: 2))
-                                  : const Icon(Icons.camera_alt, size: 20),
-                              onPressed:
-                                  _uploading ? null : _pickAndUploadPhoto,
-                              tooltip: 'profile_change_photo'.tr(),
-                            ),
-                          ),
-                        )
                       ],
                     ),
                   ),
                   const SizedBox(height: AppSpacing.lg),
-                  Container(
-                    decoration: BoxDecoration(
-                      color: AppColors.white,
-                      borderRadius: BorderRadius.circular(AppRadius.container),
-                      boxShadow: AppShadows.md,
-                    ),
-                    padding: AppPaddings.allBig,
+
+                  // Basic Details Section
+                  _buildSectionCard(
+                    title: 'profile_basic_details'.tr(),
                     child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('profile_basic_details'.tr(),
-                            style: AppTextStyles.h3),
-                        const SizedBox(height: AppSpacing.md),
-                        TextField(
-                          controller: _nameController,
-                          textInputAction: TextInputAction.done,
-                          decoration: InputDecoration(
-                            labelText: 'profile_display_name'.tr(),
-                            border: const OutlineInputBorder(),
-                          ),
-                          onSubmitted: (_) => _saveProfile(),
-                        ),
-                        const SizedBox(height: AppSpacing.md),
-                        InkWell(
-                          onTap: _pickDob,
-                          borderRadius: BorderRadius.circular(8),
-                          child: InputDecorator(
-                            decoration: InputDecoration(
-                              labelText: 'profile_date_of_birth'.tr(),
-                              border: const OutlineInputBorder(),
+                        _buildInputTile(
+                          icon: Icons.person_outline,
+                          title: 'profile_display_name'.tr(),
+                          child: TextField(
+                            controller: _nameController,
+                            textInputAction: TextInputAction.done,
+                            decoration: const InputDecoration(
+                              border: InputBorder.none,
+                              hintText: 'Enter your name',
                             ),
+                            onSubmitted: (_) => _saveProfile(),
+                          ),
+                        ),
+                        const Divider(height: 1, color: AppColors.lightgrey),
+                        _buildInputTile(
+                          icon: Icons.cake_outlined,
+                          title: 'profile_date_of_birth'.tr(),
+                          child: InkWell(
+                            onTap: _pickDob,
                             child: Text(
                               _dateOfBirth == null
                                   ? 'profile_pick_date'.tr()
                                   : DateFormat.yMMMMd().format(_dateOfBirth!),
-                              style: AppTextStyles.body,
+                              style: AppTextStyles.body.copyWith(
+                                color: _dateOfBirth == null
+                                    ? AppColors.grey
+                                    : AppColors.text,
+                              ),
                             ),
                           ),
                         ),
                       ],
                     ),
                   ),
-                  const SizedBox(height: AppSpacing.md),
+                  const SizedBox(height: AppSpacing.lg),
+
+                  // Account Section
                   if (email.isNotEmpty)
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: AppColors.white,
-                        borderRadius: BorderRadius.circular(AppRadius.card),
-                        border: Border.all(color: AppColors.lightgrey),
-                      ),
-                      child: Row(
+                    _buildSectionCard(
+                      title: 'profile_account'.tr(),
+                      child: Column(
                         children: [
-                          const Icon(Icons.email_outlined),
-                          const SizedBox(width: 8),
-                          Expanded(
-                              child: Text(email, style: AppTextStyles.body)),
+                          _buildLinkTile(
+                            icon: Icons.email_outlined,
+                            title: 'profile_email'.tr(),
+                            subtitle: email,
+                            onTap: _changingEmail ? null : _changeEmail,
+                            trailing: _changingEmail
+                                ? const SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(
+                                        strokeWidth: 2),
+                                  )
+                                : const Icon(Icons.edit, size: 16),
+                          ),
+                          const Divider(height: 1, color: AppColors.lightgrey),
+                          _buildLinkTile(
+                            icon: Icons.lock_outline,
+                            title: 'profile_change_password'.tr(),
+                            onTap: () => _showChangePasswordDialog(),
+                            trailingChevron: true,
+                          ),
                         ],
                       ),
                     ),
@@ -317,14 +341,74 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  Widget _buildSectionCard({String? title, required Widget child}) {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.white,
+        borderRadius: BorderRadius.circular(AppRadius.container),
+        boxShadow: AppShadows.md,
+      ),
+      padding: AppPaddings.allBig,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (title != null) ...[
+            Text(title, style: AppTextStyles.h3),
+            const SizedBox(height: AppSpacing.sm),
+          ],
+          child,
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLinkTile({
+    required IconData icon,
+    required String title,
+    String? subtitle,
+    required VoidCallback? onTap,
+    Widget? trailing,
+    bool trailingChevron = false,
+  }) {
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      leading: Icon(icon, color: AppColors.primary),
+      title: Text(title, style: AppTextStyles.body),
+      subtitle:
+          subtitle != null ? Text(subtitle, style: AppTextStyles.small) : null,
+      trailing: trailing ??
+          (trailingChevron ? const Icon(Icons.chevron_right) : null),
+      onTap: onTap,
+    );
+  }
+
+  Widget _buildInputTile({
+    required IconData icon,
+    required String title,
+    required Widget child,
+  }) {
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      leading: Icon(icon, color: AppColors.primary),
+      title: Text(title, style: AppTextStyles.body),
+      subtitle: child,
+    );
+  }
+
+  void _showChangePasswordDialog() {
+    // TODO: Implement change password dialog
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Change password coming soon!')),
+    );
+  }
+
   Future<void> _removePhoto() async {
     try {
       setState(() => _uploading = true);
       final uid = AuthService.currentUserId;
       if (uid != null) {
-        final storage = FirebaseStorage.instanceFor(
-            bucket: 'gs://moveyoung-55b5d.appspot.com');
-        final ref = storage.ref().child('users/$uid/profile.jpg');
+        final ref =
+            FirebaseStorage.instance.ref().child('users/$uid/profile.jpg');
         try {
           await ref.delete();
         } catch (_) {
@@ -348,6 +432,74 @@ class _ProfileScreenState extends State<ProfileScreen> {
             content: Text('Error: ${e.toString()}'),
             backgroundColor: Colors.red),
       );
+    }
+  }
+
+  Future<void> _changeEmail() async {
+    final currentEmail = AuthService.currentUser?.email ?? '';
+    if (currentEmail.isEmpty) return;
+
+    final newEmailController = TextEditingController(text: currentEmail);
+
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('profile_change_email'.tr()),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('profile_change_email_description'.tr()),
+            const SizedBox(height: AppSpacing.md),
+            TextField(
+              controller: newEmailController,
+              keyboardType: TextInputType.emailAddress,
+              decoration: InputDecoration(
+                labelText: 'profile_new_email'.tr(),
+                border: const OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text('cancel'.tr()),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final newEmail = newEmailController.text.trim();
+              if (newEmail.isNotEmpty && newEmail != currentEmail) {
+                Navigator.of(context).pop(newEmail);
+              }
+            },
+            child: Text('profile_change_email'.tr()),
+          ),
+        ],
+      ),
+    );
+
+    if (result != null && result != currentEmail) {
+      setState(() => _changingEmail = true);
+      try {
+        await AuthService.updateEmail(result);
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('profile_email_changed'.tr()),
+            backgroundColor: AppColors.primary,
+          ),
+        );
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      } finally {
+        if (mounted) setState(() => _changingEmail = false);
+      }
     }
   }
 

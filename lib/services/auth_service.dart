@@ -195,6 +195,20 @@ class AuthService {
     }
   }
 
+  // Update email
+  static Future<void> updateEmail(String newEmail) async {
+    try {
+      final user = _auth.currentUser;
+      if (user == null) throw Exception('Not signed in');
+
+      await user.verifyBeforeUpdateEmail(newEmail);
+      debugPrint('Verification email sent to: $newEmail');
+    } catch (e) {
+      debugPrint('Error updating email: $e');
+      rethrow;
+    }
+  }
+
   // Update display name
   static Future<void> updateDisplayName(String displayName) async {
     try {
