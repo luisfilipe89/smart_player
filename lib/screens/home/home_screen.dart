@@ -1,6 +1,7 @@
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart'; // HapticFeedback
+import 'package:move_young/services/haptics_service.dart';
 import 'package:move_young/models/event_model.dart';
 import 'package:move_young/services/load_events_from_json.dart';
 import 'package:move_young/services/auth_service.dart';
@@ -92,7 +93,7 @@ class _HomeScreenNewState extends State<HomeScreenNew> {
                   style: AppTextStyles.body,
                 ),
                 onPressed: () {
-                  HapticFeedback.lightImpact();
+                  HapticsService.lightImpact();
                   final curr = context.locale;
                   context.setLocale(
                     curr.languageCode == 'nl'
@@ -173,7 +174,7 @@ class _HomeScreenNewState extends State<HomeScreenNew> {
                               borderRadius:
                                   BorderRadius.circular(AppRadius.card),
                               onTap: () {
-                                HapticFeedback.lightImpact();
+                                HapticsService.lightImpact();
                                 Navigator.of(context).pushNamed('/activities');
                               },
                               child: Column(
@@ -221,7 +222,7 @@ class _HomeScreenNewState extends State<HomeScreenNew> {
                                   title: 'organize_a_game'.tr(),
                                   subtitle: 'start_a_game'.tr(),
                                   onTap: () {
-                                    HapticFeedback.lightImpact();
+                                    HapticsService.lightImpact();
                                     if (!AuthService.isSignedIn) {
                                       _showUserBottomSheet(context,
                                           showSignInPrompt: true);
@@ -293,7 +294,7 @@ class _HomeScreenNewState extends State<HomeScreenNew> {
                                             padding: AppPaddings
                                                 .symmHorizontalSmall),
                                         onPressed: () {
-                                          HapticFeedback.selectionClick();
+                                          HapticsService.selectionClick();
                                           MainScaffold.maybeOf(context)
                                               ?.switchToTab(kTabAgenda,
                                                   popToRoot: true);

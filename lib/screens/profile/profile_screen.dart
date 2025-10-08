@@ -9,6 +9,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:image_cropper/image_cropper.dart';
 import 'package:move_young/services/auth_service.dart';
 import 'package:move_young/utils/profanity.dart';
+import 'package:move_young/utils/country_data.dart';
 import 'package:move_young/theme/app_back_button.dart';
 import 'package:move_young/theme/tokens.dart';
 
@@ -21,12 +22,16 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   final TextEditingController _nameController = TextEditingController();
+  final TextEditingController _phoneController = TextEditingController();
   DateTime? _dateOfBirth;
   bool _saving = false;
   bool _uploading = false;
   File? _localImage;
   bool _loadingDetails = true;
   bool _changingEmail = false;
+  // Phone country code (default Netherlands)
+  String _selectedCountryCode = '+31';
+  List<Map<String, String>> get _countryList => CountryData.list;
 
   @override
   void initState() {
@@ -39,6 +44,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   void dispose() {
     _nameController.dispose();
+    _phoneController.dispose();
     super.dispose();
   }
 
@@ -69,6 +75,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
       if (uid != null) {
         await FirebaseDatabase.instance.ref('users/$uid/profile').update({
           'dateOfBirth': _dateOfBirth?.millisecondsSinceEpoch ?? '',
+          'phone': _phoneController.text.trim(),
+          'phoneCode': _selectedCountryCode,
           'updatedAt': DateTime.now().millisecondsSinceEpoch,
         });
       }
@@ -102,6 +110,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
         final dob = int.tryParse('${data['dateOfBirth'] ?? ''}');
         if (dob != null && dob > 0) {
           _dateOfBirth = DateTime.fromMillisecondsSinceEpoch(dob);
+        }
+        final phone = (data['phone'] ?? '').toString();
+        if (phone.isNotEmpty) {
+          _phoneController.text = phone;
+        }
+        final code = (data['phoneCode'] ?? '').toString();
+        if (code.isNotEmpty) {
+          _selectedCountryCode = code;
         }
       }
     } catch (_) {}
@@ -355,6 +371,83 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                     : AppColors.text,
                               ),
                             ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.lg),
+                  // Phone number section
+                  _buildSectionCard(
+                    title: 'profile_phone_title'.tr(),
+                    child: Column(
+                      children: [
+                        ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: const Icon(Icons.phone_outlined,
+                              color: AppColors.primary),
+                          title: SizedBox(
+                            height: 40,
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                InkWell(
+                                  onTap: _pickCountryWithFlags,
+                                  borderRadius: BorderRadius.circular(6),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 12, vertical: 8),
+                                    decoration: BoxDecoration(
+                                      border: Border.all(
+                                          color: AppColors.lightgrey),
+                                      borderRadius: BorderRadius.circular(20),
+                                      color: AppColors.white,
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                              horizontal: 6, vertical: 2),
+                                          decoration: BoxDecoration(
+                                            color: AppColors.superlightgrey,
+                                            borderRadius:
+                                                BorderRadius.circular(4),
+                                          ),
+                                          child: Text(
+                                            _selectedIsoForCode(
+                                                _selectedCountryCode),
+                                            style: AppTextStyles.small,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Text(_selectedCountryCode,
+                                            style: AppTextStyles.body),
+                                        const SizedBox(width: 4),
+                                        const Icon(Icons.arrow_drop_down,
+                                            size: 18),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: TextField(
+                                    controller: _phoneController,
+                                    keyboardType: TextInputType.phone,
+                                    decoration: InputDecoration(
+                                      border: InputBorder.none,
+                                      hintText: 'profile_phone_hint'.tr(),
+                                    ),
+                                    onSubmitted: (_) => _saveProfile(),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          subtitle: Text(
+                            'profile_phone_subtitle'.tr(),
+                            style: AppTextStyles.smallMuted,
                           ),
                         ),
                       ],
@@ -751,5 +844,136 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (picked != null) {
       setState(() => _dateOfBirth = picked);
     }
+  }
+
+  String _selectedIsoForCode(String code) {
+    final match = _countryList.firstWhere(
+      (c) => c['code'] == code,
+      orElse: () => const {'iso': 'NL'},
+    );
+    return match['iso'] ?? 'NL';
+  }
+
+  void _pickCountryWithFlags() {
+    showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) {
+        String query = '';
+        final controller = TextEditingController();
+        List<Map<String, String>> sortNumerically(
+            List<Map<String, String>> src) {
+          final copy = [...src];
+          copy.sort((a, b) {
+            final ai = int.tryParse((a['code'] ?? '').replaceAll('+', '')) ?? 0;
+            final bi = int.tryParse((b['code'] ?? '').replaceAll('+', '')) ?? 0;
+            return ai.compareTo(bi);
+          });
+          return copy;
+        }
+
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            final filtered = sortNumerically(_countryList).where((c) {
+              if (query.isEmpty) return true;
+              final q = query.toLowerCase();
+              return (c['name'] ?? '').toLowerCase().contains(q) ||
+                  (c['iso'] ?? '').toLowerCase().contains(q) ||
+                  (c['code'] ?? '').toLowerCase().contains(q);
+            }).toList();
+            return SafeArea(
+              child: Padding(
+                padding: EdgeInsets.only(
+                  bottom: MediaQuery.of(ctx).viewInsets.bottom,
+                ),
+                child: SizedBox(
+                  height: MediaQuery.of(ctx).size.height * 0.75,
+                  child: Column(
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                        child: TextField(
+                          controller: controller,
+                          onChanged: (v) => setSheetState(() => query = v),
+                          decoration: InputDecoration(
+                            hintText: 'Search country or code',
+                            prefixIcon: const Icon(Icons.search),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 10),
+                          ),
+                        ),
+                      ),
+                      const Divider(height: 1, color: AppColors.lightgrey),
+                      Expanded(
+                        child: ListView.builder(
+                          itemCount: filtered.length,
+                          itemBuilder: (context, i) {
+                            final c = filtered[i];
+                            final selected = c['code'] == _selectedCountryCode;
+                            return InkWell(
+                              onTap: () => Navigator.pop(ctx, c['code']),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 16, vertical: 12),
+                                decoration: const BoxDecoration(
+                                  border: Border(
+                                      bottom: BorderSide(
+                                          color: AppColors.lightgrey,
+                                          width: 0.5)),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 8, vertical: 4),
+                                      decoration: BoxDecoration(
+                                        color: AppColors.superlightgrey,
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: Text(c['iso'] ?? '',
+                                          style: AppTextStyles.small),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(c['name'] ?? '',
+                                              style: AppTextStyles.body),
+                                          const SizedBox(height: 2),
+                                          Text(c['code'] ?? '',
+                                              style: AppTextStyles.smallMuted),
+                                        ],
+                                      ),
+                                    ),
+                                    if (selected)
+                                      const Icon(Icons.check_circle,
+                                          color: AppColors.primary),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    ).then((val) {
+      if (val != null) setState(() => _selectedCountryCode = val);
+    });
   }
 }

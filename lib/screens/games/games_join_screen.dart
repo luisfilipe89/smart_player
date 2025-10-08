@@ -9,6 +9,7 @@ import 'package:move_young/services/cloud_games_service.dart';
 import 'package:move_young/services/friends_service.dart' as friends;
 import 'package:move_young/services/auth_service.dart';
 import 'package:flutter/services.dart';
+import 'package:move_young/services/haptics_service.dart';
 
 class GamesDiscoveryScreen extends StatefulWidget {
   final String? highlightGameId;
@@ -29,7 +30,15 @@ class _GamesDiscoveryScreenState extends State<GamesDiscoveryScreen> {
   final Map<String, GlobalKey> _itemKeys = {};
   String? _highlightId;
 
-  final List<String> _sports = ['all', 'soccer', 'basketball', 'tennis', 'volleyball', 'badminton', 'table_tennis'];
+  final List<String> _sports = [
+    'all',
+    'soccer',
+    'basketball',
+    'tennis',
+    'volleyball',
+    'badminton',
+    'table_tennis'
+  ];
 
   @override
   void initState() {
@@ -130,7 +139,7 @@ class _GamesDiscoveryScreenState extends State<GamesDiscoveryScreen> {
           await GamesService.joinGame(game.id, currentUserId, currentUserName);
 
       if (success) {
-        HapticFeedback.lightImpact();
+        HapticsService.lightImpact();
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -622,7 +631,7 @@ class _GamesDiscoveryScreenState extends State<GamesDiscoveryScreen> {
                         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       ),
                       onPressed: () {
-                        HapticFeedback.selectionClick();
+                        HapticsService.selectionClick();
                         Navigator.of(context).pushNamed(
                           '/organize-game',
                           arguments: game,

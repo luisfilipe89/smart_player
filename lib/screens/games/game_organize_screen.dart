@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:move_young/services/haptics_service.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:move_young/models/game.dart';
 import 'package:move_young/theme/_theme.dart';
@@ -363,7 +364,7 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
       debugPrint('Game created and saved: ${game.id}');
 
       if (mounted) {
-        HapticFeedback.lightImpact();
+        HapticsService.lightImpact();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('game_created_successfully'.tr()),
@@ -892,7 +893,7 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
                                                 field: field,
                                                 isSelected: isSelected,
                                                 onTap: () {
-                                                  HapticFeedback.lightImpact();
+                                                  HapticsService.lightImpact();
                                                   setState(() {
                                                     _selectedField = field;
                                                   });
@@ -1007,7 +1008,7 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
                                               isSelected: isSelected,
                                               isToday: isToday,
                                               onTap: () {
-                                                HapticFeedback.lightImpact();
+                                                HapticsService.lightImpact();
                                                 setState(() {
                                                   if (isSelected) {
                                                     // If clicking on the already selected date, unselect it

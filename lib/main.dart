@@ -6,6 +6,7 @@ import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:move_young/screens/welcome/welcome_screen.dart';
 import 'package:move_young/theme/_theme.dart';
 import 'package:move_young/services/notification_service.dart';
+import 'package:move_young/services/haptics_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -37,6 +38,11 @@ void main() async {
   // Notifications
   try {
     await NotificationService.initialize();
+  } catch (_) {}
+
+  // Haptics (load persisted preference)
+  try {
+    await HapticsService.initialize();
   } catch (_) {}
 
   // Status bar styling only; avoid forcing Android nav bar appearance

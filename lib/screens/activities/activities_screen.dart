@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:move_young/services/haptics_service.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:move_young/models/activity.dart';
 import 'package:move_young/widgets_sports/activity_category.dart';
@@ -153,7 +154,7 @@ class _ActivitiesScreenState extends State<ActivitiesScreen> {
   }
 
   void navigateToMenu(String key) {
-    HapticFeedback.lightImpact();
+    HapticsService.lightImpact();
 
     final builder = _activityRoutes[key];
     assert(() {

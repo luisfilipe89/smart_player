@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:move_young/services/haptics_service.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -663,7 +664,7 @@ class _GenericSportScreenState extends State<GenericSportScreen>
                                                     onToggleFavorite: () async {
                                                       final id = '$lat,$lon';
                                                       await _toggleFavorite(id);
-                                                      HapticFeedback
+                                                      HapticsService
                                                           .selectionClick();
                                                     },
                                                     onShare: () async {
