@@ -17,7 +17,7 @@ class HelpScreen extends StatefulWidget {
 class _HelpScreenState extends State<HelpScreen> {
   String _version = '';
   static const String _faqUrl = 'https://example.com/help';
-  static const String _supportEmail = 'luisfccfigueiredo@gmail.com';
+  static const String _supportEmail = 'support@smartplayer.nl';
   static const String _supportWhatsApp = '+31682081767';
 
   @override

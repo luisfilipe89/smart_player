@@ -4,8 +4,11 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:image_cropper/image_cropper.dart';
 import 'package:move_young/services/auth_service.dart';
+import 'package:move_young/utils/profanity.dart';
 import 'package:move_young/theme/app_back_button.dart';
 import 'package:move_young/theme/tokens.dart';
 
@@ -43,6 +46,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final newName = _nameController.text.trim();
 
     if (newName.isEmpty) return;
+    if (newName.length > 24) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Name too long (max 24).')),
+        );
+      }
+      return;
+    }
+    if (!Profanity.isNameAllowed(newName)) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('auth_name_inappropriate'.tr())),
+        );
+      }
+      return;
+    }
     setState(() => _saving = true);
     try {
       await AuthService.updateDisplayName(newName);
@@ -129,11 +148,42 @@ class _ProfileScreenState extends State<ProfileScreen> {
       }
 
       final picker = ImagePicker();
-      final XFile? picked =
-          await picker.pickImage(source: source as ImageSource, maxWidth: 1024);
+      final XFile? picked = await picker.pickImage(
+        source: source as ImageSource,
+        maxWidth: 2000,
+        maxHeight: 2000,
+        imageQuality: 95,
+      );
       if (picked == null) return;
+
+      final CroppedFile? cropped = await ImageCropper().cropImage(
+        sourcePath: picked.path,
+        aspectRatio: const CropAspectRatio(ratioX: 1, ratioY: 1),
+        uiSettings: [
+          AndroidUiSettings(
+            toolbarTitle: 'Crop',
+            toolbarColor: AppColors.primary,
+            toolbarWidgetColor: Colors.white,
+            lockAspectRatio: true,
+            hideBottomControls: false,
+            showCropGrid: true,
+          ),
+          IOSUiSettings(
+            title: 'Crop',
+            aspectRatioLockEnabled: true,
+            rotateButtonsHidden: false,
+            rotateClockwiseButtonHidden: false,
+            resetButtonHidden: false,
+          ),
+        ],
+        compressFormat: ImageCompressFormat.jpg,
+        compressQuality: 90,
+      );
+
+      if (cropped == null) return;
+
       setState(() {
-        _localImage = File(picked.path);
+        _localImage = File(cropped.path);
         _uploading = true;
       });
 
@@ -142,7 +192,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
       final storageRef =
           FirebaseStorage.instance.ref().child('users/$uid/profile.jpg');
-      final file = File(picked.path);
+      final file = File(cropped.path);
       final task = await storageRef.putFile(
           file, SettableMetadata(contentType: 'image/jpeg'));
       String downloadUrl;
@@ -187,6 +237,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
         actions: [
           TextButton(
             onPressed: _saving ? null : _saveProfile,
+            style: TextButton.styleFrom(
+              foregroundColor: AppColors.primary,
+              disabledForegroundColor: AppColors.grey,
+            ),
             child: _saving
                 ? const SizedBox(
                     width: 16,
@@ -275,6 +329,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           child: TextField(
                             controller: _nameController,
                             textInputAction: TextInputAction.done,
+                            inputFormatters: [
+                              LengthLimitingTextInputFormatter(24),
+                            ],
                             decoration: const InputDecoration(
                               border: InputBorder.none,
                               hintText: 'Enter your name',
@@ -389,6 +446,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }) {
     return ListTile(
       contentPadding: EdgeInsets.zero,
+      visualDensity: const VisualDensity(vertical: -3),
       leading: Icon(icon, color: AppColors.primary),
       title: Text(title, style: AppTextStyles.body),
       subtitle: child,
@@ -396,9 +454,168 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   void _showChangePasswordDialog() {
-    // TODO: Implement change password dialog
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Change password coming soon!')),
+    final currentPasswordController = TextEditingController();
+    final newPasswordController = TextEditingController();
+    final confirmPasswordController = TextEditingController();
+    bool showCurrentPassword = false;
+    bool showNewPassword = false;
+    bool showConfirmPassword = false;
+    bool isSubmitting = false;
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: Text('profile_change_password'.tr()),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: currentPasswordController,
+                  obscureText: !showCurrentPassword,
+                  decoration: InputDecoration(
+                    labelText: 'settings_current_password'.tr(),
+                    border: const OutlineInputBorder(),
+                    suffixIcon: IconButton(
+                      icon: Icon(showCurrentPassword
+                          ? Icons.visibility
+                          : Icons.visibility_off),
+                      onPressed: () => setState(
+                          () => showCurrentPassword = !showCurrentPassword),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.md),
+                TextField(
+                  controller: newPasswordController,
+                  obscureText: !showNewPassword,
+                  decoration: InputDecoration(
+                    labelText: 'settings_new_password'.tr(),
+                    border: const OutlineInputBorder(),
+                    suffixIcon: IconButton(
+                      icon: Icon(showNewPassword
+                          ? Icons.visibility
+                          : Icons.visibility_off),
+                      onPressed: () =>
+                          setState(() => showNewPassword = !showNewPassword),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.md),
+                TextField(
+                  controller: confirmPasswordController,
+                  obscureText: !showConfirmPassword,
+                  decoration: InputDecoration(
+                    labelText: 'settings_confirm_password'.tr(),
+                    border: const OutlineInputBorder(),
+                    suffixIcon: IconButton(
+                      icon: Icon(showConfirmPassword
+                          ? Icons.visibility
+                          : Icons.visibility_off),
+                      onPressed: () => setState(
+                          () => showConfirmPassword = !showConfirmPassword),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed:
+                  isSubmitting ? null : () => Navigator.of(context).pop(),
+              child: Text('cancel'.tr()),
+            ),
+            ElevatedButton(
+              onPressed: isSubmitting
+                  ? null
+                  : () async {
+                      final current = currentPasswordController.text.trim();
+                      final newPassword = newPasswordController.text.trim();
+                      final confirm = confirmPasswordController.text.trim();
+
+                      if (current.isEmpty ||
+                          newPassword.isEmpty ||
+                          confirm.isEmpty) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('form_fill_all_fields'.tr())),
+                        );
+                        return;
+                      }
+
+                      if (newPassword != confirm) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                              content:
+                                  Text('settings_passwords_no_match'.tr())),
+                        );
+                        return;
+                      }
+
+                      if (newPassword.length < 6) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                              content: Text('auth_password_too_short'.tr())),
+                        );
+                        return;
+                      }
+
+                      setState(() => isSubmitting = true);
+                      try {
+                        await AuthService.changePassword(
+                          currentPassword: current,
+                          newPassword: newPassword,
+                        );
+                        if (!mounted) return;
+                        Navigator.of(context).pop();
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('settings_password_changed'.tr()),
+                            backgroundColor: AppColors.primary,
+                          ),
+                        );
+                      } catch (e) {
+                        if (!mounted) return;
+                        String errorMessage = e
+                            .toString()
+                            .replaceFirst(RegExp(r'^Exception:\s*'), '');
+
+                        // Handle specific authentication errors
+                        if (errorMessage
+                            .contains('Current password is incorrect')) {
+                          errorMessage = 'settings_wrong_current_password'.tr();
+                        } else if (errorMessage
+                            .contains('Please sign in again')) {
+                          errorMessage = 'settings_requires_recent_login'.tr();
+                        } else if (errorMessage.contains('too weak')) {
+                          errorMessage = 'settings_weak_password'.tr();
+                        } else if (errorMessage
+                            .contains('No email on account')) {
+                          errorMessage = 'settings_no_email_on_account'.tr();
+                        }
+
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(errorMessage),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                      } finally {
+                        if (mounted) setState(() => isSubmitting = false);
+                      }
+                    },
+              child: isSubmitting
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : Text('profile_change_password'.tr()),
+            ),
+          ],
+        ),
+      ),
     );
   }
 

@@ -82,31 +82,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  Future<void> _sendResetEmail() async {
-    final email = AuthService.currentUser?.email ?? '';
-    if (email.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('settings_no_email_on_account'.tr())),
-      );
-      return;
-    }
-    setState(() => _submitting = true);
-    try {
-      await AuthService.sendPasswordResetEmail(email);
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('settings_reset_email_sent'.tr(args: [email]))),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString()), backgroundColor: Colors.red),
-      );
-    } finally {
-      if (mounted) setState(() => _submitting = false);
-    }
-  }
-
   Future<void> _changeEmail() async {
     final pass = _emailCurrentPassCtrl.text.trim();
     final newEmail = _newEmailCtrl.text.trim();
@@ -242,13 +217,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       padding: const EdgeInsets.only(bottom: 8),
                       child: Text('settings_google_account_hint'.tr(),
                           style: AppTextStyles.body),
-                    ),
-                    ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: const Icon(Icons.email_outlined,
-                          color: AppColors.primary),
-                      title: Text('settings_send_reset_email'.tr()),
-                      onTap: _submitting ? null : _sendResetEmail,
                     ),
                   ],
                 ],

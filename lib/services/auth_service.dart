@@ -174,6 +174,9 @@ class AuthService {
   // Listen to auth state changes
   static Stream<User?> get authStateChanges => _auth.authStateChanges();
 
+  // Listen to user profile changes (displayName, email, photoURL, etc.)
+  static Stream<User?> get userChanges => _auth.userChanges();
+
   // Update user profile
   static Future<void> updateProfile({
     String? displayName,

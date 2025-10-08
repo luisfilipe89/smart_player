@@ -12,6 +12,7 @@ import 'package:move_young/screens/settings/settings_screen.dart';
 import 'package:move_young/screens/help/help_screen.dart';
 import 'package:move_young/screens/profile/profile_screen.dart';
 import 'package:move_young/screens/friends/friends_screen.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 // Loading state for events
 enum _LoadState { idle, loading, success, error }
@@ -137,13 +138,21 @@ class _HomeScreenNewState extends State<HomeScreenNew> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          AuthService.isSignedIn
-                              ? 'hello_name'.tr(namedArgs: {
-                                  'name': AuthService.currentUserDisplayName,
-                                })
-                              : 'hello_generic'.tr(),
-                          style: AppTextStyles.title,
+                        StreamBuilder(
+                          stream: AuthService.userChanges,
+                          builder: (context, _) {
+                            final name = FirebaseAuth
+                                    .instance.currentUser?.displayName ??
+                                AuthService.currentUserDisplayName;
+                            return Text(
+                              AuthService.isSignedIn
+                                  ? 'hello_name'.tr(namedArgs: {'name': name})
+                                  : 'hello_generic'.tr(),
+                              style: AppTextStyles.title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            );
+                          },
                         ),
                         const SizedBox(height: AppHeights.small),
 
@@ -711,7 +720,7 @@ class _HomeScreenNewState extends State<HomeScreenNew> {
                       ),
                       _buildBottomSheetButton(
                         icon: Icons.help_outline_rounded,
-                        label: 'help'.tr(),
+                        label: 'help_title'.tr(),
                         onTap: () {
                           Navigator.of(context).pop();
                           Navigator.of(context).push(
