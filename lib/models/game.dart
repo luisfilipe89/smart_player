@@ -119,35 +119,102 @@ class Game {
     };
   }
 
+  // Cloud-optimized JSON (Firebase): proper types for easier querying
+  Map<String, dynamic> toCloudJson() {
+    return {
+      'id': id,
+      'sport': sport,
+      'dateTime': dateTime.toIso8601String(),
+      'location': location,
+      'address': address,
+      'latitude': latitude,
+      'longitude': longitude,
+      'maxPlayers': maxPlayers,
+      'currentPlayers': currentPlayers,
+      'description': description,
+      'organizerId': organizerId,
+      'organizerName': organizerName,
+      'createdAt': createdAt.millisecondsSinceEpoch,
+      'isActive': isActive,
+      'imageUrl': imageUrl,
+      'skillLevels': skillLevels,
+      'equipment': equipment,
+      'cost': cost,
+      'contactInfo': contactInfo,
+      'players': players,
+    };
+  }
+
   // Create from JSON
   factory Game.fromJson(Map<String, dynamic> json) {
+    // Support both local (SQLite) and cloud (Firebase) shapes
+    final dynamic createdAtRaw = json['createdAt'];
+    final DateTime createdAtParsed = createdAtRaw is int
+        ? DateTime.fromMillisecondsSinceEpoch(createdAtRaw)
+        : DateTime.tryParse(createdAtRaw?.toString() ?? '') ?? DateTime.now();
+
+    final dynamic isActiveRaw = json['isActive'];
+    final bool isActiveParsed =
+        isActiveRaw is bool ? isActiveRaw : ((isActiveRaw ?? 1) == 1);
+
+    // Players can be a List (cloud) or JSON string (local)
+    final dynamic playersRaw = json['players'];
+    List<String> playersParsed = const <String>[];
+    if (playersRaw is List) {
+      playersParsed = playersRaw.map((e) => e.toString()).toList();
+    } else if (playersRaw is String && playersRaw.isNotEmpty) {
+      try {
+        final decoded = jsonDecode(playersRaw);
+        if (decoded is List) {
+          playersParsed = decoded.map((e) => e.toString()).toList();
+        }
+      } catch (_) {}
+    }
+
+    // Skill levels can be List (cloud) or encoded string (local)
+    final dynamic skillsRaw = json['skillLevels'];
+    List<String> skillsParsed = const <String>[];
+    if (skillsRaw is List) {
+      skillsParsed = skillsRaw.map((e) => e.toString()).toList();
+    } else if (skillsRaw is String && skillsRaw.isNotEmpty) {
+      try {
+        final decoded = jsonDecode(skillsRaw);
+        if (decoded is List) {
+          skillsParsed = decoded.map((e) => e.toString()).toList();
+        }
+      } catch (_) {}
+    }
+
     return Game(
-      id: json['id'] ?? '',
-      sport: json['sport'] ?? '',
-      dateTime:
-          DateTime.parse(json['dateTime'] ?? DateTime.now().toIso8601String()),
-      location: json['location'] ?? '',
-      address: json['address'],
-      latitude: json['latitude']?.toDouble(),
-      longitude: json['longitude']?.toDouble(),
-      maxPlayers: json['maxPlayers'] ?? 0,
-      currentPlayers: json['currentPlayers'] ?? 0,
-      description: json['description'] ?? '',
-      organizerId: json['organizerId'] ?? '',
-      organizerName: json['organizerName'] ?? '',
-      createdAt:
-          DateTime.parse(json['createdAt'] ?? DateTime.now().toIso8601String()),
-      isActive: (json['isActive'] ?? 1) == 1, // Convert int to bool for SQLite
-      imageUrl: json['imageUrl'],
-      skillLevels: json['skillLevels'] != null
-          ? List<String>.from(jsonDecode(json['skillLevels']))
-          : [],
-      equipment: json['equipment'],
-      cost: json['cost']?.toDouble(),
-      contactInfo: json['contactInfo'],
-      players: json['players'] != null
-          ? List<String>.from(jsonDecode(json['players']))
-          : [],
+      id: json['id']?.toString() ?? '',
+      sport: json['sport']?.toString() ?? '',
+      dateTime: DateTime.tryParse(json['dateTime']?.toString() ??
+              DateTime.now().toIso8601String()) ??
+          DateTime.now(),
+      location: json['location']?.toString() ?? '',
+      address: json['address']?.toString(),
+      latitude: (json['latitude'] is num)
+          ? (json['latitude'] as num).toDouble()
+          : double.tryParse(json['latitude']?.toString() ?? ''),
+      longitude: (json['longitude'] is num)
+          ? (json['longitude'] as num).toDouble()
+          : double.tryParse(json['longitude']?.toString() ?? ''),
+      maxPlayers: int.tryParse(json['maxPlayers']?.toString() ?? '') ?? 0,
+      currentPlayers:
+          int.tryParse(json['currentPlayers']?.toString() ?? '') ?? 0,
+      description: json['description']?.toString() ?? '',
+      organizerId: json['organizerId']?.toString() ?? '',
+      organizerName: json['organizerName']?.toString() ?? '',
+      createdAt: createdAtParsed,
+      isActive: isActiveParsed,
+      imageUrl: json['imageUrl']?.toString(),
+      skillLevels: skillsParsed,
+      equipment: json['equipment']?.toString(),
+      cost: (json['cost'] is num)
+          ? (json['cost'] as num).toDouble()
+          : double.tryParse(json['cost']?.toString() ?? ''),
+      contactInfo: json['contactInfo']?.toString(),
+      players: playersParsed,
     );
   }
 

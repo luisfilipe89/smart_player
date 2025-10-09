@@ -43,7 +43,11 @@ class FriendsService {
     }
 
     if (updates.isEmpty) return;
-    await _db.ref().update(updates);
+    try {
+      await _db.ref().update(updates);
+    } catch (_) {
+      // Swallow permission errors so UI doesn't break on best-effort indexing
+    }
   }
 
   static String _deriveNameFromEmail(String? email) {

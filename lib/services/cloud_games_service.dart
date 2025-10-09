@@ -2,7 +2,6 @@
 import 'package:firebase_database/firebase_database.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:move_young/models/game.dart';
-import 'dart:convert';
 
 class CloudGamesService {
   static FirebaseDatabase get _database => FirebaseDatabase.instance;
@@ -21,21 +20,22 @@ class CloudGamesService {
       final gameRef = _gamesRef.push();
       final gameId = gameRef.key!;
 
-      // Convert game to Map for Firebase
-      final gameData = {
-        ...game.toJson(),
-        'id': gameId,
-        'createdAt': DateTime.now().millisecondsSinceEpoch,
-        'updatedAt': DateTime.now().millisecondsSinceEpoch,
-      };
-
-      // Auto-enroll organizer as a player
+      // Prepare cloud data with proper types
       final organizerUid = _currentUserId ?? game.organizerId;
       final initialPlayers =
           organizerUid.isNotEmpty ? [organizerUid] : <String>[];
-      gameData['organizerId'] = organizerUid;
-      gameData['players'] = jsonEncode(initialPlayers);
-      gameData['currentPlayers'] = initialPlayers.length;
+
+      final gameData = game
+          .copyWith(
+            id: gameId,
+            organizerId: organizerUid,
+            players: initialPlayers,
+            currentPlayers: initialPlayers.length,
+          )
+          .toCloudJson();
+      gameData['updatedAt'] = DateTime.now().millisecondsSinceEpoch;
+
+      // Auto-enroll organizer as a player (already reflected in data)
 
       await gameRef.set(gameData);
 

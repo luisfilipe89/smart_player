@@ -127,28 +127,23 @@ class GamesService {
         }
       } catch (_) {}
 
-      final gameJson = game.toJson();
-      // Inserting game to database
-
-      // Save to local database
-      await db.insert(_tableName, gameJson);
-      // Game inserted successfully in local database
-
-      // Sync to cloud if user is authenticated
-      // Checking authentication status
-
+      // Create in cloud first to get canonical ID (if signed in)
+      String finalId = game.id;
+      Game toStore = game;
       if (AuthService.isSignedIn) {
-        // Fire-and-forget cloud sync so UI isn't blocked
-        // Errors are intentionally ignored to avoid impacting local UX
-        // The user can still see their game locally immediately
-        // and cloud sync can complete in the background
-        // (consider adding a background sync/retry later)
-        CloudGamesService.createGame(game).onError((_, __) => game.id);
-      } else {
-        // User not authenticated, skipping cloud sync
+        try {
+          final cloudId = await CloudGamesService.createGame(game);
+          finalId = cloudId;
+          toStore = game.copyWith(id: cloudId);
+        } catch (_) {
+          // If cloud creation fails, keep local id; can add retry later
+        }
       }
 
-      return game.id;
+      // Save to local database with final ID
+      await db.insert(_tableName, toStore.toJson());
+
+      return finalId;
     } catch (e) {
       // Error in GamesService.createGame
       rethrow;

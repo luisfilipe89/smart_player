@@ -9,6 +9,9 @@ import 'package:move_young/services/weather_service.dart';
 import 'package:move_young/services/games_service.dart';
 import 'package:move_young/services/auth_service.dart';
 import 'package:move_young/screens/games/games_join_screen.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:move_young/services/friends_service.dart';
+import 'package:move_young/services/cloud_games_service.dart';
 
 class GameOrganizeScreen extends StatefulWidget {
   final Game? initialGame;
@@ -38,6 +41,9 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
   Map<String, String> _weatherData = {};
   // Booked times for selected field/date
   final Set<String> _bookedTimes = {};
+
+  // Friend invites (selected friend UIDs)
+  final Set<String> _selectedFriendUids = <String>{};
 
   // Original values for change detection when editing
   String? _originalSport;
@@ -190,13 +196,35 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
     });
 
     try {
-      // Map sport keys to OSM sport types
-      final sportType = _selectedSport == 'soccer' ? 'soccer' : 'basketball';
+      // Only support soccer and basketball and keep 's-Hertogenbosch'
+      final sportType =
+          _selectedSport == 'basketball' ? 'basketball' : 'soccer';
 
-      final fields = await OverpassService.fetchFields(
+      final rawFields = await OverpassService.fetchFields(
         areaName: "'s-Hertogenbosch",
         sportType: sportType,
       );
+
+      // Normalize Overpass keys for UI consistency
+      final fields = rawFields
+          .map<Map<String, dynamic>>((f) {
+            final name = f['name'] ?? 'Unnamed Field';
+            final address = f['addr:street'] ?? f['address'];
+            final lat = f['lat'] ?? f['latitude'];
+            final lon = f['lon'] ?? f['longitude'];
+            final lit = f['lit'] ?? f['lighting'];
+            return {
+              'name': name,
+              'address': address,
+              'latitude': lat,
+              'longitude': lon,
+              'surface': f['surface'],
+              'lighting':
+                  (lit == true) || (lit?.toString().toLowerCase() == 'yes'),
+            };
+          })
+          .where((m) => m['latitude'] != null && m['longitude'] != null)
+          .toList();
 
       setState(() {
         _availableFields = fields;
@@ -257,6 +285,7 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
     try {
       final name = (_selectedField?['name'] as String?) ?? '';
       if (name.isEmpty) return;
+      // Combine local bookings (source of truth locally). Cloud inclusion can be added here in future.
       final games =
           await GamesService.getGamesForFieldOnDate(name, _selectedDate!);
       final times = <String>{};
@@ -289,6 +318,27 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
   }
 
   Future<void> _createGame() async {
+    // Final guard: block past date/time
+    if (_selectedDate != null && _selectedTime != null) {
+      final now = DateTime.now();
+      final parts = _selectedTime!.split(':');
+      final dt = DateTime(
+        _selectedDate!.year,
+        _selectedDate!.month,
+        _selectedDate!.day,
+        int.parse(parts[0]),
+        int.parse(parts[1]),
+      );
+      if (!dt.isAfter(now)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('please_select_future_time'.tr()),
+            backgroundColor: AppColors.red,
+          ),
+        );
+        return;
+      }
+    }
     if (_selectedSport == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -357,9 +407,12 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
         players: [organizerId], // Creator is counted as the first player
       );
 
-      // Save game to SQLite database
+      // Save game to SQLite database (cloud-first ID already handled in service)
       debugPrint('Creating game with data: ${game.toJson()}');
-      await GamesService.createGame(game);
+      final createdId = await GamesService.createGame(game);
+      // If cloud created a new id, keep local object id for navigation highlight
+      final effectiveGame =
+          game.id == createdId ? game : game.copyWith(id: createdId);
 
       debugPrint('Game created and saved: ${game.id}');
 
@@ -371,12 +424,27 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
             backgroundColor: AppColors.green,
           ),
         );
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(
-            builder: (_) => GamesDiscoveryScreen(highlightGameId: game.id),
-            settings: const RouteSettings(),
-          ),
-        );
+        // Send in-app invites to selected friends (if signed in)
+        if (AuthService.isSignedIn && _selectedFriendUids.isNotEmpty) {
+          await CloudGamesService.invitePlayers(
+            effectiveGame.id,
+            _selectedFriendUids.toList(),
+            sport: effectiveGame.sport,
+            dateTime: effectiveGame.dateTime,
+          );
+        }
+
+        // Share/invite prompt after creation
+        await _promptShareInvite(effectiveGame);
+        if (mounted) {
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(
+              builder: (_) =>
+                  GamesDiscoveryScreen(highlightGameId: effectiveGame.id),
+              settings: const RouteSettings(),
+            ),
+          );
+        }
       }
     } catch (e) {
       debugPrint('Game creation error: $e');
@@ -396,6 +464,50 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
         });
       }
     }
+  }
+
+  Future<void> _promptShareInvite(Game game) async {
+    await showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return Container(
+          decoration: const BoxDecoration(
+            color: AppColors.white,
+            borderRadius: BorderRadius.only(
+              topLeft: Radius.circular(20),
+              topRight: Radius.circular(20),
+            ),
+          ),
+          child: SafeArea(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Text('game_created_share_prompt'.tr(),
+                      style: AppTextStyles.h3),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.share),
+                  title: Text('share'.tr()),
+                  onTap: () async {
+                    final date = game.formattedDate;
+                    final time = game.formattedTime;
+                    final where = game.location;
+                    final msg =
+                        '${'join_my_game'.tr()} ${game.sport} • $date $time @ $where';
+                    await Share.share(msg, subject: 'join_my_game'.tr());
+                    if (context.mounted) Navigator.pop(context);
+                  },
+                ),
+                const SizedBox(height: 8),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 
   Widget _buildSportCard({
@@ -1087,21 +1199,34 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
                                                   ? AppWidths.regular
                                                   : 0,
                                             ),
-                                            child: _buildWeatherTimeCard(
-                                              time: time,
-                                              isSelected: isSelected,
-                                              hasWeatherData: hasWeatherData,
-                                              weatherCondition:
-                                                  weatherCondition,
-                                              weatherIcon: weatherIcon,
-                                              weatherColor: weatherColor,
-                                              onTap: () {
-                                                if (isBooked) return;
-                                                HapticFeedback.lightImpact();
-                                                setState(() {
-                                                  _selectedTime = time;
-                                                });
-                                              },
+                                            child: Opacity(
+                                              opacity: isBooked ? 0.5 : 1.0,
+                                              child: _buildWeatherTimeCard(
+                                                time: time,
+                                                isSelected: isSelected,
+                                                hasWeatherData: hasWeatherData,
+                                                weatherCondition:
+                                                    weatherCondition,
+                                                weatherIcon: weatherIcon,
+                                                weatherColor: isBooked
+                                                    ? AppColors.lightgrey
+                                                    : weatherColor,
+                                                onTap: () {
+                                                  if (isBooked) {
+                                                    ScaffoldMessenger.of(
+                                                            context)
+                                                        .showSnackBar(SnackBar(
+                                                            content: Text(
+                                                                'time_slot_unavailable'
+                                                                    .tr())));
+                                                    return;
+                                                  }
+                                                  HapticFeedback.lightImpact();
+                                                  setState(() {
+                                                    _selectedTime = time;
+                                                  });
+                                                },
+                                              ),
                                             ),
                                           );
                                         },
@@ -1112,6 +1237,28 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
                               ),
                             ),
                             //const SizedBox(height: AppHeights.huge),
+                          ],
+
+                          // Invite Friends Section (optional, after time is chosen)
+                          if (_selectedTime != null &&
+                              AuthService.currentUserId != null) ...[
+                            PanelHeader('invite_friends_label'.tr()),
+                            Padding(
+                              padding: AppPaddings.symmHorizontalReg,
+                              child: _FriendPicker(
+                                currentUid: AuthService.currentUserId!,
+                                initiallySelected: _selectedFriendUids,
+                                onToggle: (uid, selected) {
+                                  setState(() {
+                                    if (selected) {
+                                      _selectedFriendUids.add(uid);
+                                    } else {
+                                      _selectedFriendUids.remove(uid);
+                                    }
+                                  });
+                                },
+                              ),
+                            ),
                           ],
 
                           // Create Game Button (match header width via same padding)
@@ -1176,6 +1323,79 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _FriendPicker extends StatelessWidget {
+  final String currentUid;
+  final Set<String> initiallySelected;
+  final void Function(String uid, bool selected) onToggle;
+
+  const _FriendPicker({
+    required this.currentUid,
+    required this.initiallySelected,
+    required this.onToggle,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.white,
+        borderRadius: BorderRadius.circular(AppRadius.container),
+        boxShadow: AppShadows.md,
+      ),
+      child: StreamBuilder<List<String>>(
+        stream: FriendsService.friendsStream(currentUid),
+        builder: (context, snapshot) {
+          final friendUids = snapshot.data ?? const <String>[];
+          if (friendUids.isEmpty) {
+            return Padding(
+              padding: const EdgeInsets.all(16),
+              child: Text('no_friends_to_invite'.tr(),
+                  style: AppTextStyles.small.copyWith(color: AppColors.grey)),
+            );
+          }
+          return ListView.separated(
+            shrinkWrap: true,
+            primary: false,
+            itemCount: friendUids.length,
+            separatorBuilder: (_, __) =>
+                const Divider(height: 1, color: AppColors.lightgrey),
+            itemBuilder: (context, i) {
+              final uid = friendUids[i];
+              return FutureBuilder<Map<String, String?>>(
+                future: FriendsService.fetchMinimalProfile(uid),
+                builder: (context, snap) {
+                  final data = snap.data ??
+                      const {'displayName': 'User', 'photoURL': null};
+                  final name = data['displayName'] ?? 'User';
+                  final photo = data['photoURL'];
+                  final selected = initiallySelected.contains(uid);
+                  return ListTile(
+                    leading: CircleAvatar(
+                      backgroundColor: AppColors.superlightgrey,
+                      backgroundImage: (photo != null && photo.isNotEmpty)
+                          ? NetworkImage(photo)
+                          : null,
+                      child: (photo == null || photo.isEmpty)
+                          ? Text(name.isNotEmpty ? name[0].toUpperCase() : '?')
+                          : null,
+                    ),
+                    title: Text(name, style: AppTextStyles.body),
+                    trailing: Checkbox(
+                      value: selected,
+                      onChanged: (v) => onToggle(uid, v == true),
+                    ),
+                    onTap: () => onToggle(uid, !selected),
+                  );
+                },
+              );
+            },
+          );
+        },
       ),
     );
   }

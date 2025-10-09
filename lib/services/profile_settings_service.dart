@@ -10,6 +10,7 @@ class ProfileSettingsService {
   static const String _pathShowOnline = 'settings/profile/showOnline';
   static const String _pathAllowFriendRequests =
       'settings/profile/allowFriendRequests';
+  static const String _pathShareEmail = 'settings/profile/shareEmail';
 
   static Stream<String> visibilityStream(String uid) {
     return _db
@@ -70,6 +71,25 @@ class ProfileSettingsService {
         .set(allowFriendRequests);
   }
 
+  static Stream<bool> shareEmailStream(String uid) {
+    return _db
+        .ref('users/$uid/$_pathShareEmail')
+        .onValue
+        .map((e) => (e.snapshot.value as bool?) ?? true)
+        .asBroadcastStream();
+  }
+
+  static Future<bool> getShareEmail(String uid) async {
+    final snap = await _db.ref('users/$uid/$_pathShareEmail').get();
+    return (snap.value as bool?) ?? true;
+  }
+
+  static Future<void> setShareEmail(bool shareEmail) async {
+    final uid = AuthService.currentUserId;
+    if (uid == null) return;
+    await _db.ref('users/$uid/$_pathShareEmail').set(shareEmail);
+  }
+
   static Stream<Map<String, dynamic>> settingsStream(String uid) {
     return _db.ref('users/$uid').child('settings/profile').onValue.map((e) {
       final data = e.snapshot.value as Map<dynamic, dynamic>?;
@@ -77,6 +97,7 @@ class ProfileSettingsService {
         'visibility': data?['visibility'] as String? ?? 'public',
         'showOnline': data?['showOnline'] as bool? ?? true,
         'allowFriendRequests': data?['allowFriendRequests'] as bool? ?? true,
+        'shareEmail': data?['shareEmail'] as bool? ?? true,
       };
     }).asBroadcastStream();
   }

@@ -203,22 +203,49 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               final visibility =
                                   settings['visibility'] ?? 'public';
 
-                              return SwitchListTile(
-                                value: showOnline && visibility != 'private',
-                                onChanged: visibility == 'private'
-                                    ? null
-                                    : (value) async {
-                                        await ProfileSettingsService
-                                            .setShowOnline(value);
-                                      },
-                                title: Text('settings_show_online'.tr()),
-                                subtitle: Text(
-                                  visibility == 'private'
-                                      ? 'settings_show_online_disabled_private'
-                                          .tr()
-                                      : 'settings_show_online_desc'.tr(),
-                                ),
-                                contentPadding: EdgeInsets.zero,
+                              final shareEmail = settings['shareEmail'] ?? true;
+
+                              return Column(
+                                children: [
+                                  SwitchListTile(
+                                    value:
+                                        showOnline && visibility != 'private',
+                                    onChanged: visibility == 'private'
+                                        ? null
+                                        : (value) async {
+                                            await ProfileSettingsService
+                                                .setShowOnline(value);
+                                          },
+                                    title: Text('settings_show_online'.tr()),
+                                    subtitle: Text(
+                                      visibility == 'private'
+                                          ? 'settings_show_online_disabled_private'
+                                              .tr()
+                                          : 'settings_show_online_desc'.tr(),
+                                    ),
+                                    contentPadding: EdgeInsets.zero,
+                                  ),
+                                  const Divider(
+                                      height: 1, color: AppColors.lightgrey),
+                                  SwitchListTile(
+                                    value:
+                                        shareEmail && visibility != 'private',
+                                    onChanged: visibility == 'private'
+                                        ? null
+                                        : (value) async {
+                                            await ProfileSettingsService
+                                                .setShareEmail(value);
+                                          },
+                                    title: Text('settings_share_email'.tr()),
+                                    subtitle: Text(
+                                      visibility == 'private'
+                                          ? 'settings_show_online_disabled_private'
+                                              .tr()
+                                          : 'settings_share_email_desc'.tr(),
+                                    ),
+                                    contentPadding: EdgeInsets.zero,
+                                  ),
+                                ],
                               );
                             },
                           );

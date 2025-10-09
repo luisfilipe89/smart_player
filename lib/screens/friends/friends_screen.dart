@@ -1,10 +1,14 @@
 import 'package:easy_localization/easy_localization.dart';
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:move_young/services/haptics_service.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:flutter_contacts/flutter_contacts.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:share_plus/share_plus.dart';
 
 import 'package:move_young/services/auth_service.dart';
 import 'package:move_young/services/friends_service.dart';
@@ -21,8 +25,6 @@ class FriendsScreen extends StatefulWidget {
 
 class _FriendsScreenState extends State<FriendsScreen>
     with SingleTickerProviderStateMixin {
-  String? _myToken;
-  bool _generating = false;
   late final TabController _tabController;
 
   @override
@@ -148,6 +150,14 @@ class _FriendsScreenState extends State<FriendsScreen>
                   Text('friends_add_title'.tr(), style: AppTextStyles.h3),
                   const SizedBox(height: 8),
                   _ActionTile(
+                    icon: Icons.contacts_outlined,
+                    title: 'friends_import_contacts'.tr(),
+                    onTap: () async {
+                      Navigator.of(context).pop();
+                      await _importContacts();
+                    },
+                  ),
+                  _ActionTile(
                     icon: Icons.search,
                     title: 'friends_search_user'.tr(),
                     onTap: () async {
@@ -171,22 +181,6 @@ class _FriendsScreenState extends State<FriendsScreen>
                       await _scanQr();
                     },
                   ),
-                  _ActionTile(
-                    icon: Icons.contacts_outlined,
-                    title: 'friends_import_contacts'.tr(),
-                    onTap: () async {
-                      Navigator.of(context).pop();
-                      await _importContacts();
-                    },
-                  ),
-                  _ActionTile(
-                    icon: Icons.alternate_email,
-                    title: 'friends_invite_email'.tr(),
-                    onTap: () async {
-                      Navigator.of(context).pop();
-                      await _promptSearchByEmail();
-                    },
-                  ),
                   const SizedBox(height: 12),
                 ],
               ),
@@ -198,42 +192,52 @@ class _FriendsScreenState extends State<FriendsScreen>
   }
 
   Future<void> _showMyQr() async {
-    setState(() => _generating = true);
-    final token = await FriendsService.generateFriendToken();
-    setState(() {
-      _myToken = token;
-      _generating = false;
-    });
     if (!mounted) return;
     showDialog(
       context: context,
-      builder: (context) {
+      builder: (dialogContext) {
         return AlertDialog(
           title: Text('friends_my_qr'.tr()),
-          content: _generating
-              ? const SizedBox(
+          content: FutureBuilder<String?>(
+            future: FriendsService.generateFriendToken(),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const SizedBox(
                   height: 120,
-                  child: Center(child: CircularProgressIndicator()))
-              : (_myToken == null)
-                  ? Text('loading_error'.tr())
-                  : Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        QrImageView(
-                          data: _myToken!,
-                          version: QrVersions.auto,
-                          size: 200.0,
-                        ),
-                        const SizedBox(height: 8),
-                        Text('friends_qr_hint'.tr(),
-                            style: AppTextStyles.small),
-                      ],
+                  child: Center(child: CircularProgressIndicator()),
+                );
+              }
+              if (snapshot.hasError) {
+                debugPrint('generateFriendToken error: ${snapshot.error}');
+                return Text('loading_error'.tr());
+              }
+              if (!snapshot.hasData || (snapshot.data == null)) {
+                return Text('loading_error'.tr());
+              }
+              final token = snapshot.data!;
+              return SizedBox(
+                width: 260,
+                height: 250,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    QrImageView(
+                      data: token,
+                      version: QrVersions.auto,
+                      size: 200.0,
                     ),
+                    const SizedBox(height: 8),
+                    Text('friends_qr_hint'.tr(), style: AppTextStyles.small),
+                  ],
+                ),
+              );
+            },
+          ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.of(context).pop(),
+              onPressed: () => Navigator.of(dialogContext).pop(),
               child: Text('ok'.tr()),
-            )
+            ),
           ],
         );
       },
@@ -342,7 +346,7 @@ class _FriendsScreenState extends State<FriendsScreen>
     final contacts = await FlutterContacts.getContacts(withProperties: true);
     if (!mounted) return;
 
-    // Simple selection list: show emails, allow tap to send request if matched
+    // Show contacts with phone numbers and allow quick share via SMS or WhatsApp
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -363,36 +367,30 @@ class _FriendsScreenState extends State<FriendsScreen>
               itemCount: contacts.length,
               itemBuilder: (context, i) {
                 final c = contacts[i];
-                final email =
-                    c.emails.isNotEmpty ? c.emails.first.address : null;
-                if (email == null || email.isEmpty) {
+                final String? phone =
+                    c.phones.isNotEmpty ? c.phones.first.number : null;
+                if (phone == null || phone.isEmpty) {
                   return const SizedBox.shrink();
                 }
                 return ListTile(
                   leading: const Icon(Icons.person_outline),
                   title: Text(c.displayName),
-                  subtitle: Text(email),
-                  trailing: TextButton(
-                    child: Text('friends_send_request'.tr()),
-                    onPressed: () async {
-                      final navigator = Navigator.of(context);
-                      final scaffoldMessenger = ScaffoldMessenger.of(context);
-                      final uid = await FriendsService.searchUidByEmail(email);
-                      if (uid == null) {
-                        if (!mounted) return;
-                        scaffoldMessenger.showSnackBar(
-                          SnackBar(content: Text('friends_not_on_app'.tr())),
-                        );
-                        return;
-                      }
-                      await FriendsService.sendFriendRequestToUid(uid);
-                      if (!mounted) return;
-                      navigator.pop();
-                      scaffoldMessenger.showSnackBar(
-                        SnackBar(content: Text('friends_request_sent'.tr())),
-                      );
-                    },
+                  subtitle: Text(phone),
+                  trailing: Wrap(
+                    spacing: 8,
+                    children: [
+                      TextButton(
+                        onPressed: () => _sendSmsInvite(phone, c.displayName),
+                        child: const Text('SMS'),
+                      ),
+                      TextButton(
+                        onPressed: () =>
+                            _sendWhatsAppInvite(phone, c.displayName),
+                        child: const Text('WhatsApp'),
+                      ),
+                    ],
                   ),
+                  onTap: () => _sendSmsInvite(phone, c.displayName),
                 );
               },
             ),
@@ -402,91 +400,46 @@ class _FriendsScreenState extends State<FriendsScreen>
     );
   }
 
-  Future<void> _promptSearchByEmail() async {
-    final controller = TextEditingController();
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: Text('friends_invite_email'.tr()),
-          content: TextField(
-            controller: controller,
-            decoration: InputDecoration(hintText: 'auth_email'.tr()),
-            keyboardType: TextInputType.emailAddress,
-            autofillHints: const [AutofillHints.email],
-          ),
-          actions: [
-            TextButton(
-                onPressed: () => Navigator.pop(context, false),
-                child: Text('cancel'.tr())),
-            TextButton(
-                onPressed: () => Navigator.pop(context, true),
-                child: Text('ok'.tr())),
-          ],
-        );
-      },
-    );
-    if (ok != true) return;
-    final email = controller.text.trim();
-    if (email.isEmpty) return;
+  String _normalizePhoneForWa(String phone) {
+    // WhatsApp wa.me requires digits only, no '+' or symbols
+    final digitsOnly = phone.replaceAll(RegExp(r'[^0-9+]'), '');
+    return digitsOnly.startsWith('+') ? digitsOnly.substring(1) : digitsOnly;
+  }
 
-    // Prevent self-invite
-    final myEmail = AuthService.currentUser?.email?.trim().toLowerCase();
-    if (myEmail != null &&
-        myEmail.isNotEmpty &&
-        email.toLowerCase() == myEmail) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('friends_cannot_invite_self'.tr())),
-      );
-      return;
-    }
+  Future<void> _sendSmsInvite(String phone, String? name) async {
+    final inviteText =
+        "Hey${name != null && name.isNotEmpty ? ' $name' : ''}! Check out SMARTPLAYER – the sports app I'm using. Download: https://smartplayer.app";
+    final uri = Uri.parse('sms:$phone?body=${Uri.encodeComponent(inviteText)}');
 
-    // Check rate limiting
-    final canSend = await EmailService.canSendInviteToEmail(email);
-    if (!canSend) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('friends_invite_rate_limited'.tr())),
-      );
-      return;
-    }
-
-    // Check if user is already on the app
-    final uid = await FriendsService.searchUidByEmail(email);
-    if (uid == null) {
-      // User not on app - send email invite via backend
-      final recipientName = _deriveNameFromEmail(email);
-      final success = await EmailService.sendFriendInviteEmail(
-        recipientEmail: email,
-        recipientName: recipientName,
-      );
-
-      if (!mounted) return;
-      if (success) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('friends_invite_email_sent'.tr())),
-        );
+    try {
+      final can = await canLaunchUrl(uri);
+      if (can) {
+        await launchUrl(uri);
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('friends_invite_email_failed'.tr())),
-        );
+        await Share.share(inviteText);
       }
-    } else {
-      // User is on app - send friend request directly
-      await FriendsService.sendFriendRequestToUid(uid);
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('friends_request_sent'.tr())),
-      );
+    } catch (_) {
+      await Share.share(inviteText);
     }
   }
 
-  String _deriveNameFromEmail(String email) {
-    final String prefix = email.split('@').first;
-    final String cleaned = prefix.replaceAll(RegExp(r"[^A-Za-z]"), '');
-    if (cleaned.isEmpty) return prefix;
-    return cleaned[0].toUpperCase() + cleaned.substring(1);
+  Future<void> _sendWhatsAppInvite(String phone, String? name) async {
+    final inviteText =
+        "Hey${name != null && name.isNotEmpty ? ' $name' : ''}! Check out SMARTPLAYER – the sports app I'm using. Download: https://smartplayer.app";
+    final waNumber = _normalizePhoneForWa(phone);
+    final uri = Uri.parse(
+        'https://wa.me/$waNumber?text=${Uri.encodeComponent(inviteText)}');
+
+    try {
+      final can = await canLaunchUrl(uri);
+      if (can) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      } else {
+        await Share.share(inviteText);
+      }
+    } catch (_) {
+      await Share.share(inviteText);
+    }
   }
 
   Future<void> _showSearchDialog() async {
@@ -544,6 +497,14 @@ class _FriendsScreenState extends State<FriendsScreen>
       return;
     }
 
+    // If the query looks like an email, skip DB search and go straight to invite flow
+    final looksLikeEmail =
+        searchQuery.contains('@') && searchQuery.contains('.');
+    if (looksLikeEmail) {
+      await _showEmailInviteDialog(searchQuery);
+      return;
+    }
+
     // Show loading and search for users
     if (!mounted) return;
     showDialog(
@@ -562,9 +523,16 @@ class _FriendsScreenState extends State<FriendsScreen>
       Navigator.pop(context); // Close loading dialog
 
       if (users.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('friends_search_no_results'.tr())),
-        );
+        // If query looks like an email address, offer to send an invite by email
+        final looksLikeEmail =
+            searchQuery.contains('@') && searchQuery.contains('.');
+        if (looksLikeEmail) {
+          await _showEmailInviteDialog(searchQuery);
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('friends_search_no_results'.tr())),
+          );
+        }
         return;
       }
 
@@ -576,6 +544,97 @@ class _FriendsScreenState extends State<FriendsScreen>
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('friends_search_error'.tr())),
       );
+    }
+  }
+
+  Future<void> _showEmailInviteDialog(String email) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text('friends_invite_email_title'.tr()),
+          content: Text('friends_invite_email_message'.tr(args: [email])),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: Text('cancel'.tr()),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: Text('friends_send_invite'.tr()),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed == true) {
+      await _sendEmailInvite(email);
+    }
+  }
+
+  Future<void> _sendEmailInvite(String email) async {
+    // Prevent self-invite
+    final myEmail = AuthService.currentUser?.email?.trim().toLowerCase();
+    if (myEmail != null &&
+        myEmail.isNotEmpty &&
+        email.trim().toLowerCase() == myEmail) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('friends_cannot_invite_self'.tr())),
+      );
+      return;
+    }
+
+    // Rate limiting check
+    final canSend = await EmailService.canSendInviteToEmail(email.trim());
+    if (!canSend) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('friends_invite_rate_limited'.tr())),
+      );
+      return;
+    }
+
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(
+        child: CircularProgressIndicator(),
+      ),
+    );
+
+    try {
+      final success =
+          await EmailService.sendFriendInviteEmail(recipientEmail: email.trim())
+              .timeout(const Duration(seconds: 12));
+
+      if (mounted) {
+        // Close loading dialog if still open
+        await Navigator.of(context, rootNavigator: true).maybePop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(success
+                ? 'friends_invite_email_sent'.tr()
+                : 'friends_invite_email_failed'.tr()),
+          ),
+        );
+      }
+    } on TimeoutException {
+      if (mounted) {
+        await Navigator.of(context, rootNavigator: true).maybePop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('friends_invite_email_failed'.tr())),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        await Navigator.of(context, rootNavigator: true).maybePop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('friends_invite_email_failed'.tr())),
+        );
+      }
     }
   }
 

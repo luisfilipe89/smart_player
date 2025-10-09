@@ -9,6 +9,7 @@ import 'package:move_young/theme/_theme.dart';
 import 'package:move_young/services/notification_service.dart';
 import 'package:move_young/services/haptics_service.dart';
 import 'package:move_young/services/accessibility_service.dart';
+import 'firebase_options.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -16,7 +17,9 @@ void main() async {
 
   // Initialize Firebase
   try {
-    await Firebase.initializeApp();
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
     // Firebase initialized successfully
   } catch (e) {
     // Firebase initialization failed
