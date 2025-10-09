@@ -78,6 +78,11 @@ class _FriendsScreenState extends State<FriendsScreen>
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const SizedBox(height: 12),
+              // Suggestions section
+              if (uid != null) ...[
+                _SuggestionsSection(uid: uid),
+                const SizedBox(height: 12),
+              ],
               Expanded(
                 child: Container(
                   decoration: BoxDecoration(
@@ -142,6 +147,14 @@ class _FriendsScreenState extends State<FriendsScreen>
                   ),
                   Text('friends_add_title'.tr(), style: AppTextStyles.h3),
                   const SizedBox(height: 8),
+                  _ActionTile(
+                    icon: Icons.search,
+                    title: 'friends_search_user'.tr(),
+                    onTap: () async {
+                      Navigator.of(context).pop();
+                      await _showSearchDialog();
+                    },
+                  ),
                   _ActionTile(
                     icon: Icons.qr_code,
                     title: 'friends_my_qr'.tr(),
@@ -474,6 +487,163 @@ class _FriendsScreenState extends State<FriendsScreen>
     final String cleaned = prefix.replaceAll(RegExp(r"[^A-Za-z]"), '');
     if (cleaned.isEmpty) return prefix;
     return cleaned[0].toUpperCase() + cleaned.substring(1);
+  }
+
+  Future<void> _showSearchDialog() async {
+    final controller = TextEditingController();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text('friends_search_title'.tr()),
+          content: TextField(
+            controller: controller,
+            decoration: InputDecoration(
+              hintText: 'friends_search_hint'.tr(),
+            ),
+            keyboardType: TextInputType.text,
+            textInputAction: TextInputAction.search,
+            onSubmitted: (value) {
+              if (value.trim().isNotEmpty) {
+                Navigator.pop(context, true);
+              }
+            },
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: Text('cancel'.tr()),
+            ),
+            TextButton(
+              onPressed: () {
+                if (controller.text.trim().isNotEmpty) {
+                  Navigator.pop(context, true);
+                }
+              },
+              child: Text('friends_search_button'.tr()),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (ok != true) return;
+    final searchQuery = controller.text.trim();
+    if (searchQuery.isEmpty) return;
+
+    // Prevent self-search
+    final myEmail = AuthService.currentUser?.email?.trim().toLowerCase();
+    final myDisplayName =
+        AuthService.currentUser?.displayName?.trim().toLowerCase();
+    if ((myEmail != null && searchQuery.toLowerCase() == myEmail) ||
+        (myDisplayName != null && searchQuery.toLowerCase() == myDisplayName)) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('friends_cannot_invite_self'.tr())),
+      );
+      return;
+    }
+
+    // Show loading and search for users
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(
+        child: CircularProgressIndicator(),
+      ),
+    );
+
+    try {
+      // Search for users by username or email
+      final users = await FriendsService.searchUsers(searchQuery);
+
+      if (!mounted) return;
+      Navigator.pop(context); // Close loading dialog
+
+      if (users.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('friends_search_no_results'.tr())),
+        );
+        return;
+      }
+
+      // Show search results
+      _showSearchResults(users, searchQuery);
+    } catch (e) {
+      if (!mounted) return;
+      Navigator.pop(context); // Close loading dialog
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('friends_search_error'.tr())),
+      );
+    }
+  }
+
+  void _showSearchResults(
+      List<Map<String, dynamic>> users, String searchQuery) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text('friends_search_results'.tr(args: [searchQuery])),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: ListView.builder(
+              shrinkWrap: true,
+              itemCount: users.length,
+              itemBuilder: (context, index) {
+                final user = users[index];
+                final displayName = user['displayName'] ?? 'Unknown User';
+                final email = user['email'] ?? '';
+
+                return ListTile(
+                  leading: CircleAvatar(
+                    backgroundImage: user['photoURL'] != null
+                        ? NetworkImage(user['photoURL'])
+                        : null,
+                    child: user['photoURL'] == null
+                        ? Text(displayName.isNotEmpty
+                            ? displayName[0].toUpperCase()
+                            : '?')
+                        : null,
+                  ),
+                  title: Text(displayName),
+                  subtitle: email.isNotEmpty ? Text(email) : null,
+                  trailing: TextButton(
+                    onPressed: () async {
+                      Navigator.pop(context);
+                      await _sendFriendRequest(user['uid']);
+                    },
+                    child: Text('friends_send_request'.tr()),
+                  ),
+                );
+              },
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text('cancel'.tr()),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _sendFriendRequest(String targetUid) async {
+    try {
+      await FriendsService.sendFriendRequestToUid(targetUid);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('friends_request_sent'.tr())),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: ${e.toString()}')),
+      );
+    }
   }
 }
 
@@ -891,6 +1061,206 @@ class _FriendsAppBarTitle extends StatelessWidget {
         final base = 'friends'.tr();
         return Text(count > 0 ? '$base ($count)' : base);
       },
+    );
+  }
+}
+
+class _SuggestionsSection extends StatefulWidget {
+  final String uid;
+  const _SuggestionsSection({required this.uid});
+
+  @override
+  State<_SuggestionsSection> createState() => _SuggestionsSectionState();
+}
+
+class _SuggestionsSectionState extends State<_SuggestionsSection> {
+  List<Map<String, dynamic>> _suggestions = [];
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSuggestions();
+  }
+
+  Future<void> _loadSuggestions() async {
+    try {
+      final suggestions = await FriendsService.getSuggestedFriends(widget.uid);
+      if (mounted) {
+        setState(() {
+          _suggestions = suggestions;
+          _loading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _suggestions = [];
+          _loading = false;
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) {
+      return Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: AppColors.white,
+          borderRadius: BorderRadius.circular(AppRadius.container),
+          boxShadow: AppShadows.md,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('friends_suggestions'.tr(), style: AppTextStyles.h3),
+            const SizedBox(height: 12),
+            const Center(
+              child: CircularProgressIndicator(),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (_suggestions.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.white,
+        borderRadius: BorderRadius.circular(AppRadius.container),
+        boxShadow: AppShadows.md,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('friends_suggestions'.tr(), style: AppTextStyles.h3),
+          const SizedBox(height: 12),
+          SizedBox(
+            height: 120,
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              itemCount: _suggestions.length,
+              itemBuilder: (context, index) {
+                final suggestion = _suggestions[index];
+                return _SuggestionCard(
+                  suggestion: suggestion,
+                  onAddFriend: () => _sendFriendRequest(suggestion['uid']),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _sendFriendRequest(String targetUid) async {
+    try {
+      await FriendsService.sendFriendRequestToUid(targetUid);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('friends_request_sent'.tr())),
+        );
+        // Remove the suggestion from the list
+        setState(() {
+          _suggestions.removeWhere((s) => s['uid'] == targetUid);
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: ${e.toString()}')),
+        );
+      }
+    }
+  }
+}
+
+class _SuggestionCard extends StatelessWidget {
+  final Map<String, dynamic> suggestion;
+  final VoidCallback onAddFriend;
+
+  const _SuggestionCard({
+    required this.suggestion,
+    required this.onAddFriend,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final displayName = suggestion['displayName'] ?? 'Unknown User';
+    final reason = suggestion['reason'] ?? '';
+    final photoURL = suggestion['photoURL'];
+
+    return Container(
+      width: 100,
+      margin: const EdgeInsets.only(right: 12),
+      child: Column(
+        children: [
+          Stack(
+            children: [
+              CircleAvatar(
+                radius: 30,
+                backgroundImage: photoURL != null && photoURL.isNotEmpty
+                    ? NetworkImage(photoURL)
+                    : null,
+                child: photoURL == null || photoURL.isEmpty
+                    ? Text(
+                        displayName.isNotEmpty
+                            ? displayName[0].toUpperCase()
+                            : '?',
+                        style:
+                            AppTextStyles.h3.copyWith(color: AppColors.white),
+                      )
+                    : null,
+              ),
+              Positioned(
+                bottom: 0,
+                right: 0,
+                child: Container(
+                  decoration: const BoxDecoration(
+                    color: AppColors.primary,
+                    shape: BoxShape.circle,
+                  ),
+                  child: IconButton(
+                    icon: const Icon(Icons.person_add,
+                        color: AppColors.white, size: 16),
+                    onPressed: onAddFriend,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(
+                      minWidth: 24,
+                      minHeight: 24,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            displayName,
+            style: AppTextStyles.small,
+            textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          const SizedBox(height: 4),
+          Text(
+            reason,
+            style: AppTextStyles.small.copyWith(
+              color: AppColors.grey,
+            ),
+            textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
+      ),
     );
   }
 }

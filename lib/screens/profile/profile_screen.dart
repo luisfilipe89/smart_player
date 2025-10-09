@@ -372,7 +372,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             ],
                             decoration: const InputDecoration(
                               border: InputBorder.none,
-                              hintText: 'Enter your name',
+                              hintText: 'Enter your nickname or first name',
                             ),
                             onSubmitted: (_) => _saveProfile(),
                           ),

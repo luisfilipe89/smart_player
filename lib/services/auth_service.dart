@@ -19,17 +19,17 @@ class AuthService {
   // Get current user ID
   static String? get currentUserId => _auth.currentUser?.uid;
 
-  // Get current user display name
+  // Get current user nickname
   static String get currentUserDisplayName {
     final user = _auth.currentUser;
     if (user == null) return 'Anonymous User';
 
-    // If display name is null or empty, try to get email prefix
+    // If nickname is null or empty, try to get email prefix
     final rawDisplayName = user.displayName?.trim() ?? '';
     if (rawDisplayName.isNotEmpty) {
-      // Use only the first name for greeting
-      final firstName = rawDisplayName.split(RegExp(r"\s+")).first;
-      return _capitalize(firstName);
+      // Use only the nickname for greeting
+      final nickname = rawDisplayName.split(RegExp(r"\s+")).first;
+      return _capitalize(nickname);
     }
 
     if (user.email != null && user.email!.isNotEmpty) {
@@ -145,7 +145,7 @@ class AuthService {
         password: password,
       );
 
-      // Update display name
+      // Update nickname
       await userCredential.user?.updateDisplayName(displayName);
       await userCredential.user?.reload();
 
@@ -215,7 +215,7 @@ class AuthService {
     }
   }
 
-  // Update display name
+  // Update nickname
   static Future<void> updateDisplayName(String displayName) async {
     try {
       final user = _auth.currentUser;
@@ -224,11 +224,11 @@ class AuthService {
         await user.reload();
         // Force refresh the user data
         await user.getIdToken(true);
-        // Display name updated successfully
+        // Nickname updated successfully
       }
     } catch (e) {
-      debugPrint('Error updating display name: $e');
-      // Error updating display name
+      debugPrint('Error updating nickname: $e');
+      // Error updating nickname
     }
   }
 

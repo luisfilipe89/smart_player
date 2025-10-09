@@ -84,7 +84,7 @@ class _AuthScreenState extends State<AuthScreen> {
           _emailController.text.trim(),
           _passwordController.text,
         );
-        // If user has no display name yet, prompt for first name once
+        // If user has no nickname yet, prompt for nickname once
         final user = AuthService.currentUser;
         final hasName = (user?.displayName?.trim().isNotEmpty ?? false);
         if (!hasName && mounted) {
@@ -123,7 +123,7 @@ class _AuthScreenState extends State<AuthScreen> {
           }
         }
       } else {
-        // Create account and set first name in one step
+        // Create account and set nickname in one step
         await AuthService.createUserWithEmailAndPassword(
           _emailController.text.trim(),
           _passwordController.text,

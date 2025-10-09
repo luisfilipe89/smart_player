@@ -189,6 +189,40 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           title: Text('settings_profile_private'.tr()),
                           contentPadding: EdgeInsets.zero,
                         ),
+                        const Divider(height: 1, color: AppColors.lightgrey),
+                        Builder(builder: (context) {
+                          final uid = AuthService.currentUserId;
+                          if (uid == null) {
+                            return const SizedBox.shrink();
+                          }
+                          return StreamBuilder<Map<String, dynamic>>(
+                            stream: ProfileSettingsService.settingsStream(uid),
+                            builder: (context, snapshot) {
+                              final settings = snapshot.data ?? {};
+                              final showOnline = settings['showOnline'] ?? true;
+                              final visibility =
+                                  settings['visibility'] ?? 'public';
+
+                              return SwitchListTile(
+                                value: showOnline && visibility != 'private',
+                                onChanged: visibility == 'private'
+                                    ? null
+                                    : (value) async {
+                                        await ProfileSettingsService
+                                            .setShowOnline(value);
+                                      },
+                                title: Text('settings_show_online'.tr()),
+                                subtitle: Text(
+                                  visibility == 'private'
+                                      ? 'settings_show_online_disabled_private'
+                                          .tr()
+                                      : 'settings_show_online_desc'.tr(),
+                                ),
+                                contentPadding: EdgeInsets.zero,
+                              );
+                            },
+                          );
+                        }),
                       ],
                     );
                   },

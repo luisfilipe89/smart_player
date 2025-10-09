@@ -3,6 +3,7 @@ import 'dart:async';
 
 import 'package:crypto/crypto.dart' as crypto;
 import 'dart:convert' show utf8;
+import 'package:easy_localization/easy_localization.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:uuid/uuid.dart';
@@ -308,6 +309,253 @@ class FriendsService {
       return null;
     }
     return targetUid;
+  }
+
+  // Search users by username or email
+  static Future<List<Map<String, dynamic>>> searchUsers(String query) async {
+    final String searchQuery = query.trim().toLowerCase();
+    if (searchQuery.isEmpty) return [];
+
+    final List<Map<String, dynamic>> results = [];
+    final String? currentUid = _auth.currentUser?.uid;
+
+    try {
+      // Search by email first
+      if (searchQuery.contains('@')) {
+        final String? targetUid = await searchUidByEmail(searchQuery);
+        if (targetUid != null && targetUid != currentUid) {
+          final userData = await _getUserProfile(targetUid);
+          if (userData != null) {
+            results.add(userData);
+          }
+        }
+      } else {
+        // Search by display name (username)
+        final DataSnapshot usersSnapshot = await _db.ref('users').get();
+        if (usersSnapshot.exists) {
+          final Map<dynamic, dynamic> users =
+              usersSnapshot.value as Map<dynamic, dynamic>;
+
+          for (final entry in users.entries) {
+            final String uid = entry.key.toString();
+            if (uid == currentUid) continue; // Skip self
+
+            final Map<dynamic, dynamic> userData =
+                entry.value as Map<dynamic, dynamic>;
+            final Map<dynamic, dynamic>? profile = userData['profile'];
+
+            if (profile != null) {
+              final String displayName =
+                  (profile['displayName'] ?? '').toString().toLowerCase();
+
+              // Check if display name contains the search query
+              if (displayName.contains(searchQuery)) {
+                // Check visibility settings
+                final String visibility = await _getVisibility(uid);
+                if (visibility != 'private') {
+                  final Map<String, dynamic> userProfile = {
+                    'uid': uid,
+                    'displayName': profile['displayName'] ?? 'Unknown User',
+                    'email': userData['email'] ?? '',
+                    'photoURL': profile['photoURL'],
+                  };
+                  results.add(userProfile);
+                }
+              }
+            }
+          }
+        }
+      }
+    } catch (e) {
+      // Return empty list on error
+      return [];
+    }
+
+    return results;
+  }
+
+  // Helper method to get user profile data
+  static Future<Map<String, dynamic>?> _getUserProfile(String uid) async {
+    try {
+      final DataSnapshot userSnapshot = await _db.ref('users/$uid').get();
+      if (!userSnapshot.exists) return null;
+
+      final Map<dynamic, dynamic> userData =
+          userSnapshot.value as Map<dynamic, dynamic>;
+      final Map<dynamic, dynamic>? profile = userData['profile'];
+
+      if (profile == null) return null;
+
+      return {
+        'uid': uid,
+        'displayName': profile['displayName'] ?? 'Unknown User',
+        'email': userData['email'] ?? '',
+        'photoURL': profile['photoURL'],
+      };
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // Get suggested friends based on mutual friends and same games
+  static Future<List<Map<String, dynamic>>> getSuggestedFriends(
+      String uid) async {
+    final List<Map<String, dynamic>> suggestions = [];
+    final Set<String> suggestedUids = <String>{};
+
+    try {
+      // Get current user's friends
+      final friends = await _getUserFriends(uid);
+      final friendsSet = friends.toSet();
+
+      // Get mutual friends suggestions
+      final mutualSuggestions =
+          await _getMutualFriendsSuggestions(uid, friendsSet);
+      for (final suggestion in mutualSuggestions) {
+        if (!suggestedUids.contains(suggestion['uid'])) {
+          suggestions.add(suggestion);
+          suggestedUids.add(suggestion['uid']);
+        }
+      }
+
+      // Get same games suggestions
+      final sameGamesSuggestions =
+          await _getSameGamesSuggestions(uid, friendsSet);
+      for (final suggestion in sameGamesSuggestions) {
+        if (!suggestedUids.contains(suggestion['uid'])) {
+          suggestions.add(suggestion);
+          suggestedUids.add(suggestion['uid']);
+        }
+      }
+
+      // Limit to 10 suggestions and shuffle
+      suggestions.shuffle();
+      return suggestions.take(10).toList();
+    } catch (e) {
+      return [];
+    }
+  }
+
+  // Get mutual friends suggestions
+  static Future<List<Map<String, dynamic>>> _getMutualFriendsSuggestions(
+      String uid, Set<String> friendsSet) async {
+    final List<Map<String, dynamic>> suggestions = [];
+
+    try {
+      // Get friends of friends
+      for (final friendUid in friendsSet) {
+        final friendFriends = await _getUserFriends(friendUid);
+
+        for (final friendOfFriend in friendFriends) {
+          // Skip if already friends or is self
+          if (friendOfFriend == uid || friendsSet.contains(friendOfFriend)) {
+            continue;
+          }
+
+          // Check if profile is not private
+          final visibility = await _getVisibility(friendOfFriend);
+          if (visibility == 'private') continue;
+
+          // Get user profile
+          final userProfile = await _getUserProfile(friendOfFriend);
+          if (userProfile != null) {
+            suggestions.add({
+              ...userProfile,
+              'reason': 'friends_mutual_friends'.tr(),
+            });
+          }
+        }
+      }
+    } catch (e) {
+      // Return empty list on error
+    }
+
+    return suggestions;
+  }
+
+  // Get same games suggestions
+  static Future<List<Map<String, dynamic>>> _getSameGamesSuggestions(
+      String uid, Set<String> friendsSet) async {
+    final List<Map<String, dynamic>> suggestions = [];
+
+    try {
+      // Get user's games
+      final userGames = await _getUserGames(uid);
+
+      // Find other users who played in the same games
+      for (final gameId in userGames) {
+        final gamePlayers = await _getGamePlayers(gameId);
+
+        for (final playerUid in gamePlayers) {
+          // Skip if already friends or is self
+          if (playerUid == uid || friendsSet.contains(playerUid)) {
+            continue;
+          }
+
+          // Check if profile is not private
+          final visibility = await _getVisibility(playerUid);
+          if (visibility == 'private') continue;
+
+          // Get user profile
+          final userProfile = await _getUserProfile(playerUid);
+          if (userProfile != null) {
+            suggestions.add({
+              ...userProfile,
+              'reason': 'friends_same_games'.tr(),
+            });
+          }
+        }
+      }
+    } catch (e) {
+      // Return empty list on error
+    }
+
+    return suggestions;
+  }
+
+  // Helper method to get user's friends
+  static Future<List<String>> _getUserFriends(String uid) async {
+    try {
+      final DataSnapshot friendsSnapshot =
+          await _db.ref('users/$uid/friends').get();
+      if (!friendsSnapshot.exists) return [];
+
+      final Map<dynamic, dynamic> friends =
+          friendsSnapshot.value as Map<dynamic, dynamic>;
+      return friends.keys.cast<String>().toList();
+    } catch (e) {
+      return [];
+    }
+  }
+
+  // Helper method to get user's games
+  static Future<List<String>> _getUserGames(String uid) async {
+    try {
+      final DataSnapshot gamesSnapshot =
+          await _db.ref('users/$uid/games').get();
+      if (!gamesSnapshot.exists) return [];
+
+      final Map<dynamic, dynamic> games =
+          gamesSnapshot.value as Map<dynamic, dynamic>;
+      return games.keys.cast<String>().toList();
+    } catch (e) {
+      return [];
+    }
+  }
+
+  // Helper method to get game players
+  static Future<List<String>> _getGamePlayers(String gameId) async {
+    try {
+      final DataSnapshot playersSnapshot =
+          await _db.ref('games/$gameId/players').get();
+      if (!playersSnapshot.exists) return [];
+
+      final Map<dynamic, dynamic> players =
+          playersSnapshot.value as Map<dynamic, dynamic>;
+      return players.keys.cast<String>().toList();
+    } catch (e) {
+      return [];
+    }
   }
 
   // QR token flow

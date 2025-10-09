@@ -69,4 +69,15 @@ class ProfileSettingsService {
         .ref('users/$uid/$_pathAllowFriendRequests')
         .set(allowFriendRequests);
   }
+
+  static Stream<Map<String, dynamic>> settingsStream(String uid) {
+    return _db.ref('users/$uid').child('settings/profile').onValue.map((e) {
+      final data = e.snapshot.value as Map<dynamic, dynamic>?;
+      return {
+        'visibility': data?['visibility'] as String? ?? 'public',
+        'showOnline': data?['showOnline'] as bool? ?? true,
+        'allowFriendRequests': data?['allowFriendRequests'] as bool? ?? true,
+      };
+    }).asBroadcastStream();
+  }
 }
