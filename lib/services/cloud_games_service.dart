@@ -2,14 +2,15 @@
 import 'package:firebase_database/firebase_database.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:move_young/models/game.dart';
+import 'package:move_young/db/db_paths.dart';
 
 class CloudGamesService {
   static FirebaseDatabase get _database => FirebaseDatabase.instance;
   static FirebaseAuth get _auth => FirebaseAuth.instance;
 
   // Database references
-  static DatabaseReference get _gamesRef => _database.ref('games');
-  static DatabaseReference get _usersRef => _database.ref('users');
+  static DatabaseReference get _gamesRef => _database.ref(DbPaths.games);
+  static DatabaseReference get _usersRef => _database.ref(DbPaths.users);
 
   // Get current user ID
   static String? get _currentUserId => _auth.currentUser?.uid;
@@ -17,11 +18,26 @@ class CloudGamesService {
   // Create a new game in the cloud
   static Future<String> createGame(Game game) async {
     try {
+      // Enforce at most 5 active upcoming organized games per user in cloud
+      final organizerUid = _currentUserId ?? game.organizerId;
+      if (organizerUid.isNotEmpty) {
+        try {
+          // Fetch user's created games and count active upcoming
+          final List<Game> existing = await getUserGames();
+          final int activeUpcoming = existing
+              .where((g) => g.isActive && g.dateTime.isAfter(DateTime.now()))
+              .length;
+          if (activeUpcoming >= 5) {
+            throw Exception('max_active_organized_games');
+          }
+        } catch (_) {}
+      }
+
       final gameRef = _gamesRef.push();
       final gameId = gameRef.key!;
 
       // Prepare cloud data with proper types
-      final organizerUid = _currentUserId ?? game.organizerId;
+      // Reuse organizerUid from above
       final initialPlayers =
           organizerUid.isNotEmpty ? [organizerUid] : <String>[];
 
@@ -41,16 +57,12 @@ class CloudGamesService {
 
       // Add game to user's created games
       if (_currentUserId != null) {
-        await _usersRef
-            .child(_currentUserId!)
-            .child('createdGames')
+        await _database
+            .ref(DbPaths.userCreatedGames(_currentUserId!))
             .child(gameId)
             .set(true);
-
-        // Also add to joined games for organizer
-        await _usersRef
-            .child(_currentUserId!)
-            .child('joinedGames')
+        await _database
+            .ref(DbPaths.userJoinedGames(_currentUserId!))
             .child(gameId)
             .set(true);
       }
@@ -68,19 +80,93 @@ class CloudGamesService {
       {String? sport, DateTime? dateTime}) async {
     final organizerId = _currentUserId;
     if (organizerId == null || userIds.isEmpty) return;
-    final Map<String, Object?> updates = {};
-    final ts = DateTime.now().millisecondsSinceEpoch;
+    // Write only under the game node to avoid cross-user writes blocked by rules
+    final DatabaseReference invitesRef = _database.ref('games/$gameId/invites');
+    final Map<String, Object?> batch = {};
     for (final uid in userIds) {
-      updates['games/$gameId/invites/$uid'] = 'pending';
-      updates['users/$uid/gameInvites/$gameId'] = {
+      batch[uid] = {
         'status': 'pending',
         'organizerId': organizerId,
         if (sport != null) 'sport': sport,
         if (dateTime != null) 'dateTime': dateTime.toIso8601String(),
-        'ts': ts,
+        'ts': DateTime.now().millisecondsSinceEpoch,
       };
     }
-    await _database.ref().update(updates);
+    await invitesRef.update(batch);
+  }
+
+  // List games where the current user has a pending invite
+  static Future<List<Game>> getInvitedGamesForCurrentUser(
+      {int limit = 100}) async {
+    final uid = _currentUserId;
+    if (uid == null) return [];
+    try {
+      Query query =
+          _gamesRef.orderByChild('isActive').equalTo(true).limitToFirst(limit);
+      final snapshot = await query.get();
+      if (!snapshot.exists) return [];
+      final List<Game> invited = [];
+      for (final child in snapshot.children) {
+        try {
+          final Map<dynamic, dynamic> gameData =
+              child.value as Map<dynamic, dynamic>;
+          final invites = gameData['invites'];
+          if (invites is Map && invites.containsKey(uid)) {
+            final entry = invites[uid];
+            if (entry is Map &&
+                (entry['status']?.toString() ?? 'pending') == 'pending') {
+              final game = Game.fromJson(Map<String, dynamic>.from(gameData));
+              // Only show upcoming invites
+              if (game.isUpcoming) invited.add(game);
+            }
+          }
+        } catch (_) {}
+      }
+      // Sort upcoming invited games by time
+      invited.sort((a, b) => a.dateTime.compareTo(b.dateTime));
+      return invited;
+    } catch (e) {
+      return [];
+    }
+  }
+
+  // Accept invite: mark as accepted and join game
+  static Future<bool> acceptInvite(String gameId) async {
+    final uid = _currentUserId;
+    if (uid == null) return false;
+    try {
+      // Attempt to join first; if successful, mark invite accepted
+      final displayName = _auth.currentUser?.displayName ?? 'User';
+      final joined = await joinGame(gameId, uid, displayName);
+      try {
+        await _gamesRef
+            .child(gameId)
+            .child('invites')
+            .child(uid)
+            .child('status')
+            .set('accepted');
+      } catch (_) {}
+      return joined;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  // Decline invite: mark status declined
+  static Future<bool> declineInvite(String gameId) async {
+    final uid = _currentUserId;
+    if (uid == null) return false;
+    try {
+      await _gamesRef
+          .child(gameId)
+          .child('invites')
+          .child(uid)
+          .child('status')
+          .set('declined');
+      return true;
+    } catch (e) {
+      return false;
+    }
   }
 
   // Update an existing game

@@ -14,6 +14,7 @@ import 'package:move_young/screens/help/help_screen.dart';
 import 'package:move_young/screens/profile/profile_screen.dart';
 import 'package:move_young/screens/friends/friends_screen.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:move_young/services/cloud_games_service.dart';
 
 // Loading state for events
 enum _LoadState { idle, loading, success, error }
@@ -28,11 +29,13 @@ class HomeScreenNew extends StatefulWidget {
 class _HomeScreenNewState extends State<HomeScreenNew> {
   List<Event> events = [];
   _LoadState _state = _LoadState.idle;
+  int _pendingInvites = 0;
 
   @override
   void initState() {
     super.initState();
     _fetch();
+    _refreshInvites();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       precacheImage(
           const AssetImage('assets/images/general_public.jpg'), context);
@@ -66,6 +69,14 @@ class _HomeScreenNewState extends State<HomeScreenNew> {
     }
   }
 
+  Future<void> _refreshInvites() async {
+    try {
+      final invited = await CloudGamesService.getInvitedGamesForCurrentUser();
+      if (!mounted) return;
+      setState(() => _pendingInvites = invited.length);
+    } catch (_) {}
+  }
+
   @override
   Widget build(BuildContext context) {
     return StreamBuilder(
@@ -83,7 +94,7 @@ class _HomeScreenNewState extends State<HomeScreenNew> {
               ),
               onPressed: () => _showUserMenu(context),
             ),
-            title: const Text('SMARTPLAYER'),
+            title: Text('home'.tr()),
             centerTitle: true,
             actions: [
               TextButton.icon(
@@ -238,16 +249,67 @@ class _HomeScreenNewState extends State<HomeScreenNew> {
                             Expanded(
                               child: SizedBox(
                                 height: 168,
-                                child: _HomeImageTile(
-                                  image: const AssetImage(
-                                      'assets/images/games3.jpg'),
-                                  title: 'join_a_game'.tr(),
-                                  subtitle: 'choose_a_game'.tr(),
-                                  onTap: () {
-                                    HapticFeedback.lightImpact();
-                                    Navigator.of(context)
-                                        .pushNamed('/discover-games');
-                                  },
+                                child: Stack(
+                                  clipBehavior: Clip.none,
+                                  children: [
+                                    _HomeImageTile(
+                                      image: const AssetImage(
+                                          'assets/images/games3.jpg'),
+                                      title: 'join_a_game'.tr(),
+                                      subtitle: 'choose_a_game'.tr(),
+                                      onTap: () async {
+                                        HapticFeedback.lightImpact();
+                                        await Navigator.of(context)
+                                            .pushNamed('/discover-games');
+                                        if (mounted) {
+                                          await _refreshInvites();
+                                        }
+                                      },
+                                    ),
+                                    if (_pendingInvites > 0)
+                                      Positioned(
+                                        right: -6, // place fully outside tile
+                                        top: -6,
+                                        child: Container(
+                                          height: 22,
+                                          padding: EdgeInsets.symmetric(
+                                            horizontal:
+                                                _pendingInvites < 10 ? 0 : 6,
+                                          ),
+                                          constraints: const BoxConstraints(
+                                            minWidth: 22,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: Colors.red,
+                                            borderRadius:
+                                                BorderRadius.circular(11),
+                                            border: Border.all(
+                                              color: Colors.white,
+                                              width: 2,
+                                            ),
+                                            boxShadow: const [
+                                              BoxShadow(
+                                                color: Colors.black26,
+                                                blurRadius: 4,
+                                                offset: Offset(0, 1),
+                                              ),
+                                            ],
+                                          ),
+                                          alignment: Alignment.center,
+                                          child: Text(
+                                            _pendingInvites > 99
+                                                ? '99+'
+                                                : '$_pendingInvites',
+                                            style: const TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.w700,
+                                            ),
+                                            textAlign: TextAlign.center,
+                                          ),
+                                        ),
+                                      ),
+                                  ],
                                 ),
                               ),
                             ),

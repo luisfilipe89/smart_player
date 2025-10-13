@@ -6,6 +6,7 @@ import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:image_cropper/image_cropper.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:move_young/services/auth_service.dart';
@@ -13,6 +14,7 @@ import 'package:move_young/utils/profanity.dart';
 import 'package:move_young/utils/country_data.dart';
 import 'package:move_young/theme/app_back_button.dart';
 import 'package:move_young/theme/tokens.dart';
+import 'package:move_young/db/db_paths.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -74,7 +76,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       await AuthService.updateDisplayName(newName);
       final uid = AuthService.currentUserId;
       if (uid != null) {
-        await FirebaseDatabase.instance.ref('users/$uid/profile').update({
+        await FirebaseDatabase.instance.ref(DbPaths.userProfile(uid)).update({
           'dateOfBirth': _dateOfBirth?.millisecondsSinceEpoch ?? '',
           'phone': _phoneController.text.trim(),
           'phoneCode': _selectedCountryCode,
@@ -105,7 +107,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
     try {
       final snap =
-          await FirebaseDatabase.instance.ref('users/$uid/profile').get();
+          await FirebaseDatabase.instance.ref(DbPaths.userProfile(uid)).get();
       if (snap.exists) {
         final data = Map<String, dynamic>.from(snap.value as Map);
         final dob = int.tryParse('${data['dateOfBirth'] ?? ''}');
@@ -127,6 +129,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Future<void> _pickAndUploadPhoto() async {
     try {
+      final messenger = ScaffoldMessenger.of(context);
       final source = await showModalBottomSheet<dynamic>(
             context: context,
             builder: (ctx) => SafeArea(
@@ -169,7 +172,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         final cameraStatus = await Permission.camera.request();
         if (!cameraStatus.isGranted) {
           if (!mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(
+          messenger.showSnackBar(
             SnackBar(content: Text('permission_camera_denied'.tr())),
           );
           return;
@@ -178,7 +181,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         final storageStatus = await Permission.storage.request();
         if (!storageStatus.isGranted) {
           if (!mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(
+          messenger.showSnackBar(
             SnackBar(content: Text('permission_storage_denied'.tr())),
           );
           return;
@@ -245,13 +248,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
       if (!mounted) return;
       setState(() => _uploading = false);
-      ScaffoldMessenger.of(context).showSnackBar(
+      messenger.showSnackBar(
         const SnackBar(content: Text('Photo updated')),
       );
     } catch (e) {
       if (!mounted) return;
       setState(() => _uploading = false);
-      ScaffoldMessenger.of(context).showSnackBar(
+      final messenger = ScaffoldMessenger.of(context);
+      messenger.showSnackBar(
         SnackBar(
             content: Text('Error: ${e.toString()}'),
             backgroundColor: Colors.red),
@@ -317,7 +321,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                   backgroundImage: _localImage != null
                                       ? FileImage(_localImage!)
                                       : (photoUrl != null
-                                          ? NetworkImage(photoUrl)
+                                          ? CachedNetworkImageProvider(photoUrl)
                                           : null) as ImageProvider?,
                                   child:
                                       (photoUrl == null && _localImage == null)
@@ -839,28 +843,32 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     : () async {
                         // Allow social users to set a password via reset email
                         try {
+                          final messenger = ScaffoldMessenger.of(context);
                           setState(() => isSubmitting = true);
                           await AuthService.sendPasswordResetEmail(
                               currentEmail);
-                          if (!mounted) return;
-                          ScaffoldMessenger.of(context).showSnackBar(
+                          if (!context.mounted) return;
+                          messenger.showSnackBar(
                             SnackBar(
                               content: Text('settings_reset_email_sent'.tr()),
                               backgroundColor: AppColors.primary,
                             ),
                           );
                         } catch (e) {
-                          if (!mounted) return;
+                          if (!context.mounted) return;
                           final msg = e
                               .toString()
                               .replaceFirst(RegExp(r'^Exception:\s*'), '');
-                          ScaffoldMessenger.of(context).showSnackBar(
+                          final messenger = ScaffoldMessenger.of(context);
+                          messenger.showSnackBar(
                             SnackBar(
                                 content: Text(msg),
                                 backgroundColor: Colors.red),
                           );
                         } finally {
-                          if (mounted) setState(() => isSubmitting = false);
+                          if (context.mounted) {
+                            setState(() => isSubmitting = false);
+                          }
                         }
                       },
                 child: Text('settings_send_reset_email'.tr()),
@@ -874,9 +882,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
               onPressed: isSubmitting
                   ? null
                   : () async {
+                      final messenger = ScaffoldMessenger.of(context);
+                      final navigator = Navigator.of(context);
                       final newEmail = newEmailController.text.trim();
                       if (newEmail.isEmpty || newEmail == currentEmail) {
-                        ScaffoldMessenger.of(context).showSnackBar(
+                        messenger.showSnackBar(
                           SnackBar(content: Text('auth_email_invalid'.tr())),
                         );
                         return;
@@ -888,7 +898,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           final currentPw =
                               currentPasswordController.text.trim();
                           if (currentPw.isEmpty) {
-                            ScaffoldMessenger.of(context).showSnackBar(
+                            messenger.showSnackBar(
                               SnackBar(
                                   content: Text('form_fill_all_fields'.tr())),
                             );
@@ -904,8 +914,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         }
 
                         if (!mounted) return;
-                        Navigator.of(context).pop(true);
-                        ScaffoldMessenger.of(context).showSnackBar(
+                        navigator.pop(true);
+                        messenger.showSnackBar(
                           SnackBar(
                             content: Text('profile_email_changed'.tr()),
                             backgroundColor: AppColors.primary,
@@ -929,7 +939,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           errorMessage = 'settings_requires_recent_login'.tr();
                         }
 
-                        ScaffoldMessenger.of(context).showSnackBar(
+                        messenger.showSnackBar(
                           SnackBar(
                             content: Text(errorMessage),
                             backgroundColor: Colors.red,

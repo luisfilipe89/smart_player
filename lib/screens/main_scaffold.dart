@@ -8,6 +8,32 @@ import 'package:move_young/screens/games/games_join_screen.dart';
 import 'package:move_young/screens/friends/friends_screen.dart';
 import 'package:easy_localization/easy_localization.dart';
 
+// ---------------------------- Navigation Controller Scope ----------------------------
+class MainScaffoldController {
+  const MainScaffoldController(this._switchToTab);
+  final void Function(int index, {bool popToRoot}) _switchToTab;
+
+  void switchToTab(int index, {bool popToRoot = false}) =>
+      _switchToTab(index, popToRoot: popToRoot);
+}
+
+class MainScaffoldScope extends InheritedWidget {
+  const MainScaffoldScope(
+      {super.key, required this.controller, required super.child});
+
+  final MainScaffoldController controller;
+
+  static MainScaffoldController? maybeOf(BuildContext context) {
+    final MainScaffoldScope? scope =
+        context.dependOnInheritedWidgetOfExactType<MainScaffoldScope>();
+    return scope?.controller;
+  }
+
+  @override
+  bool updateShouldNotify(MainScaffoldScope oldWidget) =>
+      controller != oldWidget.controller;
+}
+
 // --- Dummy screens -
 class WalletScreen extends StatelessWidget {
   const WalletScreen({super.key});
@@ -46,6 +72,17 @@ class MainScaffoldState extends State<MainScaffold> {
   final _joinKey = GlobalKey<NavigatorState>();
   final _agendaKey = GlobalKey<NavigatorState>();
 
+  late final MainScaffoldController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = MainScaffoldController((int index, {bool popToRoot = false}) {
+      if (popToRoot) _popToRoot(index);
+      if (mounted) setState(() => _currentIndex = index);
+    });
+  }
+
   void switchToTab(int index, {bool popToRoot = false}) {
     if (popToRoot) _popToRoot(index);
     setState(() => _currentIndex = index);
@@ -73,47 +110,50 @@ class MainScaffoldState extends State<MainScaffold> {
 
   @override
   Widget build(BuildContext context) {
-    return PopScope(
-      canPop: false,
-      onPopInvokedWithResult: (didPop, result) async {
-        if (didPop) return;
+    return MainScaffoldScope(
+      controller: _controller,
+      child: PopScope(
+        canPop: false,
+        onPopInvokedWithResult: (didPop, result) async {
+          if (didPop) return;
 
-        final popped = await _maybeCurrentNavigator?.maybePop() ?? false;
-        if (popped) return;
+          final popped = await _maybeCurrentNavigator?.maybePop() ?? false;
+          if (popped) return;
 
-        if (_currentIndex != 0) {
-          setState(() => _currentIndex = 0);
-          return;
-        }
-      },
-      child: Scaffold(
-        body: IndexedStack(
-          index: _currentIndex,
-          children: <Widget>[
-            HeroMode(
-                enabled: _currentIndex == kTabHome,
-                child: _HomeFlow(navigatorKey: _homeKey)),
-            HeroMode(
-                enabled: _currentIndex == kTabFriends,
-                child: _FriendsFlow(navigatorKey: _friendsKey)),
-            HeroMode(
-                enabled: _currentIndex == kTabJoin,
-                child: _JoinFlow(navigatorKey: _joinKey)),
-            HeroMode(
-                enabled: _currentIndex == kTabAgenda,
-                child: _AgendaFlow(navigatorKey: _agendaKey)),
-          ],
-        ),
-        bottomNavigationBar: SafeArea(
-          child: _BottomBar(
-            currentIndex: _currentIndex,
-            onTap: (index) {
-              if (index == _currentIndex) {
-                _popToRoot(index);
-              } else {
-                setState(() => _currentIndex = index);
-              }
-            },
+          if (_currentIndex != 0) {
+            setState(() => _currentIndex = 0);
+            return;
+          }
+        },
+        child: Scaffold(
+          body: IndexedStack(
+            index: _currentIndex,
+            children: <Widget>[
+              HeroMode(
+                  enabled: _currentIndex == kTabHome,
+                  child: _HomeFlow(navigatorKey: _homeKey)),
+              HeroMode(
+                  enabled: _currentIndex == kTabFriends,
+                  child: _FriendsFlow(navigatorKey: _friendsKey)),
+              HeroMode(
+                  enabled: _currentIndex == kTabJoin,
+                  child: _JoinFlow(navigatorKey: _joinKey)),
+              HeroMode(
+                  enabled: _currentIndex == kTabAgenda,
+                  child: _AgendaFlow(navigatorKey: _agendaKey)),
+            ],
+          ),
+          bottomNavigationBar: SafeArea(
+            child: _BottomBar(
+              currentIndex: _currentIndex,
+              onTap: (index) {
+                if (index == _currentIndex) {
+                  _popToRoot(index);
+                } else {
+                  setState(() => _currentIndex = index);
+                }
+              },
+            ),
           ),
         ),
       ),

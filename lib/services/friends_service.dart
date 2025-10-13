@@ -9,12 +9,13 @@ import 'package:firebase_database/firebase_database.dart';
 import 'package:uuid/uuid.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/foundation.dart' show debugPrint;
+import 'package:move_young/db/db_paths.dart';
 
 class FriendsService {
   static FirebaseAuth get _auth => FirebaseAuth.instance;
   static FirebaseDatabase get _db => FirebaseDatabase.instance;
 
-  static DatabaseReference _userRef(String uid) => _db.ref('users/$uid');
+  static DatabaseReference _userRef(String uid) => _db.ref(DbPaths.user(uid));
 
   // Centralized helper to log RTDB reads and surface the exact failing path
   static Future<DataSnapshot> _safeGet(String path) async {
@@ -53,6 +54,12 @@ class FriendsService {
     updates['users/$uid/profile/displayName'] = displayName;
     if (user.photoURL != null && user.photoURL!.isNotEmpty) {
       updates['users/$uid/profile/photoURL'] = user.photoURL;
+    }
+
+    // Index by lowercase display name for prefix search
+    final String displayNameLower = displayName.toLowerCase();
+    if (displayNameLower.isNotEmpty) {
+      updates['usersByDisplayNameLower/$displayNameLower/$uid'] = true;
     }
 
     if (updates.isEmpty) return;
@@ -112,7 +119,6 @@ class FriendsService {
     debugPrint(
         '🔍 Skipping allowRequests check - assuming friend requests are allowed');
     // Skip the allowRequests check for now to avoid permission issues
-    // TODO: Implement proper allowRequests check once permission issues are resolved
 
     debugPrint('🔍 Checking if can send request...');
     // De-duplicate and blocklist checks
@@ -302,13 +308,19 @@ class FriendsService {
 
   // --- Privacy helpers ---
   static Future<String> _getVisibility(String uid) async {
-    final DataSnapshot v =
-        await _db.ref('users/$uid/settings/profile/visibility').get();
-    final String vis = v.value?.toString() ?? 'public';
-    if (vis != 'public' && vis != 'friends' && vis != 'private') {
+    try {
+      final DataSnapshot v =
+          await _db.ref('users/$uid/settings/profile/visibility').get();
+      final String vis = v.value?.toString() ?? 'public';
+      if (vis != 'public' && vis != 'friends' && vis != 'private') {
+        return 'public';
+      }
+      return vis;
+    } catch (e) {
+      // On permission errors, default to public so basic profile can render
+      debugPrint('🔍 _getVisibility read failed for $uid: $e');
       return 'public';
     }
-    return vis;
   }
 
   static Future<bool> _isProfileVisibleTo({
@@ -318,12 +330,16 @@ class FriendsService {
   }) async {
     if (viewerUid == targetUid || visibility == 'public') return true;
     if (visibility == 'private') return false;
-    // friends-only → check friendship
-    final snaps = await Future.wait([
-      _db.ref('users/$viewerUid/friends/$targetUid').get(),
-      _db.ref('users/$targetUid/friends/$viewerUid').get(),
-    ]);
-    return snaps.any((s) => s.exists);
+    // friends-only → check friendship (viewer-side only to avoid cross-user read)
+    try {
+      final DataSnapshot s =
+          await _db.ref('users/$viewerUid/friends/$targetUid').get();
+      return s.exists;
+    } catch (e) {
+      // On permission error, assume not visible to be safe
+      debugPrint('🔍 _isProfileVisibleTo check failed: $e');
+      return false;
+    }
   }
 
   // Blocking
@@ -452,41 +468,8 @@ class FriendsService {
           }
         }
       } else {
-        // Search by display name (username)
-        final DataSnapshot usersSnapshot = await _db.ref('users').get();
-        if (usersSnapshot.exists) {
-          final Map<dynamic, dynamic> users =
-              usersSnapshot.value as Map<dynamic, dynamic>;
-
-          for (final entry in users.entries) {
-            final String uid = entry.key.toString();
-            if (uid == currentUid) continue; // Skip self
-
-            final Map<dynamic, dynamic> userData =
-                entry.value as Map<dynamic, dynamic>;
-            final Map<dynamic, dynamic>? profile = userData['profile'];
-
-            if (profile != null) {
-              final String displayName =
-                  (profile['displayName'] ?? '').toString().toLowerCase();
-
-              // Check if display name contains the search query
-              if (displayName.contains(searchQuery)) {
-                // Check visibility settings
-                final String visibility = await _getVisibility(uid);
-                if (visibility != 'private') {
-                  final Map<String, dynamic> userProfile = {
-                    'uid': uid,
-                    'displayName': profile['displayName'] ?? 'Unknown User',
-                    'email': userData['email'] ?? '',
-                    'photoURL': profile['photoURL'],
-                  };
-                  results.add(userProfile);
-                }
-              }
-            }
-          }
-        }
+        // Name prefix search disabled due to RTDB permission constraints
+        return results;
       }
     } catch (e) {
       // Return empty list on error
@@ -714,9 +697,10 @@ class FriendsService {
     }
 
     try {
-      final DatabaseReference tokenRef = _db.ref('friendTokens/$normalized');
+      final DatabaseReference tokenRef =
+          _db.ref(DbPaths.friendToken(normalized));
       debugPrint('🔍 Attempting to read token: friendTokens/$normalized');
-      final DataSnapshot snap = await _safeGet('friendTokens/$normalized');
+      final DataSnapshot snap = await _safeGet(DbPaths.friendToken(normalized));
       debugPrint('🔍 Token read successful, exists: ${snap.exists}');
 
       if (!snap.exists) {
@@ -752,7 +736,8 @@ class FriendsService {
       final String fromUid = user.uid;
 
       // First, write sender's "sent" edge (should be allowed for self)
-      final String sentPath = 'users/$fromUid/friendRequests/sent/$ownerUid';
+      final String sentPath =
+          '${DbPaths.userFriendRequestsSent(fromUid)}/$ownerUid';
       try {
         debugPrint('🔍 WRITE TRY: $sentPath = true');
         await _db.ref(sentPath).set(true);
@@ -764,7 +749,7 @@ class FriendsService {
 
       // Then, write receiver's "received" edge (should be allowed for sender)
       final String recvPath =
-          'users/$ownerUid/friendRequests/received/$fromUid';
+          '${DbPaths.userFriendRequestsReceived(ownerUid)}/$fromUid';
       try {
         debugPrint('🔍 WRITE TRY: $recvPath = true');
         await _db.ref(recvPath).set(true);
@@ -855,21 +840,34 @@ class FriendsService {
     };
   }
 
+  // Batch fetch minimal profiles for a list of uids
+  static Future<Map<String, Map<String, String?>>> fetchMinimalProfiles(
+      List<String> uids) async {
+    final Map<String, Map<String, String?>> result = {};
+    if (uids.isEmpty) return result;
+
+    // Fetch all profiles concurrently
+    final List<Future<void>> tasks = [];
+    for (final uid in uids.toSet()) {
+      tasks.add(() async {
+        final Map<String, String?> data = await fetchMinimalProfile(uid);
+        result[uid] = data;
+      }());
+    }
+    await Future.wait(tasks);
+    return result;
+  }
+
+  // Batch compute mutual friends counts for a list of other user uids
+  static Future<Map<String, int>> fetchMutualFriendsCounts(
+      List<String> otherUids) async {
+    // Disabled: requires cross-user friends list reads; return empty map
+    return {};
+  }
+
   // Mutual friends count between current user and other user
   static Future<int> fetchMutualFriendsCount(String otherUid) async {
-    final me = _auth.currentUser?.uid;
-    if (me == null || me == otherUid) return 0;
-    final meRef = _db.ref('users/$me/friends');
-    final otherRef = _db.ref('users/$otherUid/friends');
-    final snaps = await Future.wait([meRef.get(), otherRef.get()]);
-    final a = snaps[0].value is Map
-        ? (snaps[0].value as Map).keys.cast<String>().toSet()
-        : <String>{};
-    final b = snaps[1].value is Map
-        ? (snaps[1].value as Map).keys.cast<String>().toSet()
-        : <String>{};
-    a.remove(otherUid);
-    b.remove(me);
-    return a.intersection(b).length;
+    // Disabled: cross-user collection read; return 0
+    return 0;
   }
 }

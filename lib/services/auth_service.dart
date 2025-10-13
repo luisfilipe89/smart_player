@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
 import 'package:google_sign_in/google_sign_in.dart';
 import 'dart:convert' show jsonDecode, jsonEncode, utf8;
 import 'package:crypto/crypto.dart' as crypto;
+import 'package:move_young/db/db_paths.dart';
 
 class AuthService {
   static FirebaseAuth get _auth => FirebaseAuth.instance;
@@ -318,61 +319,61 @@ class AuthService {
 
     // 2) Gather current relationships and requests to clean up cross refs
     final DataSnapshot friendsSnap =
-        await root.child('users/$uid/friends').get();
+        await root.child(DbPaths.userFriends(uid)).get();
     if (friendsSnap.exists && friendsSnap.value is Map) {
       final Map data = friendsSnap.value as Map;
       for (final dynamic k in data.keys) {
         final String otherUid = k.toString();
-        updates['users/$uid/friends/$otherUid'] = null;
-        updates['users/$otherUid/friends/$uid'] = null;
+        updates['${DbPaths.userFriends(uid)}/$otherUid'] = null;
+        updates['${DbPaths.userFriends(otherUid)}/$uid'] = null;
       }
     }
 
     final DataSnapshot sentReqSnap =
-        await root.child('users/$uid/friendRequests/sent').get();
+        await root.child(DbPaths.userFriendRequestsSent(uid)).get();
     if (sentReqSnap.exists && sentReqSnap.value is Map) {
       final Map data = sentReqSnap.value as Map;
       for (final dynamic k in data.keys) {
         final String toUid = k.toString();
-        updates['users/$uid/friendRequests/sent/$toUid'] = null;
-        updates['users/$toUid/friendRequests/received/$uid'] = null;
+        updates['${DbPaths.userFriendRequestsSent(uid)}/$toUid'] = null;
+        updates['${DbPaths.userFriendRequestsReceived(toUid)}/$uid'] = null;
       }
     }
 
     final DataSnapshot recvReqSnap =
-        await root.child('users/$uid/friendRequests/received').get();
+        await root.child(DbPaths.userFriendRequestsReceived(uid)).get();
     if (recvReqSnap.exists && recvReqSnap.value is Map) {
       final Map data = recvReqSnap.value as Map;
       for (final dynamic k in data.keys) {
         final String fromUid = k.toString();
-        updates['users/$uid/friendRequests/received/$fromUid'] = null;
-        updates['users/$fromUid/friendRequests/sent/$uid'] = null;
+        updates['${DbPaths.userFriendRequestsReceived(uid)}/$fromUid'] = null;
+        updates['${DbPaths.userFriendRequestsSent(fromUid)}/$uid'] = null;
       }
     }
 
     // 3) Remove game invites for this user
     final DataSnapshot myInvitesSnap =
-        await root.child('users/$uid/gameInvites').get();
+        await root.child(DbPaths.userGameInvites(uid)).get();
     if (myInvitesSnap.exists && myInvitesSnap.value is Map) {
       final Map data = myInvitesSnap.value as Map;
       for (final dynamic k in data.keys) {
         final String gameId = k.toString();
-        updates['games/$gameId/invites/$uid'] = null;
-        updates['users/$uid/gameInvites/$gameId'] =
+        updates['${DbPaths.gameInvites(gameId)}/$uid'] = null;
+        updates['${DbPaths.userGameInvites(uid)}/$gameId'] =
             null; // redundant due to full user delete
       }
     }
 
     // 4) Remove joined games entry for this user and update game players lists
     final DataSnapshot joinedSnap =
-        await root.child('users/$uid/joinedGames').get();
+        await root.child(DbPaths.userJoinedGames(uid)).get();
     if (joinedSnap.exists && joinedSnap.value is Map) {
       final Map data = joinedSnap.value as Map;
       for (final dynamic k in data.keys) {
         final String gameId = k.toString();
         try {
           final DataSnapshot playersSnap =
-              await root.child('games/$gameId/players').get();
+              await root.child(DbPaths.gamePlayers(gameId)).get();
           List<String> players = <String>[];
           bool originalWasString = false;
           if (playersSnap.exists) {
@@ -391,11 +392,11 @@ class AuthService {
           }
           if (players.contains(uid)) {
             players = players.where((p) => p != uid).toList();
-            updates['games/$gameId/players'] =
+            updates[DbPaths.gamePlayers(gameId)] =
                 originalWasString ? jsonEncode(players) : players;
-            updates['games/$gameId/currentPlayers'] = players.length;
+            updates['${DbPaths.game(gameId)}/currentPlayers'] = players.length;
           }
-          updates['users/$uid/joinedGames/$gameId'] = null;
+          updates['${DbPaths.userJoinedGames(uid)}/$gameId'] = null;
         } catch (e) {
           debugPrint('Failed to update players for game $gameId: $e');
         }
@@ -405,7 +406,7 @@ class AuthService {
     // 5) Delete games organized by this user and clean participant references
     try {
       final Query myGamesQuery =
-          root.child('games').orderByChild('organizerId').equalTo(uid);
+          root.child(DbPaths.games).orderByChild('organizerId').equalTo(uid);
       final DataSnapshot myGamesSnap = await myGamesQuery.get();
       if (myGamesSnap.exists && myGamesSnap.value is Map) {
         final Map gamesMap = myGamesSnap.value as Map;
@@ -414,7 +415,7 @@ class AuthService {
           // Clean joinedGames of participants
           try {
             final DataSnapshot playersSnap =
-                await root.child('games/$gameId/players').get();
+                await root.child(DbPaths.gamePlayers(gameId)).get();
             List<String> players = <String>[];
             if (playersSnap.exists) {
               final dynamic val = playersSnap.value;
@@ -430,7 +431,7 @@ class AuthService {
               }
             }
             for (final String pid in players) {
-              updates['users/$pid/joinedGames/$gameId'] = null;
+              updates['${DbPaths.userJoinedGames(pid)}/$gameId'] = null;
             }
           } catch (e) {
             debugPrint('Failed cleaning joinedGames for $gameId: $e');
@@ -439,12 +440,12 @@ class AuthService {
           // Clean invites mapping for this game across users
           try {
             final DataSnapshot invitesSnap =
-                await root.child('games/$gameId/invites').get();
+                await root.child(DbPaths.gameInvites(gameId)).get();
             if (invitesSnap.exists && invitesSnap.value is Map) {
               final Map inv = invitesSnap.value as Map;
               for (final dynamic uk in inv.keys) {
                 final String invitee = uk.toString();
-                updates['users/$invitee/gameInvites/$gameId'] = null;
+                updates['${DbPaths.userGameInvites(invitee)}/$gameId'] = null;
               }
             }
           } catch (e) {
@@ -452,9 +453,9 @@ class AuthService {
           }
 
           // Remove game node
-          updates['games/$gameId'] = null;
+          updates[DbPaths.game(gameId)] = null;
           // Also remove from my createdGames index (redundant when removing entire user)
-          updates['users/$uid/createdGames/$gameId'] = null;
+          updates['${DbPaths.userCreatedGames(uid)}/$gameId'] = null;
         }
       }
     } catch (e) {
@@ -463,14 +464,16 @@ class AuthService {
 
     // 6) Remove any friendTokens owned by this user
     try {
-      final Query myTokensQuery =
-          root.child('friendTokens').orderByChild('ownerUid').equalTo(uid);
+      final Query myTokensQuery = root
+          .child(DbPaths.friendTokens)
+          .orderByChild('ownerUid')
+          .equalTo(uid);
       final DataSnapshot tokensSnap = await myTokensQuery.get();
       if (tokensSnap.exists && tokensSnap.value is Map) {
         final Map tokens = tokensSnap.value as Map;
         for (final dynamic tk in tokens.keys) {
           final String tokenId = tk.toString();
-          updates['friendTokens/$tokenId'] = null;
+          updates['${DbPaths.friendTokens}/$tokenId'] = null;
         }
       }
     } catch (e) {
@@ -478,7 +481,7 @@ class AuthService {
     }
 
     // 7) Finally, remove the entire user subtree
-    updates['users/$uid'] = null;
+    updates[DbPaths.user(uid)] = null;
 
     if (updates.isNotEmpty) {
       await root.update(updates);
@@ -579,7 +582,7 @@ class AuthService {
       // Enforce cooldown between email change requests
       final uid = user.uid;
       final DatabaseReference metaRef =
-          FirebaseDatabase.instance.ref('users/$uid/metadata');
+          FirebaseDatabase.instance.ref(DbPaths.userMetadata(uid));
       const int cooldownHours = 24; // adjust policy as needed
       final cooldownMs = Duration(hours: cooldownHours).inMilliseconds;
       final metaSnapshot = await metaRef.child('emailChangeRequestedAt').get();

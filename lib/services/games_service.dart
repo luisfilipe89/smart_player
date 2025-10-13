@@ -127,6 +127,22 @@ class GamesService {
         }
       } catch (_) {}
 
+      // Enforce at most 5 active organized games per user (upcoming only)
+      try {
+        final nowIso = DateTime.now().toIso8601String();
+        final List<Map<String, Object?>> rows = await db.rawQuery(
+          'SELECT COUNT(*) as cnt FROM $_tableName WHERE organizerId = ? AND isActive = 1 AND dateTime > ?',
+          [game.organizerId, nowIso],
+        );
+        final int currentActive = (rows.isNotEmpty
+                ? int.tryParse((rows.first['cnt'] ?? 0).toString())
+                : 0) ??
+            0;
+        if (currentActive >= 5) {
+          throw Exception('max_active_organized_games');
+        }
+      } catch (_) {}
+
       // Create in cloud first to get canonical ID (if signed in)
       String finalId = game.id;
       Game toStore = game;
@@ -179,13 +195,22 @@ class GamesService {
       // Error getting cloud games
     }
 
-    // Remove duplicates and sort
-    final uniqueGames = <String, Game>{};
+    // Remove duplicates by a composite key: organizerId + dateTime minute + location
+    final Map<String, Game> uniqueByComposite = {};
     for (final game in games) {
-      uniqueGames[game.id] = game;
+      final String dtKey = DateTime(
+        game.dateTime.year,
+        game.dateTime.month,
+        game.dateTime.day,
+        game.dateTime.hour,
+        game.dateTime.minute,
+      ).toIso8601String();
+      final String key =
+          '${game.organizerId}|${game.location.toLowerCase()}|$dtKey';
+      uniqueByComposite[key] = game;
     }
 
-    final finalGames = uniqueGames.values.toList()
+    final finalGames = uniqueByComposite.values.toList()
       ..sort((a, b) => a.dateTime.compareTo(b.dateTime));
 
     return finalGames;

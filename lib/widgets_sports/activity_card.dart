@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:move_young/theme/tokens.dart';
 
 class ActivityCard extends StatelessWidget {
@@ -43,8 +44,8 @@ class ActivityCard extends StatelessWidget {
                 ClipRRect(
                   borderRadius: BorderRadius.circular(AppRadius.image),
                   child: isNetworkImage
-                      ? Image.network(
-                          imageUrl,
+                      ? CachedNetworkImage(
+                          imageUrl: imageUrl,
                           height: imgH,
                           width: double.infinity,
                           fit: BoxFit.cover,

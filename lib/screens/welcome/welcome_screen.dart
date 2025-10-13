@@ -1,4 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:easy_localization/easy_localization.dart';
+import 'package:flutter/foundation.dart'
+    show defaultTargetPlatform, TargetPlatform, kIsWeb;
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:move_young/services/auth_service.dart';
 import 'package:move_young/screens/auth/auth_screen.dart';
 import 'package:move_young/screens/main_scaffold.dart';
@@ -16,6 +20,8 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
   bool _loadingAnon = false;
 
   bool get _isLoading => _loadingGoogle || _loadingAnon;
+
+  bool get _isIOS => !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;
 
   @override
   Widget build(BuildContext context) {
@@ -61,7 +67,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                     ),
                     const SizedBox(height: AppSpacing.lg),
 
-                    // App Title
+                    // App Title (kept as brand; if desired, localize key below)
                     Text(
                       'SMARTPLAYER',
                       style: AppTextStyles.huge.copyWith(
@@ -74,7 +80,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
 
                     // Subtitle
                     Text(
-                      'Find, organize, and join sports games near you',
+                      'join_sports_event'.tr(),
                       style: AppTextStyles.body.copyWith(
                         color: AppColors.grey,
                         fontSize: 16,
@@ -89,22 +95,24 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                 // Auth Buttons Section
                 Column(
                   children: [
-                    // Continue with Apple
-                    _buildSocialButton(
-                      context: context,
-                      icon: Icons.apple,
-                      label: 'Continue with Apple',
-                      onPressed:
-                          _isLoading ? null : () => _showComingSoon(context),
-                      loading: false,
-                    ),
-                    const SizedBox(height: AppSpacing.md),
+                    // Continue with Apple (iOS only)
+                    if (_isIOS) ...[
+                      _buildSocialButton(
+                        context: context,
+                        icon: _brandIcon('apple'),
+                        label: 'auth_continue_apple'.tr(),
+                        onPressed:
+                            _isLoading ? null : () => _showComingSoon(context),
+                        loading: false,
+                      ),
+                      const SizedBox(height: AppSpacing.md),
+                    ],
 
                     // Continue with Google
                     _buildSocialButton(
                       context: context,
-                      icon: Icons.g_mobiledata,
-                      label: 'Continue with Google',
+                      icon: _brandIcon('google'),
+                      label: 'auth_continue_google'.tr(),
                       onPressed: _isLoading
                           ? null
                           : () => _continueWithGoogle(context),
@@ -120,7 +128,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                           padding: const EdgeInsets.symmetric(
                               horizontal: AppSpacing.md),
                           child: Text(
-                            'or',
+                            'auth_or'.tr(),
                             style: AppTextStyles.body.copyWith(
                               color: AppColors.grey,
                             ),
@@ -147,7 +155,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
                           : Text(
-                              'Skip for now',
+                              'auth_skip_for_now'.tr(),
                               style: AppTextStyles.body.copyWith(
                                 color: AppColors.grey,
                                 decoration: TextDecoration.underline,
@@ -168,7 +176,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
 
   Widget _buildSocialButton({
     required BuildContext context,
-    required IconData icon,
+    required Widget icon,
     required String label,
     required VoidCallback? onPressed,
     bool loading = false,
@@ -184,9 +192,9 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                 width: 18,
                 child: CircularProgressIndicator(strokeWidth: 2),
               )
-            : Icon(icon, size: 24),
+            : icon,
         label: loading
-            ? const Text('Please wait...')
+            ? Text('auth_please_wait'.tr())
             : Text(
                 label,
                 style: AppTextStyles.button.copyWith(
@@ -214,7 +222,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
       child: ElevatedButton.icon(
         onPressed: disabled ? null : () => _showEmailAuth(context),
         icon: const Icon(Icons.email, size: 24),
-        label: const Text('Continue with Email'),
+        label: Text('auth_continue_email'.tr()),
         style: ElevatedButton.styleFrom(
           backgroundColor: AppColors.primary,
           foregroundColor: Colors.white,
@@ -275,8 +283,8 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
       }
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Google sign-in cancelled'),
+          SnackBar(
+            content: Text('auth_google_cancelled'.tr()),
             backgroundColor: AppColors.primary,
           ),
         );
@@ -307,10 +315,20 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
 
   void _showComingSoon(BuildContext context) {
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Coming soon! Use email for now.'),
+      SnackBar(
+        content: Text('auth_coming_soon'.tr()),
         backgroundColor: AppColors.primary,
       ),
     );
+  }
+
+  Widget _brandIcon(String brand) {
+    switch (brand) {
+      case 'apple':
+        return const FaIcon(FontAwesomeIcons.apple, size: 22);
+      case 'google':
+      default:
+        return const FaIcon(FontAwesomeIcons.google, size: 22);
+    }
   }
 }

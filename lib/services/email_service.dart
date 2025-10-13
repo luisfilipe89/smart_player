@@ -1,5 +1,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_database/firebase_database.dart';
+import 'package:move_young/db/db_paths.dart';
+import 'package:easy_localization/easy_localization.dart';
 import 'package:uuid/uuid.dart';
 
 class EmailService {
@@ -17,7 +19,7 @@ class EmailService {
       if (user == null) return false;
 
       final String inviterName =
-          user.displayName ?? _deriveNameFromEmail(user.email) ?? 'Someone';
+          user.displayName ?? _deriveNameFromEmail(user.email) ?? 'User';
       final String inviterEmail = user.email ?? '';
       final String recipientName = _deriveNameFromEmail(recipientEmail) ?? '';
 
@@ -28,7 +30,7 @@ class EmailService {
       final Map<String, dynamic> emailData = {
         'to': recipientEmail,
         'message': {
-          'subject': 'Join me on SMARTPLAYER!',
+          'subject': 'friends_invite_email_title'.tr(),
           'html': _generateInviteEmailHtml(
             inviterName: inviterName,
             inviterEmail: inviterEmail,
@@ -56,10 +58,10 @@ class EmailService {
       };
 
       // Write to mail collection to trigger email extension
-      await _db.ref('mail/$emailId').set(emailData);
+      await _db.ref('${DbPaths.mail}/$emailId').set(emailData);
 
       // Store a lightweight rate-limit record
-      await _db.ref('emailInvites/$emailId').set({
+      await _db.ref('${DbPaths.emailInvites}/$emailId').set({
         'fromUid': user.uid,
         'toEmail': recipientEmail,
         'createdAt': ServerValue.timestamp,
@@ -83,7 +85,7 @@ class EmailService {
 
       // Simplified query to avoid requiring an index on `fromUid`.
       // Fetch all invites and filter client-side by `fromUid`, `toEmail`, and time window.
-      final invitesRef = _db.ref('emailInvites');
+      final invitesRef = _db.ref(DbPaths.emailInvites);
       final snapshot = await invitesRef.get();
 
       if (snapshot.exists) {
@@ -121,17 +123,8 @@ class EmailService {
     required String inviterEmail,
     required String recipientName,
   }) {
-    return '''
-<!DOCTYPE html>
-<html>
-  <body>
-    <p>Hi $recipientName,</p>
-    <p>$inviterName ($inviterEmail) invited you to join SMARTPLAYER.</p>
-    <p><a href="https://smartplayer.app">Create your account</a> and connect as friends!</p>
-    <p>If you don't want to receive these emails, you can ignore this message.</p>
-  </body>
-  </html>
-''';
+    return 'friends_invite_email_html'
+        .tr(args: [recipientName, inviterName, inviterEmail]);
   }
 
   static String _generateInviteEmailText({
@@ -139,13 +132,7 @@ class EmailService {
     required String inviterEmail,
     required String recipientName,
   }) {
-    return '''
-Hi $recipientName,
-
-$inviterName ($inviterEmail) invited you to join SMARTPLAYER.
-Create your account at https://smartplayer.app and connect as friends!
-
-If you don't want to receive these emails, you can ignore this message.
-''';
+    return 'friends_invite_email_text'
+        .tr(args: [recipientName, inviterName, inviterEmail]);
   }
 }

@@ -165,25 +165,34 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                     : 'settings_profile_public_desc'.tr(),
                           ),
                         ),
+                        // ignore: deprecated_member_use
                         RadioListTile<String>(
                           value: 'public',
+                          // ignore: deprecated_member_use
                           groupValue: value,
+                          // ignore: deprecated_member_use
                           onChanged: (v) =>
                               ProfileSettingsService.setVisibility('public'),
                           title: Text('settings_profile_public'.tr()),
                           contentPadding: EdgeInsets.zero,
                         ),
+                        // ignore: deprecated_member_use
                         RadioListTile<String>(
                           value: 'friends',
+                          // ignore: deprecated_member_use
                           groupValue: value,
+                          // ignore: deprecated_member_use
                           onChanged: (v) =>
                               ProfileSettingsService.setVisibility('friends'),
                           title: Text('settings_profile_friends'.tr()),
                           contentPadding: EdgeInsets.zero,
                         ),
+                        // ignore: deprecated_member_use
                         RadioListTile<String>(
                           value: 'private',
+                          // ignore: deprecated_member_use
                           groupValue: value,
+                          // ignore: deprecated_member_use
                           onChanged: (v) =>
                               ProfileSettingsService.setVisibility('private'),
                           title: Text('settings_profile_private'.tr()),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/services.dart';
 import 'package:move_young/services/haptics_service.dart';
 import 'package:easy_localization/easy_localization.dart';
@@ -9,7 +10,6 @@ import 'package:move_young/services/weather_service.dart';
 import 'package:move_young/services/games_service.dart';
 import 'package:move_young/services/auth_service.dart';
 import 'package:move_young/screens/games/games_join_screen.dart';
-import 'package:share_plus/share_plus.dart';
 import 'package:move_young/services/friends_service.dart';
 import 'package:move_young/services/cloud_games_service.dart';
 
@@ -280,6 +280,115 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
     }
   }
 
+  Future<void> _updateGame() async {
+    // Final guard: block past date/time
+    if (_selectedDate != null && _selectedTime != null) {
+      final now = DateTime.now();
+      final parts = _selectedTime!.split(':');
+      final dt = DateTime(
+        _selectedDate!.year,
+        _selectedDate!.month,
+        _selectedDate!.day,
+        int.parse(parts[0]),
+        int.parse(parts[1]),
+      );
+      if (!dt.isAfter(now)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('please_select_future_time'.tr()),
+            backgroundColor: AppColors.red,
+          ),
+        );
+        return;
+      }
+    }
+
+    if (_selectedSport == null ||
+        _selectedField == null ||
+        _selectedDate == null ||
+        _selectedTime == null ||
+        widget.initialGame == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('form_fill_all_fields'.tr()),
+          backgroundColor: AppColors.red,
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      // Parse the selected time and combine with selected date
+      final timeParts = _selectedTime!.split(':');
+      final hour = int.parse(timeParts[0]);
+      final minute = int.parse(timeParts[1]);
+      final combinedDateTime = DateTime(
+        _selectedDate!.year,
+        _selectedDate!.month,
+        _selectedDate!.day,
+        hour,
+        minute,
+      );
+
+      final current = widget.initialGame!;
+      final updated = current.copyWith(
+        sport: _selectedSport!,
+        dateTime: combinedDateTime,
+        location: _selectedField?['name'] ?? current.location,
+        address: _selectedField?['address'] ?? current.address,
+        latitude: _selectedField?['latitude']?.toDouble() ?? current.latitude,
+        longitude:
+            _selectedField?['longitude']?.toDouble() ?? current.longitude,
+        maxPlayers: _maxPlayers,
+      );
+
+      // Update local first
+      await GamesService.updateGame(updated);
+      // Best-effort cloud sync if signed in
+      if (AuthService.isSignedIn) {
+        try {
+          await CloudGamesService.updateGame(updated);
+        } catch (_) {}
+      }
+
+      if (mounted) {
+        HapticsService.lightImpact();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('game_updated_successfully'.tr()),
+            backgroundColor: AppColors.green,
+          ),
+        );
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(
+            builder: (_) => GamesDiscoveryScreen(highlightGameId: updated.id),
+            settings: const RouteSettings(),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('${'game_creation_failed'.tr()}: $e'),
+            backgroundColor: AppColors.red,
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
   Future<void> _loadBookedSlots() async {
     if (_selectedField == null || _selectedDate == null) return;
     try {
@@ -433,9 +542,6 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
             dateTime: effectiveGame.dateTime,
           );
         }
-
-        // Share/invite prompt after creation
-        await _promptShareInvite(effectiveGame);
         if (mounted) {
           Navigator.of(context).pushReplacement(
             MaterialPageRoute(
@@ -451,7 +557,13 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('${'game_creation_failed'.tr()}: $e'),
+            content: Text(
+              e.toString().contains('max_active_organized_games')
+                  ? 'max_active_organized_games'.tr()
+                  : e.toString().contains('only_one_game_per_day')
+                      ? 'only_one_game_per_day'.tr()
+                      : '${'game_creation_failed'.tr()}: $e',
+            ),
             backgroundColor: AppColors.red,
             duration: const Duration(seconds: 5),
           ),
@@ -464,50 +576,6 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
         });
       }
     }
-  }
-
-  Future<void> _promptShareInvite(Game game) async {
-    await showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (context) {
-        return Container(
-          decoration: const BoxDecoration(
-            color: AppColors.white,
-            borderRadius: BorderRadius.only(
-              topLeft: Radius.circular(20),
-              topRight: Radius.circular(20),
-            ),
-          ),
-          child: SafeArea(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Text('game_created_share_prompt'.tr(),
-                      style: AppTextStyles.h3),
-                ),
-                ListTile(
-                  leading: const Icon(Icons.share),
-                  title: Text('share'.tr()),
-                  onTap: () async {
-                    final date = game.formattedDate;
-                    final time = game.formattedTime;
-                    final where = game.location;
-                    final msg =
-                        '${'join_my_game'.tr()} ${game.sport} • $date $time @ $where';
-                    await Share.share(msg, subject: 'join_my_game'.tr());
-                    if (context.mounted) Navigator.pop(context);
-                  },
-                ),
-                const SizedBox(height: 8),
-              ],
-            ),
-          ),
-        );
-      },
-    );
   }
 
   Widget _buildSportCard({
@@ -1270,7 +1338,9 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
                               height: 50,
                               child: ElevatedButton(
                                 onPressed: _isFormComplete && !_isLoading
-                                    ? _createGame
+                                    ? (widget.initialGame != null
+                                        ? _updateGame
+                                        : _createGame)
                                     : null,
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: _isFormComplete
@@ -1301,9 +1371,7 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
                                       )
                                     : Text(
                                         widget.initialGame != null
-                                            ? (_hasChanges
-                                                ? 'change_game'.tr()
-                                                : 'confirm_game'.tr())
+                                            ? 'update_game'.tr()
                                             : 'create_game'.tr(),
                                         style: AppTextStyles.cardTitle.copyWith(
                                           color: Colors.white,
@@ -1378,7 +1446,7 @@ class _FriendPicker extends StatelessWidget {
                     leading: CircleAvatar(
                       backgroundColor: AppColors.superlightgrey,
                       backgroundImage: (photo != null && photo.isNotEmpty)
-                          ? NetworkImage(photo)
+                          ? CachedNetworkImageProvider(photo)
                           : null,
                       child: (photo == null || photo.isEmpty)
                           ? Text(name.isNotEmpty ? name[0].toUpperCase() : '?')

@@ -20,7 +20,10 @@ class GamesDiscoveryScreen extends StatefulWidget {
 
 class _GamesDiscoveryScreenState extends State<GamesDiscoveryScreen> {
   List<Game> _games = [];
+  List<Game> _invitedGames = [];
   bool _isLoading = true;
+  // Removed: _isLoadingInvited used when AppBar invite action existed
+  // No explicit filter UI; list renders invited games first
   String _selectedSport = 'all';
   String _searchQuery = '';
   late final TextEditingController _searchController;
@@ -45,6 +48,31 @@ class _GamesDiscoveryScreenState extends State<GamesDiscoveryScreen> {
     _searchController = TextEditingController(text: _searchQuery);
     _highlightId = widget.highlightGameId;
     _loadGames();
+    _loadInvitedGames();
+  }
+
+  // Try a few times to ensure the list is built before scrolling
+  void _scrollToHighlightedGame({int attempts = 0}) {
+    if (!mounted || _highlightId == null) return;
+    final key = _itemKeys[_highlightId!];
+    final ctx = key?.currentContext;
+    if (ctx != null) {
+      Scrollable.ensureVisible(
+        ctx,
+        duration: const Duration(milliseconds: 450),
+        curve: Curves.easeOutCubic,
+        alignment: 0.15,
+      );
+      Future.delayed(const Duration(seconds: 2), () {
+        if (mounted) setState(() => _highlightId = null);
+      });
+      return;
+    }
+    if (attempts < 6) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _scrollToHighlightedGame(attempts: attempts + 1);
+      });
+    }
   }
 
   @override
@@ -68,18 +96,12 @@ class _GamesDiscoveryScreenState extends State<GamesDiscoveryScreen> {
         games = games.where((g) => g.sport == _selectedSport).toList();
       }
 
-      // Filter by search query if provided
+      // Filter by search query if provided (location and organizer only)
       if (_searchQuery.isNotEmpty) {
         games = games.where((game) {
-          return game.location
-                  .toLowerCase()
-                  .contains(_searchQuery.toLowerCase()) ||
-              game.description
-                  .toLowerCase()
-                  .contains(_searchQuery.toLowerCase()) ||
-              game.organizerName
-                  .toLowerCase()
-                  .contains(_searchQuery.toLowerCase());
+          final q = _searchQuery.toLowerCase();
+          return game.location.toLowerCase().contains(q) ||
+              game.organizerName.toLowerCase().contains(q);
         }).toList();
       }
 
@@ -90,20 +112,7 @@ class _GamesDiscoveryScreenState extends State<GamesDiscoveryScreen> {
 
       // Scroll to and highlight the created game if requested
       if (_highlightId != null) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          final key = _itemKeys[_highlightId!];
-          final ctx = key?.currentContext;
-          if (ctx != null) {
-            Scrollable.ensureVisible(
-              ctx,
-              duration: const Duration(milliseconds: 400),
-              curve: Curves.easeOut,
-            );
-            Future.delayed(const Duration(seconds: 2), () {
-              if (mounted) setState(() => _highlightId = null);
-            });
-          }
-        });
+        _scrollToHighlightedGame();
       }
     } catch (e) {
       setState(() {
@@ -112,12 +121,22 @@ class _GamesDiscoveryScreenState extends State<GamesDiscoveryScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to load games'),
+            content: Text('loading_error'.tr()),
             backgroundColor: AppColors.red,
           ),
         );
       }
     }
+  }
+
+  Future<void> _loadInvitedGames() async {
+    try {
+      final invited = await CloudGamesService.getInvitedGamesForCurrentUser();
+      if (!mounted) return;
+      setState(() {
+        _invitedGames = invited;
+      });
+    } catch (_) {}
   }
 
   Future<void> _joinGame(Game game) async {
@@ -142,7 +161,7 @@ class _GamesDiscoveryScreenState extends State<GamesDiscoveryScreen> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Successfully joined the game!'),
+              content: Text('game_created_successfully'.tr()),
               backgroundColor: AppColors.green,
             ),
           );
@@ -152,7 +171,7 @@ class _GamesDiscoveryScreenState extends State<GamesDiscoveryScreen> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Failed to join game. Game might be full.'),
+              content: Text('game_full'.tr()),
               backgroundColor: AppColors.red,
             ),
           );
@@ -162,7 +181,7 @@ class _GamesDiscoveryScreenState extends State<GamesDiscoveryScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error joining game'),
+            content: Text('loading_error'.tr()),
             backgroundColor: AppColors.red,
           ),
         );
@@ -344,29 +363,354 @@ class _GamesDiscoveryScreenState extends State<GamesDiscoveryScreen> {
       body: SafeArea(
         child: Padding(
           padding: AppPaddings.symmHorizontalReg,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: AppColors.white,
-                    borderRadius: BorderRadius.circular(AppRadius.container),
-                    boxShadow: AppShadows.md,
+          child: _buildBrowseTab(),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildGameCard(Game game) {
+    final bool isHighlighted = game.id == _highlightId;
+    return Card(
+      margin: const EdgeInsets.only(bottom: AppHeights.superbig),
+      elevation: 2,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppRadius.card),
+      ),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 300),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(AppRadius.card),
+          boxShadow: isHighlighted
+              ? [
+                  BoxShadow(
+                    color: AppColors.blue.withValues(alpha: 0.25),
+                    blurRadius: 16,
+                    spreadRadius: 1,
+                    offset: const Offset(0, 4),
                   ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(AppRadius.container),
+                ]
+              : const [],
+        ),
+        child: InkWell(
+          onTap: () {},
+          borderRadius: BorderRadius.circular(AppRadius.card),
+          child: Padding(
+            padding: const EdgeInsets.all(AppWidths.regular),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color:
+                            _getSportColor(game.sport).withValues(alpha: 0.1),
+                        borderRadius:
+                            BorderRadius.circular(AppRadius.smallCard),
+                      ),
+                      child: Icon(
+                        _getSportIcon(game.sport),
+                        color: _getSportColor(game.sport),
+                        size: 24,
+                      ),
+                    ),
+                    const SizedBox(width: AppWidths.regular),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            game.sport.toUpperCase(),
+                            style: AppTextStyles.smallCardTitle.copyWith(
+                              color: _getSportColor(game.sport),
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          Text(
+                            game.location,
+                            style: AppTextStyles.cardTitle,
+                          ),
+                          Text(
+                            '${game.formattedDate} at ${game.formattedTime}',
+                            style: AppTextStyles.body.copyWith(
+                              color: AppColors.grey,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: game.hasSpace
+                            ? AppColors.green.withValues(alpha: 0.1)
+                            : AppColors.red.withValues(alpha: 0.1),
+                        borderRadius:
+                            BorderRadius.circular(AppRadius.smallCard),
+                      ),
+                      child: Text(
+                        '${game.currentPlayers}/${game.maxPlayers}',
+                        style: AppTextStyles.small.copyWith(
+                          color:
+                              game.hasSpace ? AppColors.green : AppColors.red,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                  ],
+                ),
+                const SizedBox(height: AppHeights.reg),
+                if (game.description.isNotEmpty) ...[
+                  Text(
+                    game.description,
+                    style: AppTextStyles.body,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: AppHeights.reg),
+                ],
+                Row(
+                  children: [
+                    Icon(
+                      Icons.person,
+                      size: 16,
+                      color: AppColors.grey,
+                    ),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text(
+                        (_invitedGames.any((g) => g.id == game.id))
+                            ? 'Invited by ${game.organizerName}'
+                            : (AuthService.isSignedIn &&
+                                    AuthService.currentUserId ==
+                                        game.organizerId)
+                                ? 'Organized by me'
+                                : 'Organized by ${game.organizerName}',
+                        style: AppTextStyles.small.copyWith(
+                          color: AppColors.grey,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const SizedBox(width: AppWidths.regular),
+                    if (AuthService.isSignedIn &&
+                        AuthService.currentUser?.uid == game.organizerId)
+                      TextButton.icon(
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 4),
+                          minimumSize: const Size(0, 0),
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                        onPressed: () {
+                          HapticsService.selectionClick();
+                          Navigator.of(context).pushNamed(
+                            '/organize-game',
+                            arguments: game,
+                          );
+                        },
+                        icon: const Icon(Icons.edit, size: 16),
+                        label: Text('edit'.tr(), style: AppTextStyles.small),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: AppHeights.reg),
+                SizedBox(
+                  width: double.infinity,
+                  child: Builder(
+                    builder: (context) {
+                      final isOwnerOrAdmin = AuthService.isSignedIn &&
+                          (AuthService.currentUserId == game.organizerId ||
+                              (AuthService.currentUser?.email?.toLowerCase() ==
+                                  _adminEmail));
+                      if (isOwnerOrAdmin) {
+                        return ElevatedButton(
+                          onPressed: () => _cancelGame(game),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.red,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius:
+                                  BorderRadius.circular(AppRadius.card),
+                            ),
+                            elevation: 0,
+                          ),
+                          child: Text(
+                            'cancel_game'.tr(),
+                            style: AppTextStyles.cardTitle.copyWith(
+                              color: Colors.white,
+                            ),
+                          ),
+                        );
+                      }
+                      final String myUid = AuthService.currentUserId ?? '';
+                      final bool isInvited =
+                          _invitedGames.any((g) => g.id == game.id);
+                      final bool isJoined = myUid.isNotEmpty &&
+                          game.players.any((p) => p == myUid);
+                      if (isInvited) {
+                        return Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton(
+                                onPressed: () async {
+                                  final ok =
+                                      await CloudGamesService.declineInvite(
+                                          game.id);
+                                  if (ok && mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text('declined'.tr()),
+                                        backgroundColor: AppColors.grey,
+                                      ),
+                                    );
+                                    await _loadInvitedGames();
+                                  }
+                                },
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: AppColors.red,
+                                  side: const BorderSide(color: AppColors.red),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius:
+                                        BorderRadius.circular(AppRadius.card),
+                                  ),
+                                ),
+                                child: Text('decline'.tr()),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: ElevatedButton(
+                                onPressed: () async {
+                                  final ok =
+                                      await CloudGamesService.acceptInvite(
+                                          game.id);
+                                  if (mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(ok
+                                            ? 'Successfully joined the game!'
+                                            : 'Failed to join'),
+                                        backgroundColor: ok
+                                            ? AppColors.green
+                                            : AppColors.red,
+                                      ),
+                                    );
+                                  }
+                                  await _loadInvitedGames();
+                                  await _loadGames();
+                                },
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppColors.green,
+                                  foregroundColor: Colors.white,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius:
+                                        BorderRadius.circular(AppRadius.card),
+                                  ),
+                                  elevation: 0,
+                                ),
+                                child: Text('accept'.tr()),
+                              ),
+                            ),
+                          ],
+                        );
+                      } else if (isJoined) {
+                        return ElevatedButton(
+                          onPressed: () async {
+                            if (myUid.isEmpty) return;
+                            final ok = await CloudGamesService.leaveGame(
+                                game.id, myUid);
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(ok
+                                      ? 'You left the game'
+                                      : 'Failed to leave'),
+                                  backgroundColor:
+                                      ok ? AppColors.grey : AppColors.red,
+                                ),
+                              );
+                            }
+                            await _loadGames();
+                            await _loadInvitedGames();
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.red,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius:
+                                  BorderRadius.circular(AppRadius.card),
+                            ),
+                            elevation: 0,
+                          ),
+                          child: Text('cancel_game'.tr()),
+                        );
+                      }
+                      return ElevatedButton(
+                        onPressed: game.hasSpace ? () => _joinGame(game) : null,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor:
+                              game.hasSpace ? AppColors.blue : AppColors.grey,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(AppRadius.card),
+                          ),
+                          elevation: 0,
+                        ),
+                        child: Text(
+                          game.hasSpace ? 'join_game'.tr() : 'game_full'.tr(),
+                          style: AppTextStyles.cardTitle.copyWith(
+                            color: Colors.white,
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Removed AppBar invite action; badge shown on Home tile instead
+
+  // --- Tabs content builders ---
+  Widget _buildBrowseTab() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: Container(
+            decoration: BoxDecoration(
+              color: AppColors.white,
+              borderRadius: BorderRadius.circular(AppRadius.container),
+              boxShadow: AppShadows.md,
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(AppRadius.container),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  PanelHeader('find_games'.tr()),
+                  Padding(
+                    padding: AppPaddings.symmHorizontalReg,
                     child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        PanelHeader('find_games'.tr()),
-                        Padding(
-                          padding: AppPaddings.symmHorizontalReg,
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const SizedBox(height: AppHeights.superSmall),
-                              TextField(
+                        const SizedBox(height: AppHeights.superSmall),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: TextField(
                                 controller: _searchController,
                                 textInputAction: TextInputAction.search,
                                 decoration: InputDecoration(
@@ -397,319 +741,118 @@ class _GamesDiscoveryScreenState extends State<GamesDiscoveryScreen> {
                                   _loadGames();
                                 },
                               ),
-                              const SizedBox(height: AppHeights.reg),
-                              SizedBox(
-                                height: 40,
-                                child: ListView.builder(
-                                  scrollDirection: Axis.horizontal,
-                                  itemCount: _sports.length,
-                                  itemBuilder: (context, index) {
-                                    final sport = _sports[index];
-                                    final isSelected = _selectedSport == sport;
-
-                                    return Padding(
-                                      padding: EdgeInsets.only(
-                                        right: index < _sports.length - 1
-                                            ? AppWidths.regular
-                                            : 0,
-                                      ),
-                                      child: FilterChip(
-                                        label: Text(sport == 'all'
-                                            ? 'all_sports'.tr()
-                                            : sport.tr()),
-                                        selected: isSelected,
-                                        onSelected: (selected) {
-                                          setState(
-                                              () => _selectedSport = sport);
-                                          _loadGames();
-                                        },
-                                        selectedColor: AppColors.blue
-                                            .withValues(alpha: 0.2),
-                                        checkmarkColor: AppColors.blue,
-                                      ),
-                                    );
-                                  },
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: AppHeights.reg),
+                        SizedBox(
+                          height: 40,
+                          child: ListView.builder(
+                            scrollDirection: Axis.horizontal,
+                            itemCount: _sports.length,
+                            itemBuilder: (context, index) {
+                              final sport = _sports[index];
+                              final isSelected = _selectedSport == sport;
+                              return Padding(
+                                padding: EdgeInsets.only(
+                                  right: index < _sports.length - 1
+                                      ? AppWidths.regular
+                                      : 0,
                                 ),
-                              ),
-                              const SizedBox(height: AppHeights.reg),
-                            ],
+                                child: FilterChip(
+                                  label: Text(sport == 'all'
+                                      ? 'all_sports'.tr()
+                                      : sport.tr()),
+                                  selected: isSelected,
+                                  onSelected: (selected) {
+                                    setState(() => _selectedSport = sport);
+                                    _loadGames();
+                                  },
+                                  selectedColor:
+                                      AppColors.blue.withValues(alpha: 0.2),
+                                  checkmarkColor: AppColors.blue,
+                                ),
+                              );
+                            },
                           ),
                         ),
-                        Expanded(
-                          child: Padding(
-                            padding: AppPaddings.symmHorizontalReg,
-                            child: _isLoading
-                                ? const Center(
-                                    child: CircularProgressIndicator())
-                                : _games.isEmpty
-                                    ? Center(
-                                        child: Column(
-                                          mainAxisAlignment:
-                                              MainAxisAlignment.center,
-                                          children: [
-                                            Icon(
-                                              Icons.sports_soccer,
-                                              size: 64,
-                                              color: AppColors.grey,
-                                            ),
-                                            const SizedBox(
-                                                height: AppHeights.reg),
-                                            Text(
-                                              'no_games_found'.tr(),
-                                              style:
-                                                  AppTextStyles.title.copyWith(
-                                                color: AppColors.grey,
-                                              ),
-                                            ),
-                                            const SizedBox(
-                                                height: AppHeights.small),
-                                            Text(
-                                              'no_games_found_description'.tr(),
-                                              style:
-                                                  AppTextStyles.body.copyWith(
-                                                color: AppColors.grey,
-                                              ),
-                                              textAlign: TextAlign.center,
-                                            ),
-                                          ],
-                                        ),
-                                      )
-                                    : RefreshIndicator(
-                                        onRefresh: _loadGames,
-                                        child: ListView.builder(
-                                          controller: _listController,
-                                          padding: EdgeInsets.zero,
-                                          itemCount: _games.length,
-                                          itemBuilder: (context, index) {
-                                            final game = _games[index];
-                                            final key = _itemKeys.putIfAbsent(
-                                                game.id, () => GlobalKey());
-                                            return KeyedSubtree(
-                                              key: key,
-                                              child: _buildGameCard(game),
-                                            );
-                                          },
+                        const SizedBox(height: AppHeights.reg),
+                      ],
+                    ),
+                  ),
+                  Expanded(
+                    child: Padding(
+                      padding: AppPaddings.symmHorizontalReg,
+                      child: _isLoading
+                          ? const Center(child: CircularProgressIndicator())
+                          : (_games.isEmpty && _invitedGames.isEmpty)
+                              ? Center(
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(
+                                        Icons.sports_soccer,
+                                        size: 64,
+                                        color: AppColors.grey,
+                                      ),
+                                      const SizedBox(height: AppHeights.reg),
+                                      Text(
+                                        'no_games_found'.tr(),
+                                        style: AppTextStyles.title.copyWith(
+                                          color: AppColors.grey,
                                         ),
                                       ),
-                          ),
-                        ),
-                      ],
+                                      const SizedBox(height: AppHeights.small),
+                                      Text(
+                                        'no_games_found_description'.tr(),
+                                        style: AppTextStyles.body.copyWith(
+                                          color: AppColors.grey,
+                                        ),
+                                        textAlign: TextAlign.center,
+                                      ),
+                                    ],
+                                  ),
+                                )
+                              : RefreshIndicator(
+                                  onRefresh: () async {
+                                    await _loadGames();
+                                    await _loadInvitedGames();
+                                  },
+                                  child: Builder(builder: (context) {
+                                    // Merge lists with invited first
+                                    final List<Game> merged = [
+                                      ..._invitedGames,
+                                      ..._games.where((g) => !_invitedGames
+                                          .any((i) => i.id == g.id)),
+                                    ];
+                                    return ListView.builder(
+                                      controller: _listController,
+                                      padding: EdgeInsets.zero,
+                                      itemCount: merged.length,
+                                      itemBuilder: (context, index) {
+                                        final game = merged[index];
+                                        final key = _itemKeys.putIfAbsent(
+                                            game.id, () => GlobalKey());
+                                        return KeyedSubtree(
+                                          key: key,
+                                          child: _buildGameCard(game),
+                                        );
+                                      },
+                                    );
+                                  }),
+                                ),
                     ),
                   ),
-                ),
+                ],
               ),
-            ],
+            ),
           ),
         ),
-      ),
+      ],
     );
   }
 
-  Widget _buildGameCard(Game game) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: AppHeights.superbig),
-      elevation: 2,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(AppRadius.card),
-      ),
-      child: InkWell(
-        onTap: () {},
-        borderRadius: BorderRadius.circular(AppRadius.card),
-        child: Padding(
-          padding: const EdgeInsets.all(AppWidths.regular),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Header Row
-              Row(
-                children: [
-                  // Sport Icon
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: _getSportColor(game.sport).withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(AppRadius.smallCard),
-                    ),
-                    child: Icon(
-                      _getSportIcon(game.sport),
-                      color: _getSportColor(game.sport),
-                      size: 24,
-                    ),
-                  ),
-                  const SizedBox(width: AppWidths.regular),
-
-                  // Game Info
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          game.sport.toUpperCase(),
-                          style: AppTextStyles.smallCardTitle.copyWith(
-                            color: _getSportColor(game.sport),
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        Text(
-                          game.location,
-                          style: AppTextStyles.cardTitle,
-                        ),
-                        Text(
-                          '${game.formattedDate} at ${game.formattedTime}',
-                          style: AppTextStyles.body.copyWith(
-                            color: AppColors.grey,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  // Players Count
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: game.hasSpace
-                          ? AppColors.green.withValues(alpha: 0.1)
-                          : AppColors.red.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(AppRadius.smallCard),
-                    ),
-                    child: Text(
-                      '${game.currentPlayers}/${game.maxPlayers}',
-                      style: AppTextStyles.small.copyWith(
-                        color: game.hasSpace ? AppColors.green : AppColors.red,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                ],
-              ),
-
-              const SizedBox(height: AppHeights.reg),
-
-              // Description
-              if (game.description.isNotEmpty) ...[
-                Text(
-                  game.description,
-                  style: AppTextStyles.body,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: AppHeights.reg),
-              ],
-
-              // Organizer Info + Edit (if owner)
-              Row(
-                children: [
-                  Icon(
-                    Icons.person,
-                    size: 16,
-                    color: AppColors.grey,
-                  ),
-                  const SizedBox(width: 4),
-                  Expanded(
-                    child: Text(
-                      'Organized by ${game.organizerName}',
-                      style: AppTextStyles.small.copyWith(
-                        color: AppColors.grey,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  const SizedBox(width: AppWidths.regular),
-                  if (AuthService.isSignedIn &&
-                      AuthService.currentUser?.uid == game.organizerId)
-                    TextButton.icon(
-                      style: TextButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 4),
-                        minimumSize: const Size(0, 0),
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      ),
-                      onPressed: () {
-                        HapticsService.selectionClick();
-                        Navigator.of(context).pushNamed(
-                          '/organize-game',
-                          arguments: game,
-                        );
-                      },
-                      icon: const Icon(Icons.edit, size: 16),
-                      label: Text('edit'.tr(), style: AppTextStyles.small),
-                    ),
-                ],
-              ),
-
-              const SizedBox(height: AppHeights.reg),
-
-              // Join or Cancel Button
-              SizedBox(
-                width: double.infinity,
-                child: Builder(builder: (context) {
-                  final isOwnerOrAdmin = AuthService.isSignedIn &&
-                      (AuthService.currentUserId == game.organizerId ||
-                          (AuthService.currentUser?.email?.toLowerCase() ==
-                              _adminEmail));
-                  if (isOwnerOrAdmin) {
-                    return ElevatedButton(
-                      onPressed: () => _cancelGame(game),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.red,
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(AppRadius.card),
-                        ),
-                        elevation: 0,
-                      ),
-                      child: Text(
-                        'cancel_game'.tr(),
-                        style: AppTextStyles.cardTitle.copyWith(
-                          color: Colors.white,
-                        ),
-                      ),
-                    );
-                  }
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      ElevatedButton(
-                        onPressed: game.hasSpace ? () => _joinGame(game) : null,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor:
-                              game.hasSpace ? AppColors.blue : AppColors.grey,
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(AppRadius.card),
-                          ),
-                          elevation: 0,
-                        ),
-                        child: Text(
-                          game.hasSpace ? 'join_game'.tr() : 'game_full'.tr(),
-                          style: AppTextStyles.cardTitle.copyWith(
-                            color: Colors.white,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      OutlinedButton.icon(
-                        onPressed: game.hasSpace
-                            ? () => _inviteFriendsToGame(game)
-                            : null,
-                        icon: const Icon(Icons.person_add_alt_1),
-                        label: Text('invite_friends'.tr()),
-                      ),
-                    ],
-                  );
-                }),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
+  // (removed: invited tab UI; now handled via Invited filter in browse)
 
   Color _getSportColor(String sport) {
     switch (sport) {

@@ -38,4 +38,16 @@ class HapticsService {
       HapticFeedback.selectionClick();
     }
   }
+
+  static Future<void> mediumImpact() async {
+    if (await isEnabled()) {
+      HapticFeedback.mediumImpact();
+    }
+  }
+
+  static Future<void> heavyImpact() async {
+    if (await isEnabled()) {
+      HapticFeedback.heavyImpact();
+    }
+  }
 }

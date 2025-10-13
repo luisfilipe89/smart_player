@@ -80,9 +80,8 @@ class AppTheme {
       seedColor: AppColors.highContrastPrimary,
       brightness: Brightness.dark,
     ).copyWith(
-      background: AppColors.highContrastBackground,
+      // background/onBackground deprecated; use surface/onSurface in widgets
       surface: AppColors.highContrastSurface,
-      onBackground: AppColors.highContrastText,
       onSurface: AppColors.highContrastText,
       primary: AppColors.highContrastPrimary,
       onPrimary: AppColors.highContrastBackground,
@@ -137,7 +136,7 @@ class AppTheme {
         ),
         labelStyle: TextStyle(color: AppColors.highContrastText),
         hintStyle:
-            TextStyle(color: AppColors.highContrastText.withOpacity(0.7)),
+            TextStyle(color: AppColors.highContrastText.withValues(alpha: 0.7)),
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
@@ -158,22 +157,22 @@ class AppTheme {
         ),
       ),
       switchTheme: SwitchThemeData(
-        thumbColor: MaterialStateProperty.resolveWith((states) {
-          if (states.contains(MaterialState.selected)) {
+        thumbColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) {
             return AppColors.highContrastPrimary;
           }
           return AppColors.highContrastText;
         }),
-        trackColor: MaterialStateProperty.resolveWith((states) {
-          if (states.contains(MaterialState.selected)) {
-            return AppColors.highContrastPrimary.withOpacity(0.5);
+        trackColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) {
+            return AppColors.highContrastPrimary.withValues(alpha: 0.5);
           }
           return AppColors.highContrastSurface;
         }),
       ),
       radioTheme: RadioThemeData(
-        fillColor: MaterialStateProperty.resolveWith((states) {
-          if (states.contains(MaterialState.selected)) {
+        fillColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) {
             return AppColors.highContrastPrimary;
           }
           return AppColors.highContrastText;
@@ -188,7 +187,7 @@ class AppTheme {
     return base.copyWith(
       chipTheme: base.chipTheme.copyWith(
         backgroundColor: AppColors.highContrastSurface,
-        selectedColor: AppColors.highContrastPrimary.withOpacity(0.3),
+        selectedColor: AppColors.highContrastPrimary.withValues(alpha: 0.3),
         disabledColor: AppColors.highContrastSurface,
         labelStyle:
             AppTextStyles.small.copyWith(color: AppColors.highContrastText),
