@@ -111,6 +111,9 @@ class AuthService {
     String email,
     String password,
   ) async {
+    if (password.isEmpty) {
+      throw Exception('auth_password_required');
+    }
     try {
       final userCredential = await _auth.signInWithEmailAndPassword(
         email: email,

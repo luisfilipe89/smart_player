@@ -10,9 +10,11 @@ import 'package:move_young/services/notification_service.dart';
 import 'package:move_young/services/haptics_service.dart';
 import 'package:move_young/services/accessibility_service.dart';
 import 'firebase_options.dart';
+import 'package:move_young/utils/logger.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  NumberedLogger.install();
   await EasyLocalization.ensureInitialized();
 
   // Initialize Firebase

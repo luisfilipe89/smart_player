@@ -79,6 +79,10 @@ class _AuthScreenState extends State<AuthScreen> {
     setState(() => _isLoading = true);
 
     try {
+      // Ensure no existing session (including anonymous) masks a failed login
+      if (_isLogin && AuthService.isSignedIn) {
+        await AuthService.signOut();
+      }
       if (_isLogin) {
         await AuthService.signInWithEmail(
           _emailController.text.trim(),
@@ -147,20 +151,6 @@ class _AuthScreenState extends State<AuthScreen> {
       }
     } catch (e) {
       if (mounted) {
-        // If already authenticated, inform and close
-        if (AuthService.isSignedIn) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(tr('already_signed_in')),
-              backgroundColor: AppColors.primary,
-            ),
-          );
-          // Use a timer instead of await to avoid context usage across async gaps
-          Future.delayed(const Duration(milliseconds: 400), () {
-            if (mounted) Navigator.of(context).pop(true);
-          });
-          return;
-        }
         String raw = e.toString();
         raw = raw.replaceFirst(RegExp(r'^Exception:\s*'), '');
         final localized = tr(raw);

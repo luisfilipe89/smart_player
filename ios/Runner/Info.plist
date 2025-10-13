@@ -45,5 +45,16 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<!-- Permissions for camera, location, contacts, and photo library -->
+	<key>NSCameraUsageDescription</key>
+	<string>This app needs camera access to scan QR codes for adding friends.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>This app needs location access to show nearby sports facilities and events.</string>
+	<key>NSContactsUsageDescription</key>
+	<string>This app needs contacts access to help you find friends who also use the app.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>This app needs photo library access to let you choose profile pictures.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>This app may save edited images to your photo library.</string>
 </dict>
 </plist>
