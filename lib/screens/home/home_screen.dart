@@ -132,7 +132,7 @@ class _HomeScreenNewState extends State<HomeScreenNew> {
             child: RefreshIndicator(
               onRefresh: _fetch,
               child: ListView(
-                physics: const NeverScrollableScrollPhysics(),
+                physics: const AlwaysScrollableScrollPhysics(),
                 padding: AppPaddings.symmHorizontalReg.copyWith(
                   bottom: kBottomNavigationBarHeight +
                       MediaQuery.of(context).padding.bottom +

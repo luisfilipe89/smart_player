@@ -9,6 +9,7 @@ import 'package:move_young/services/cloud_games_service.dart';
 import 'package:move_young/services/friends_service.dart' as friends;
 import 'package:move_young/services/auth_service.dart';
 import 'package:move_young/services/haptics_service.dart';
+import 'package:move_young/screens/main_scaffold.dart';
 
 class GamesDiscoveryScreen extends StatefulWidget {
   final String? highlightGameId;
@@ -161,8 +162,15 @@ class _GamesDiscoveryScreenState extends State<GamesDiscoveryScreen> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('game_created_successfully'.tr()),
+              content: Text('joined_successfully'.tr()),
               backgroundColor: AppColors.green,
+              action: SnackBarAction(
+                label: 'view_in_my_games'.tr(),
+                onPressed: () {
+                  MainScaffoldScope.maybeOf(context)
+                      ?.switchToTab(kTabJoin, popToRoot: true);
+                },
+              ),
             ),
           );
         }
@@ -237,6 +245,7 @@ class _GamesDiscoveryScreenState extends State<GamesDiscoveryScreen> {
     }
   }
 
+  // ignore: unused_element
   Future<void> _inviteFriendsToGame(Game game) async {
     final uid = AuthService.currentUserId;
     if (uid == null) {
@@ -358,6 +367,16 @@ class _GamesDiscoveryScreenState extends State<GamesDiscoveryScreen> {
         title: Text('join_a_game'.tr()),
         backgroundColor: AppColors.white,
         elevation: 0,
+        actions: [
+          IconButton(
+            tooltip: 'my_games'.tr(),
+            icon: const Icon(Icons.sports_soccer),
+            onPressed: () {
+              MainScaffoldScope.maybeOf(context)
+                  ?.switchToTab(kTabJoin, popToRoot: true);
+            },
+          ),
+        ],
       ),
       backgroundColor: AppColors.white,
       body: SafeArea(
@@ -558,12 +577,57 @@ class _GamesDiscoveryScreenState extends State<GamesDiscoveryScreen> {
                         return Row(
                           children: [
                             Expanded(
+                              child: ElevatedButton(
+                                onPressed: () async {
+                                  final ok =
+                                      await CloudGamesService.acceptInvite(
+                                          game.id);
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(ok
+                                            ? 'joined_successfully'.tr()
+                                            : 'loading_error'.tr()),
+                                        backgroundColor: ok
+                                            ? AppColors.green
+                                            : AppColors.red,
+                                        action: ok
+                                            ? SnackBarAction(
+                                                label: 'view_in_my_games'.tr(),
+                                                onPressed: () {
+                                                  MainScaffoldScope.maybeOf(
+                                                          context)
+                                                      ?.switchToTab(kTabJoin,
+                                                          popToRoot: true);
+                                                },
+                                              )
+                                            : null,
+                                      ),
+                                    );
+                                  }
+                                  await _loadInvitedGames();
+                                  await _loadGames();
+                                },
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppColors.green,
+                                  foregroundColor: Colors.white,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius:
+                                        BorderRadius.circular(AppRadius.card),
+                                  ),
+                                  elevation: 0,
+                                ),
+                                child: Text('accept'.tr()),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
                               child: OutlinedButton(
                                 onPressed: () async {
                                   final ok =
                                       await CloudGamesService.declineInvite(
                                           game.id);
-                                  if (ok && mounted) {
+                                  if (ok && context.mounted) {
                                     ScaffoldMessenger.of(context).showSnackBar(
                                       SnackBar(
                                         content: Text('declined'.tr()),
@@ -584,40 +648,6 @@ class _GamesDiscoveryScreenState extends State<GamesDiscoveryScreen> {
                                 child: Text('decline'.tr()),
                               ),
                             ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: ElevatedButton(
-                                onPressed: () async {
-                                  final ok =
-                                      await CloudGamesService.acceptInvite(
-                                          game.id);
-                                  if (mounted) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(
-                                        content: Text(ok
-                                            ? 'Successfully joined the game!'
-                                            : 'Failed to join'),
-                                        backgroundColor: ok
-                                            ? AppColors.green
-                                            : AppColors.red,
-                                      ),
-                                    );
-                                  }
-                                  await _loadInvitedGames();
-                                  await _loadGames();
-                                },
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: AppColors.green,
-                                  foregroundColor: Colors.white,
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius:
-                                        BorderRadius.circular(AppRadius.card),
-                                  ),
-                                  elevation: 0,
-                                ),
-                                child: Text('accept'.tr()),
-                              ),
-                            ),
                           ],
                         );
                       } else if (isJoined) {
@@ -626,7 +656,7 @@ class _GamesDiscoveryScreenState extends State<GamesDiscoveryScreen> {
                             if (myUid.isEmpty) return;
                             final ok = await CloudGamesService.leaveGame(
                                 game.id, myUid);
-                            if (mounted) {
+                            if (context.mounted) {
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
                                   content: Text(ok

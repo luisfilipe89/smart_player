@@ -688,7 +688,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           currentPassword: current,
                           newPassword: newPassword,
                         );
-                        if (!mounted) return;
+                        if (!context.mounted) return;
                         navigator.pop();
                         messenger.showSnackBar(
                           SnackBar(
@@ -697,7 +697,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           ),
                         );
                       } catch (e) {
-                        if (!mounted) return;
+                        if (!context.mounted) return;
                         String errorMessage = e
                             .toString()
                             .replaceFirst(RegExp(r'^Exception:\s*'), '');
@@ -723,7 +723,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           ),
                         );
                       } finally {
-                        if (mounted) setState(() => isSubmitting = false);
+                        if (context.mounted) {
+                          setState(() => isSubmitting = false);
+                        }
                       }
                     },
               child: isSubmitting
@@ -913,7 +915,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           await AuthService.updateEmail(newEmail);
                         }
 
-                        if (!mounted) return;
+                        if (!context.mounted) return;
                         navigator.pop(true);
                         messenger.showSnackBar(
                           SnackBar(
@@ -922,7 +924,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           ),
                         );
                       } catch (e) {
-                        if (!mounted) return;
+                        if (!context.mounted) return;
                         String errorMessage = e
                             .toString()
                             .replaceFirst(RegExp(r'^Exception:\s*'), '');
@@ -946,7 +948,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           ),
                         );
                       } finally {
-                        if (mounted) setState(() => isSubmitting = false);
+                        if (context.mounted) {
+                          setState(() => isSubmitting = false);
+                        }
                       }
                     },
               child: isSubmitting

@@ -5,6 +5,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:move_young/theme/tokens.dart';
+import 'package:move_young/services/location_service.dart';
 
 class GenericMapScreen extends StatefulWidget {
   final String title;
@@ -46,27 +47,18 @@ class _GenericMapScreenState extends State<GenericMapScreen> {
 
   Future<void> _initializeMap() async {
     try {
-      final locationSettings = const LocationSettings(
-        accuracy: LocationAccuracy.high,
-      );
-
-      final position = await Geolocator.getCurrentPosition(
-        locationSettings: locationSettings,
-      );
+      final position = await const LocationService()
+          .getCurrentPosition(accuracy: LocationAccuracy.high);
+      if (!mounted) return;
       setState(() {
         _userPosition = position;
       });
       _setLocationMarkers();
     } catch (e) {
-      if (e.toString().contains('PERMISSION DENIED')) {
-        setState(() {
-          _locationError = 'location_denied'.tr();
-        });
-      } else {
-        setState(() {
-          _locationError = 'failed_location'.tr();
-        });
-      }
+      if (!mounted) return;
+      setState(() {
+        _locationError = const LocationService().mapError(e);
+      });
       debugPrint("Failed to get location: $e");
     }
   }
@@ -162,12 +154,12 @@ class _GenericMapScreenState extends State<GenericMapScreen> {
     return Scaffold(
       appBar: AppBar(title: Text(widget.title)),
       body: _locationError != null
-          ? Center(
-              child: Text(
-                _locationError!,
-                style: AppTextStyles.cardTitle,
-                textAlign: TextAlign.center,
-              ),
+          ? _LocationErrorView(
+              message: _locationError!,
+              onOpenSettings: () async {
+                await const LocationService().openSettings();
+              },
+              onRetry: _initializeMap,
             )
           : _userPosition == null
               ? const Center(child: CircularProgressIndicator())
@@ -191,11 +183,16 @@ class _GenericMapScreenState extends State<GenericMapScreen> {
                         });
                       },
                     ),
+                    // Place OSM attribution at top-left to avoid clashing
+                    // with Google's logo/attribution on the bottom-left.
                     Positioned(
                       left: 8,
-                      bottom: 28, // slightly above Google logo
+                      top: 8,
                       child: Container(
-                        color: Colors.white.withValues(alpha: 0.7),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.8),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
                         padding: AppPaddings.symmSuperSmall,
                         child: const Text(
                           '© OpenStreetMap contributors (ODbL)',
@@ -289,5 +286,51 @@ class _GenericMapScreenState extends State<GenericMapScreen> {
   void dispose() {
     _mapController?.dispose();
     super.dispose();
+  }
+}
+
+class _LocationErrorView extends StatelessWidget {
+  final String message;
+  final VoidCallback onOpenSettings;
+  final VoidCallback onRetry;
+
+  const _LocationErrorView({
+    required this.message,
+    required this.onOpenSettings,
+    required this.onRetry,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: AppPaddings.allReg,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              message,
+              style: AppTextStyles.cardTitle,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: AppHeights.reg),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                OutlinedButton(
+                  onPressed: onRetry,
+                  child: Text('retry'.tr()),
+                ),
+                const SizedBox(width: AppWidths.regular),
+                ElevatedButton(
+                  onPressed: onOpenSettings,
+                  child: Text('open_settings'.tr()),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

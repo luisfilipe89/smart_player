@@ -5,6 +5,7 @@ import 'package:move_young/screens/agenda/agenda_screen.dart';
 import 'package:move_young/screens/games/game_organize_screen.dart';
 import 'package:move_young/models/game.dart';
 import 'package:move_young/screens/games/games_join_screen.dart';
+import 'package:move_young/screens/games/games_my_screen.dart';
 import 'package:move_young/screens/friends/friends_screen.dart';
 import 'package:easy_localization/easy_localization.dart';
 
@@ -137,7 +138,7 @@ class MainScaffoldState extends State<MainScaffold> {
                   child: _FriendsFlow(navigatorKey: _friendsKey)),
               HeroMode(
                   enabled: _currentIndex == kTabJoin,
-                  child: _JoinFlow(navigatorKey: _joinKey)),
+                  child: _MyGamesFlow(navigatorKey: _joinKey)),
               HeroMode(
                   enabled: _currentIndex == kTabAgenda,
                   child: _AgendaFlow(navigatorKey: _agendaKey)),
@@ -244,8 +245,8 @@ class _FriendsFlow extends StatelessWidget {
   }
 }
 
-class _JoinFlow extends StatelessWidget {
-  const _JoinFlow({required this.navigatorKey});
+class _MyGamesFlow extends StatelessWidget {
+  const _MyGamesFlow({required this.navigatorKey});
   final GlobalKey<NavigatorState> navigatorKey;
 
   @override
@@ -254,7 +255,7 @@ class _JoinFlow extends StatelessWidget {
       key: navigatorKey,
       onGenerateRoute: (settings) {
         return MaterialPageRoute(
-          builder: (_) => const GamesDiscoveryScreen(),
+          builder: (_) => const GamesMyScreen(),
           settings: settings,
         );
       },
@@ -280,7 +281,7 @@ class _BottomBar extends StatelessWidget {
         BottomNavigationBarItem(icon: Icon(Icons.home), label: 'home'.tr()),
         BottomNavigationBarItem(icon: Icon(Icons.group), label: 'friends'.tr()),
         BottomNavigationBarItem(
-            icon: Icon(Icons.sports_soccer), label: 'join_a_game'.tr()),
+            icon: Icon(Icons.sports_soccer), label: 'my_games'.tr()),
         BottomNavigationBarItem(icon: Icon(Icons.event), label: 'agenda'.tr()),
       ],
     );

@@ -12,6 +12,7 @@ import 'package:move_young/widgets_sports/sport_field_card.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:move_young/config/_config.dart';
 import 'package:move_young/theme/_theme.dart';
+import 'package:move_young/services/location_service.dart';
 
 class GenericSportScreen extends StatefulWidget {
   final String title;
@@ -86,21 +87,8 @@ class _GenericSportScreenState extends State<GenericSportScreen>
 
   Future<void> _loadData({bool bypassCache = false}) async {
     try {
-      final permission = await Geolocator.requestPermission();
-
-      if (permission == LocationPermission.denied ||
-          permission == LocationPermission.deniedForever) {
-        setState(() {
-          _error = 'location_permission_required'.tr();
-          _isLoading = false;
-        });
-        return;
-      }
-
-      final pos = await Geolocator.getCurrentPosition(
-        locationSettings:
-            const LocationSettings(accuracy: LocationAccuracy.best),
-      );
+      final pos = await const LocationService()
+          .getCurrentPosition(accuracy: LocationAccuracy.best);
       _userPosition = pos;
 
       final locations = await OverpassService.fetchFields(
@@ -143,7 +131,7 @@ class _GenericSportScreenState extends State<GenericSportScreen>
       });
     } catch (e) {
       setState(() {
-        _error = 'loading_error'.tr();
+        _error = const LocationService().mapError(e);
         _isLoading = false;
       });
       debugPrint('Error in _loadData: $e');

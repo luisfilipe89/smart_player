@@ -432,4 +432,35 @@ class CloudGamesService {
       return games;
     });
   }
+
+  // Get user's joined games
+  static Future<List<Game>> getUserJoinedGames(String userId) async {
+    try {
+      final joinedSnap =
+          await _usersRef.child(userId).child('joinedGames').get();
+      if (!joinedSnap.exists) return [];
+
+      final List<Game> games = [];
+      for (final child in joinedSnap.children) {
+        final gameId = child.key;
+        if (gameId == null) continue;
+        try {
+          final gameSnapshot = await _gamesRef.child(gameId).get();
+          if (gameSnapshot.exists) {
+            final Map<dynamic, dynamic> gameData =
+                gameSnapshot.value as Map<dynamic, dynamic>;
+            final game = Game.fromJson(Map<String, dynamic>.from(gameData));
+            if (game.isActive && game.isUpcoming) {
+              games.add(game);
+            }
+          }
+        } catch (_) {}
+      }
+
+      games.sort((a, b) => a.dateTime.compareTo(b.dateTime));
+      return games;
+    } catch (e) {
+      return [];
+    }
+  }
 }
