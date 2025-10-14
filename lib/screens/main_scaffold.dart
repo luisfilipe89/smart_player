@@ -11,11 +11,26 @@ import 'package:easy_localization/easy_localization.dart';
 
 // ---------------------------- Navigation Controller Scope ----------------------------
 class MainScaffoldController {
-  const MainScaffoldController(this._switchToTab);
+  const MainScaffoldController(this._switchToTab, [this._openMyGames]);
   final void Function(int index, {bool popToRoot}) _switchToTab;
+  final void Function(
+      {int initialTab, String? highlightGameId, bool popToRoot})? _openMyGames;
 
   void switchToTab(int index, {bool popToRoot = false}) =>
       _switchToTab(index, popToRoot: popToRoot);
+
+  void openMyGames(
+      {int initialTab = 0, String? highlightGameId, bool popToRoot = true}) {
+    final fn = _openMyGames;
+    if (fn != null) {
+      fn(
+          initialTab: initialTab,
+          highlightGameId: highlightGameId,
+          popToRoot: popToRoot);
+    } else {
+      _switchToTab(kTabJoin, popToRoot: popToRoot);
+    }
+  }
 }
 
 class MainScaffoldScope extends InheritedWidget {
@@ -74,14 +89,43 @@ class MainScaffoldState extends State<MainScaffold> {
   final _agendaKey = GlobalKey<NavigatorState>();
 
   late final MainScaffoldController _controller;
+  MyGamesArgs? _myGamesArgs;
 
   @override
   void initState() {
     super.initState();
-    _controller = MainScaffoldController((int index, {bool popToRoot = false}) {
-      if (popToRoot) _popToRoot(index);
-      if (mounted) setState(() => _currentIndex = index);
-    });
+    _controller = MainScaffoldController(
+      (int index, {bool popToRoot = false}) {
+        if (popToRoot) _popToRoot(index);
+        if (mounted) setState(() => _currentIndex = index);
+      },
+      ({int initialTab = 0, String? highlightGameId, bool popToRoot = true}) {
+        if (popToRoot) {
+          _popToRoot(kTabJoin);
+          // Also clear Home flow so returning Home shows the root Home screen
+          _homeKey.currentState?.popUntil((r) => r.isFirst);
+        }
+        setState(() {
+          _myGamesArgs = MyGamesArgs(
+              initialTab: initialTab, highlightGameId: highlightGameId);
+          _currentIndex = kTabJoin;
+        });
+        // Nudge the nested My Games navigator to rebuild and show latest
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          final nav = _joinKey.currentState;
+          if (nav != null) {
+            nav.pushReplacement(
+              MaterialPageRoute(
+                builder: (_) => GamesMyScreen(
+                  initialTab: initialTab,
+                  highlightGameId: highlightGameId,
+                ),
+              ),
+            );
+          }
+        });
+      },
+    );
   }
 
   void switchToTab(int index, {bool popToRoot = false}) {
@@ -138,7 +182,8 @@ class MainScaffoldState extends State<MainScaffold> {
                   child: _FriendsFlow(navigatorKey: _friendsKey)),
               HeroMode(
                   enabled: _currentIndex == kTabJoin,
-                  child: _MyGamesFlow(navigatorKey: _joinKey)),
+                  child:
+                      _MyGamesFlow(navigatorKey: _joinKey, args: _myGamesArgs)),
               HeroMode(
                   enabled: _currentIndex == kTabAgenda,
                   child: _AgendaFlow(navigatorKey: _agendaKey)),
@@ -246,8 +291,9 @@ class _FriendsFlow extends StatelessWidget {
 }
 
 class _MyGamesFlow extends StatelessWidget {
-  const _MyGamesFlow({required this.navigatorKey});
+  const _MyGamesFlow({required this.navigatorKey, this.args});
   final GlobalKey<NavigatorState> navigatorKey;
+  final MyGamesArgs? args;
 
   @override
   Widget build(BuildContext context) {
@@ -255,12 +301,21 @@ class _MyGamesFlow extends StatelessWidget {
       key: navigatorKey,
       onGenerateRoute: (settings) {
         return MaterialPageRoute(
-          builder: (_) => const GamesMyScreen(),
+          builder: (_) => GamesMyScreen(
+            initialTab: args?.initialTab ?? 0,
+            highlightGameId: args?.highlightGameId,
+          ),
           settings: settings,
         );
       },
     );
   }
+}
+
+class MyGamesArgs {
+  final int initialTab;
+  final String? highlightGameId;
+  const MyGamesArgs({this.initialTab = 0, this.highlightGameId});
 }
 
 // ---------------------------- Bottom Bar Wrapper ----------------------------

@@ -9,8 +9,6 @@ import 'package:move_young/services/overpass_service.dart';
 import 'package:move_young/services/weather_service.dart';
 import 'package:move_young/services/games_service.dart';
 import 'package:move_young/services/auth_service.dart';
-import 'package:move_young/screens/games/games_join_screen.dart';
-import 'package:move_young/screens/games/games_my_screen.dart';
 import 'package:move_young/screens/main_scaffold.dart';
 import 'package:move_young/services/friends_service.dart';
 import 'package:move_young/services/cloud_games_service.dart';
@@ -365,11 +363,11 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
             backgroundColor: AppColors.green,
           ),
         );
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(
-            builder: (_) => GamesDiscoveryScreen(highlightGameId: updated.id),
-            settings: const RouteSettings(),
-          ),
+        // Navigate to My Games (Organizing tab) and highlight the updated game
+        MainScaffoldScope.maybeOf(context)?.openMyGames(
+          initialTab: 1,
+          highlightGameId: updated.id,
+          popToRoot: true,
         );
       }
     } catch (e) {
@@ -545,16 +543,10 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
           );
         }
         if (mounted) {
-          // Navigate to My Games screen, Organizing tab, and refresh
-          MainScaffoldScope.maybeOf(context)
-              ?.switchToTab(kTabJoin, popToRoot: true);
-          // Push My Games with organizing tab selected (index 1)
-          await Future.delayed(const Duration(milliseconds: 50));
-          Navigator.of(context).pushReplacement(
-            MaterialPageRoute(
-              builder: (_) => const GamesMyScreen(initialTab: 1),
-              settings: const RouteSettings(),
-            ),
+          MainScaffoldScope.maybeOf(context)?.openMyGames(
+            initialTab: 1,
+            highlightGameId: effectiveGame.id,
+            popToRoot: true,
           );
         }
       }

@@ -94,7 +94,7 @@ class _HomeScreenNewState extends State<HomeScreenNew> {
               ),
               onPressed: () => _showUserMenu(context),
             ),
-            title: Text('home'.tr()),
+            title: const Text('SMARTPLAYER'),
             centerTitle: true,
             actions: [
               TextButton.icon(

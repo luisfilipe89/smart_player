@@ -383,16 +383,6 @@ class _GamesDiscoveryScreenState extends State<GamesDiscoveryScreen> {
         title: Text('join_a_game'.tr()),
         backgroundColor: AppColors.white,
         elevation: 0,
-        actions: [
-          IconButton(
-            tooltip: 'my_games'.tr(),
-            icon: const Icon(Icons.sports_soccer),
-            onPressed: () {
-              MainScaffoldScope.maybeOf(context)
-                  ?.switchToTab(kTabJoin, popToRoot: true);
-            },
-          ),
-        ],
       ),
       backgroundColor: AppColors.white,
       body: SafeArea(

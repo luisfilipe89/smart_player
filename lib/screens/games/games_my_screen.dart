@@ -33,13 +33,39 @@ class _GamesMyScreenState extends State<GamesMyScreen>
   // Weather forecast cache per gameId: time("HH:00") -> condition
   final Map<String, Map<String, String>> _weatherByGameId = {};
   final Set<String> _weatherLoading = <String>{};
+  String? _highlightId;
 
   @override
   void initState() {
     super.initState();
     _tab =
         TabController(length: 2, vsync: this, initialIndex: widget.initialTab);
-    _load();
+    _highlightId = widget.highlightGameId;
+    // Schedule load after first frame to ensure Navigator/Inheriteds are ready
+    WidgetsBinding.instance.addPostFrameCallback((_) => _load());
+  }
+
+  void _scrollToHighlightedGame({int attempts = 0}) {
+    if (!mounted || _highlightId == null) return;
+    final key = _itemKeys[_highlightId!];
+    final ctx = key?.currentContext;
+    if (ctx != null) {
+      Scrollable.ensureVisible(
+        ctx,
+        duration: const Duration(milliseconds: 450),
+        curve: Curves.easeOutCubic,
+        alignment: 0.15,
+      );
+      Future.delayed(const Duration(seconds: 2), () {
+        if (mounted) setState(() => _highlightId = null);
+      });
+      return;
+    }
+    if (attempts < 6) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _scrollToHighlightedGame(attempts: attempts + 1);
+      });
+    }
   }
 
   // ---- Helpers restored ----
@@ -293,6 +319,9 @@ class _GamesMyScreenState extends State<GamesMyScreen>
             .toList();
         _loading = false;
       });
+      if (_highlightId != null) {
+        _scrollToHighlightedGame();
+      }
     } catch (_) {
       setState(() => _loading = false);
     }
@@ -552,9 +581,7 @@ class _GamesMyScreenState extends State<GamesMyScreen>
                       ),
                     ),
                     const SizedBox(width: 6),
-                    if (isMine)
-                      const Icon(Icons.edit)
-                    else
+                    if (isMine) ...[
                       IconButton(
                         padding: const EdgeInsets.all(4),
                         constraints:
@@ -567,6 +594,20 @@ class _GamesMyScreenState extends State<GamesMyScreen>
                           child: const Icon(Icons.expand_more),
                         ),
                       ),
+                    ] else ...[
+                      IconButton(
+                        padding: const EdgeInsets.all(4),
+                        constraints:
+                            const BoxConstraints(minWidth: 32, minHeight: 32),
+                        tooltip: expanded ? 'collapse' : 'expand',
+                        onPressed: () => _toggleExpanded(game.id),
+                        icon: AnimatedRotation(
+                          turns: expanded ? 0 : -0.25,
+                          duration: const Duration(milliseconds: 200),
+                          child: const Icon(Icons.expand_more),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
                 onTap: isMine ? null : () => _toggleExpanded(game.id),
@@ -655,6 +696,28 @@ class _GamesMyScreenState extends State<GamesMyScreen>
                                   }),
                                   Expanded(
                                       child: _buildParticipantsStrip(game)),
+                                  const SizedBox(width: 8),
+                                  if (isMine)
+                                    OutlinedButton(
+                                      onPressed: () {
+                                        Navigator.of(context).push(
+                                          MaterialPageRoute(
+                                            builder: (_) => GameOrganizeScreen(
+                                                initialGame: game),
+                                          ),
+                                        );
+                                      },
+                                      style: OutlinedButton.styleFrom(
+                                        minimumSize: const Size(0, 32),
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 8, vertical: 6),
+                                        textStyle: AppTextStyles.small,
+                                        foregroundColor: AppColors.primary,
+                                        side: const BorderSide(
+                                            color: AppColors.primary),
+                                      ),
+                                      child: const Icon(Icons.edit, size: 16),
+                                    ),
                                 ],
                               ),
                             ),
@@ -691,27 +754,70 @@ class _GamesMyScreenState extends State<GamesMyScreen>
                         ],
                         if (isMine) ...[
                           Expanded(
-                            child: OutlinedButton.icon(
-                              onPressed: () {
-                                Navigator.of(context).push(
-                                  MaterialPageRoute(
-                                    builder: (_) =>
-                                        GameOrganizeScreen(initialGame: game),
+                            child: ElevatedButton.icon(
+                              onPressed: () async {
+                                final confirmed = await showDialog<bool>(
+                                  context: context,
+                                  builder: (ctx) => AlertDialog(
+                                    title: Text('cancel'.tr()),
+                                    content: Text('are_you_sure'.tr()),
+                                    actions: [
+                                      TextButton(
+                                          onPressed: () =>
+                                              Navigator.pop(ctx, false),
+                                          child: Text('cancel'.tr())),
+                                      TextButton(
+                                          onPressed: () =>
+                                              Navigator.pop(ctx, true),
+                                          child: Text('ok'.tr())),
+                                    ],
                                   ),
                                 );
+                                if (confirmed == true) {
+                                  try {
+                                    if (AuthService.isSignedIn) {
+                                      await CloudGamesService.deleteGame(
+                                          game.id);
+                                    }
+                                    await GamesService.cancelGame(game.id);
+                                    if (context.mounted) {
+                                      ScaffoldMessenger.of(context)
+                                          .showSnackBar(
+                                        SnackBar(
+                                          content: Text(
+                                              'game_cancelled_successfully'
+                                                  .tr()),
+                                          backgroundColor: AppColors.green,
+                                        ),
+                                      );
+                                    }
+                                    await _load();
+                                  } catch (_) {
+                                    if (context.mounted) {
+                                      ScaffoldMessenger.of(context)
+                                          .showSnackBar(
+                                        SnackBar(
+                                          content:
+                                              Text('game_creation_failed'.tr()),
+                                          backgroundColor: AppColors.red,
+                                        ),
+                                      );
+                                    }
+                                  }
+                                }
                               },
-                              style: OutlinedButton.styleFrom(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.red,
+                                foregroundColor: Colors.white,
                                 minimumSize: const Size(0, 36),
                                 padding: const EdgeInsets.symmetric(
-                                    horizontal: 6, vertical: 6),
+                                    horizontal: 8, vertical: 6),
                                 textStyle: AppTextStyles.small,
                                 iconSize: 16,
-                                foregroundColor: AppColors.primary,
-                                side:
-                                    const BorderSide(color: AppColors.primary),
+                                elevation: 0,
                               ),
-                              icon: const Icon(Icons.edit, size: 16),
-                              label: Text('Edit'.tr()),
+                              icon: const Icon(Icons.cancel, size: 16),
+                              label: Text('cancel'.tr()),
                             ),
                           ),
                           const SizedBox(width: 6),
