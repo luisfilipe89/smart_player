@@ -70,7 +70,18 @@ class _GamesMyScreenState extends State<GamesMyScreen>
 
   // ---- Helpers restored ----
   Widget _buildParticipantsStrip(Game game) {
-    final List<String> uids = game.players;
+    final List<String> uids = List<String>.from(game.players);
+    // Include pending invited users (organizer-side) to visualize invites
+    if (AuthService.currentUserId == game.organizerId) {
+      // Fire and forget; we render once data arrives
+      CloudGamesService.getInvitedUids(game.id).then((invited) {
+        if (!mounted) return;
+        final merged = <String>{...uids, ...invited}.toList();
+        if (merged.length != uids.length) {
+          setState(() {});
+        }
+      });
+    }
     if (uids.isEmpty) return const SizedBox.shrink();
     final List<String> limited = uids.take(12).toList();
     return SizedBox(

@@ -97,6 +97,26 @@ class CloudGamesService {
     await invitesRef.update(batch);
   }
 
+  // Fetch pending invited user IDs for a game (organizer-side display)
+  static Future<List<String>> getInvitedUids(String gameId) async {
+    try {
+      final snap = await _database.ref('games/$gameId/invites').get();
+      if (!snap.exists) return const [];
+      final Map<dynamic, dynamic>? data = snap.value as Map<dynamic, dynamic>?;
+      if (data == null) return const [];
+      final List<String> uids = [];
+      data.forEach((key, value) {
+        final status = (value is Map) ? value['status']?.toString() : null;
+        if (status == null || status == 'pending') {
+          uids.add(key.toString());
+        }
+      });
+      return uids;
+    } catch (_) {
+      return const [];
+    }
+  }
+
   // List games where the current user has a pending invite
   static Future<List<Game>> getInvitedGamesForCurrentUser(
       {int limit = 100}) async {
