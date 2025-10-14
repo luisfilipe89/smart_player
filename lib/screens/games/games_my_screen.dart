@@ -70,89 +70,159 @@ class _GamesMyScreenState extends State<GamesMyScreen>
 
   // ---- Helpers restored ----
   Widget _buildParticipantsStrip(Game game) {
-    final List<String> uids = game.players;
-    if (uids.isEmpty) return const SizedBox.shrink();
-    final List<String> limited = uids.take(12).toList();
+    final bool isOrganizer = AuthService.currentUserId == game.organizerId;
+    final List<String> basePlayerUids = List<String>.from(game.players);
     return SizedBox(
       height: 44,
-      child: FutureBuilder<List<Map<String, String?>>>(
-        future: Future.wait(
-          limited.map((uid) => friends.FriendsService.fetchMinimalProfile(uid)),
-        ),
-        builder: (context, snapshot) {
-          final profiles = snapshot.data ?? const <Map<String, String?>>[];
-          if (profiles.isEmpty) return const SizedBox.shrink();
+      child: FutureBuilder<Map<String, String>>(
+        future: isOrganizer
+            ? CloudGamesService.getInviteStatuses(game.id)
+            : Future.value(const <String, String>{}),
+        builder: (context, statusesSnap) {
+          final Map<String, String> inviteStatuses =
+              statusesSnap.data ?? const <String, String>{};
+          final List<String> invited = inviteStatuses.keys.toList();
+          // Keep invitees included visually even if they haven't joined yet
+          final List<String> merged =
+              <String>{...basePlayerUids, ...invited}.toList();
+          if (merged.isEmpty) return const SizedBox.shrink();
 
-          const double radius = 18;
-          const double diameter = radius * 2;
-          const double overlap = 6;
-          const int maxVisible = 8;
-          final int total = uids.length;
-          final int visibleCount =
-              profiles.length > maxVisible ? maxVisible : profiles.length;
-          final int remaining = total - visibleCount;
+          // Fetch minimal profiles for merged set
+          final List<String> limited = merged.take(12).toList();
+          return FutureBuilder<List<Map<String, String?>>>(
+            future: Future.wait(
+              limited.map(
+                  (uid) => friends.FriendsService.fetchMinimalProfile(uid)),
+            ),
+            builder: (context, snapshot) {
+              final profiles = snapshot.data ?? const <Map<String, String?>>[];
+              if (profiles.isEmpty) return const SizedBox.shrink();
 
-          final List<Widget> items = [];
-          for (int i = 0; i < visibleCount; i++) {
-            final name = (profiles[i]['displayName'] ?? 'User').trim();
-            final photo = profiles[i]['photoURL'];
-            final initials = _initialsFromName(name);
-            items.add(Positioned(
-              left: i * (diameter - overlap),
-              top: 0,
-              child: Container(
-                padding: const EdgeInsets.all(1),
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: const Border.fromBorderSide(
-                      BorderSide(color: AppColors.primary, width: 1)),
-                ),
-                child: CircleAvatar(
-                  radius: radius,
-                  backgroundColor: AppColors.superlightgrey,
-                  backgroundImage: (photo != null && photo.isNotEmpty)
-                      ? NetworkImage(photo)
-                      : null,
-                  child: (photo == null || photo.isEmpty)
-                      ? (initials == '?'
-                          ? const Icon(Icons.person,
-                              size: 18, color: AppColors.blackopac)
-                          : Text(initials, style: AppTextStyles.small))
-                      : null,
-                ),
-              ),
-            ));
-          }
+              const double radius = 18;
+              const double diameter = radius * 2;
+              const double overlap = 6;
+              const int maxVisible = 8;
 
-          if (remaining > 0) {
-            items.add(Positioned(
-              left: visibleCount * (diameter - overlap),
-              top: 0,
-              child: Container(
-                padding: const EdgeInsets.all(1),
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: const Border.fromBorderSide(
-                      BorderSide(color: AppColors.primary, width: 1)),
-                ),
-                child: CircleAvatar(
-                  radius: radius,
-                  backgroundColor: AppColors.white,
-                  child: Text('+$remaining',
-                      style: AppTextStyles.small
-                          .copyWith(color: AppColors.primary)),
-                ),
-              ),
-            ));
-          }
+              final int total = merged.length;
+              final int visibleCount =
+                  profiles.length > maxVisible ? maxVisible : profiles.length;
+              final int remaining = total - visibleCount;
 
-          final double width =
-              (visibleCount + (remaining > 0 ? 1 : 0)) * (diameter - overlap) +
+              final Set<String> invitedSet = invited.toSet();
+
+              final List<Widget> items = [];
+              for (int i = 0; i < visibleCount; i++) {
+                final String uid = limited[i];
+                final String status = inviteStatuses[uid] ?? 'pending';
+                final bool isPending = invitedSet.contains(uid) &&
+                    !basePlayerUids.contains(uid) &&
+                    status == 'pending';
+                final bool isAccepted = invitedSet.contains(uid) &&
+                    (status == 'accepted' || basePlayerUids.contains(uid));
+                final name = (profiles[i]['displayName'] ?? 'User').trim();
+                final photo = profiles[i]['photoURL'];
+                final initials = _initialsFromName(name);
+                items.add(Positioned(
+                  left: i * (diameter - overlap),
+                  top: 0,
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(1),
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: const Border.fromBorderSide(
+                              BorderSide(color: AppColors.primary, width: 1)),
+                        ),
+                        child: CircleAvatar(
+                          radius: radius,
+                          backgroundColor: AppColors.superlightgrey,
+                          backgroundImage: (photo != null && photo.isNotEmpty)
+                              ? NetworkImage(photo)
+                              : null,
+                          child: (photo == null || photo.isEmpty)
+                              ? (initials == '?'
+                                  ? const Icon(Icons.person,
+                                      size: 18, color: AppColors.blackopac)
+                                  : Text(initials, style: AppTextStyles.small))
+                              : null,
+                        ),
+                      ),
+                      if (isPending)
+                        Positioned(
+                          right: -2,
+                          bottom: -2,
+                          child: Container(
+                            width: 14,
+                            height: 14,
+                            decoration: const BoxDecoration(
+                              color: Colors.amber,
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.hourglass_bottom,
+                              size: 10,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                      if (isAccepted && !isPending)
+                        Positioned(
+                          right: -2,
+                          bottom: -2,
+                          child: Container(
+                            width: 14,
+                            height: 14,
+                            decoration: const BoxDecoration(
+                              color: Colors.green,
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.check,
+                              size: 10,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ));
+              }
+
+              if (remaining > 0) {
+                items.add(Positioned(
+                  left: visibleCount * (diameter - overlap),
+                  top: 0,
+                  child: Container(
+                    padding: const EdgeInsets.all(1),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: const Border.fromBorderSide(
+                          BorderSide(color: AppColors.primary, width: 1)),
+                    ),
+                    child: CircleAvatar(
+                      radius: radius,
+                      backgroundColor: AppColors.white,
+                      child: Text('+$remaining',
+                          style: AppTextStyles.small
+                              .copyWith(color: AppColors.primary)),
+                    ),
+                  ),
+                ));
+              }
+
+              final double width = (visibleCount + (remaining > 0 ? 1 : 0)) *
+                      (diameter - overlap) +
                   overlap +
                   2;
 
-          return SizedBox(
-              width: width, height: diameter, child: Stack(children: items));
+              return SizedBox(
+                  width: width,
+                  height: diameter,
+                  child: Stack(children: items));
+            },
+          );
         },
       ),
     );
