@@ -3,6 +3,8 @@ import 'package:firebase_database/firebase_database.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:move_young/models/game.dart';
 import 'package:move_young/db/db_paths.dart';
+import 'package:sqflite/sqflite.dart';
+import 'package:path/path.dart' as path;
 
 class CloudGamesService {
   static FirebaseDatabase get _database => FirebaseDatabase.instance;
@@ -138,17 +140,56 @@ class CloudGamesService {
       // Attempt to join first; if successful, mark invite accepted
       final displayName = _auth.currentUser?.displayName ?? 'User';
       final joined = await joinGame(gameId, uid, displayName);
-      try {
-        await _gamesRef
-            .child(gameId)
-            .child('invites')
-            .child(uid)
-            .child('status')
-            .set('accepted');
-      } catch (_) {}
+
+      if (joined) {
+        // Mark invite as accepted
+        try {
+          await _gamesRef
+              .child(gameId)
+              .child('invites')
+              .child(uid)
+              .child('status')
+              .set('accepted');
+        } catch (_) {}
+
+        // Sync the game to local database
+        try {
+          final gameSnapshot = await _gamesRef.child(gameId).get();
+          if (gameSnapshot.exists) {
+            final gameData = gameSnapshot.value as Map<dynamic, dynamic>;
+            final game = Game.fromJson(Map<String, dynamic>.from(gameData));
+
+            // Insert into local SQLite database
+            await _syncGameToLocalDb(game);
+          }
+        } catch (_) {
+          // Local sync failed, but cloud join succeeded
+        }
+      }
+
       return joined;
     } catch (e) {
       return false;
+    }
+  }
+
+  // Helper to sync game to local database (avoids circular dependency with GamesService)
+  static Future<void> _syncGameToLocalDb(Game game) async {
+    try {
+      final dbPath = await getDatabasesPath();
+      final db = await openDatabase(
+        path.join(dbPath, 'games.db'),
+        version: 2,
+      );
+
+      // Try to insert, or update if already exists
+      await db.insert(
+        'games',
+        game.toJson(),
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    } catch (_) {
+      // Ignore local DB errors
     }
   }
 

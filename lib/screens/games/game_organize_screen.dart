@@ -10,6 +10,8 @@ import 'package:move_young/services/weather_service.dart';
 import 'package:move_young/services/games_service.dart';
 import 'package:move_young/services/auth_service.dart';
 import 'package:move_young/screens/games/games_join_screen.dart';
+import 'package:move_young/screens/games/games_my_screen.dart';
+import 'package:move_young/screens/main_scaffold.dart';
 import 'package:move_young/services/friends_service.dart';
 import 'package:move_young/services/cloud_games_service.dart';
 
@@ -543,10 +545,14 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
           );
         }
         if (mounted) {
+          // Navigate to My Games screen, Organizing tab, and refresh
+          MainScaffoldScope.maybeOf(context)
+              ?.switchToTab(kTabJoin, popToRoot: true);
+          // Push My Games with organizing tab selected (index 1)
+          await Future.delayed(const Duration(milliseconds: 50));
           Navigator.of(context).pushReplacement(
             MaterialPageRoute(
-              builder: (_) =>
-                  GamesDiscoveryScreen(highlightGameId: effectiveGame.id),
+              builder: (_) => const GamesMyScreen(initialTab: 1),
               settings: const RouteSettings(),
             ),
           );

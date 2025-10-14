@@ -489,107 +489,41 @@ class _GenericSportScreenState extends State<GenericSportScreen>
                                             Padding(
                                               padding:
                                                   AppPaddings.symmHorizontalReg,
-                                              child: Row(
-                                                children: [
-                                                  Expanded(
-                                                    child: TextField(
-                                                      controller:
-                                                          _searchController,
-                                                      textInputAction:
-                                                          TextInputAction
-                                                              .search,
-                                                      onSubmitted: (_) {
-                                                        setState(() {
-                                                          _searchQuery =
-                                                              _searchController
-                                                                  .text;
-                                                          _applyFilters();
-                                                        });
-                                                      },
-                                                      decoration:
-                                                          InputDecoration(
-                                                        hintText:
-                                                            'search_by_name_address'
-                                                                .tr(),
-                                                        filled: true,
-                                                        fillColor:
-                                                            AppColors.lightgrey,
-                                                        prefixIcon: const Icon(
-                                                            Icons.search),
-                                                        suffixIcon:
-                                                            (_searchController
-                                                                    .text
-                                                                    .isEmpty)
-                                                                ? IconButton(
-                                                                    icon: const Icon(
-                                                                        Icons
-                                                                            .map),
-                                                                    onPressed:
-                                                                        _openMapWithFiltered,
-                                                                  )
-                                                                : SizedBox(
-                                                                    width: 96,
-                                                                    child: Row(
-                                                                      mainAxisAlignment:
-                                                                          MainAxisAlignment
-                                                                              .end,
-                                                                      mainAxisSize:
-                                                                          MainAxisSize
-                                                                              .min,
-                                                                      children: [
-                                                                        IconButton(
-                                                                          icon:
-                                                                              const Icon(Icons.clear),
-                                                                          onPressed:
-                                                                              () {
-                                                                            _searchController.clear();
-                                                                            setState(() {
-                                                                              _searchQuery = '';
-                                                                              _applyFilters();
-                                                                            });
-                                                                          },
-                                                                        ),
-                                                                        IconButton(
-                                                                          icon:
-                                                                              const Icon(Icons.map),
-                                                                          onPressed:
-                                                                              _openMapWithFiltered,
-                                                                        ),
-                                                                      ],
-                                                                    ),
-                                                                  ),
-                                                        border:
-                                                            OutlineInputBorder(
-                                                          borderRadius:
-                                                              BorderRadius
-                                                                  .circular(
-                                                                      AppRadius
-                                                                          .image),
-                                                          borderSide:
-                                                              BorderSide.none,
-                                                        ),
-                                                      ),
-                                                      onChanged: (value) {
-                                                        if (_debounce
-                                                                ?.isActive ??
-                                                            false) {
-                                                          _debounce!.cancel();
-                                                        }
-                                                        _debounce = Timer(
-                                                            const Duration(
-                                                                milliseconds:
-                                                                    300), () {
-                                                          if (!mounted) return;
-                                                          setState(() {
-                                                            _searchQuery =
-                                                                value;
-                                                            _applyFilters();
-                                                          });
-                                                        });
-                                                      },
-                                                    ),
-                                                  ),
-                                                ],
+                                              child: _SearchBar(
+                                                controller: _searchController,
+                                                isEmpty: _searchController
+                                                    .text.isEmpty,
+                                                onOpenMap: _openMapWithFiltered,
+                                                onClear: () {
+                                                  _searchController.clear();
+                                                  setState(() {
+                                                    _searchQuery = '';
+                                                    _applyFilters();
+                                                  });
+                                                },
+                                                onSubmitted: (_) {
+                                                  setState(() {
+                                                    _searchQuery =
+                                                        _searchController.text;
+                                                    _applyFilters();
+                                                  });
+                                                },
+                                                onChanged: (value) {
+                                                  if (_debounce?.isActive ??
+                                                      false) {
+                                                    _debounce!.cancel();
+                                                  }
+                                                  _debounce = Timer(
+                                                      const Duration(
+                                                          milliseconds: 300),
+                                                      () {
+                                                    if (!mounted) return;
+                                                    setState(() {
+                                                      _searchQuery = value;
+                                                      _applyFilters();
+                                                    });
+                                                  });
+                                                },
                                               ),
                                             ),
                                             const SizedBox(
@@ -603,73 +537,17 @@ class _GenericSportScreenState extends State<GenericSportScreen>
                                     ),
                                     SliverPadding(
                                       padding: AppPaddings.symmHorizontalReg,
-                                      sliver: _filteredLocations.isEmpty
-                                          ? SliverToBoxAdapter(
-                                              child: Padding(
-                                                padding:
-                                                    AppPaddings.allSuperBig,
-                                                child: Center(
-                                                  child: Text(
-                                                    'no_fields_found'.tr(),
-                                                    textAlign: TextAlign.center,
-                                                    style:
-                                                        AppTextStyles.cardTitle,
-                                                  ),
-                                                ),
-                                              ),
-                                            )
-                                          : SliverList(
-                                              delegate:
-                                                  SliverChildBuilderDelegate(
-                                                (context, index) {
-                                                  final field =
-                                                      _filteredLocations[index];
-                                                  final lat = field['lat']
-                                                          ?.toString() ??
-                                                      '';
-                                                  final lon = field['lon']
-                                                          ?.toString() ??
-                                                      '';
-                                                  final distance =
-                                                      (field['distance']
-                                                                  as num?)
-                                                              ?.toDouble() ??
-                                                          double.infinity;
-
-                                                  return SportFieldCard(
-                                                    field: field,
-                                                    isFavorite: _favoriteIds
-                                                        .contains('$lat,$lon'),
-                                                    distanceText:
-                                                        _formatDistance(
-                                                            distance),
-                                                    getDisplayName:
-                                                        _getDisplayName,
-                                                    characteristics:
-                                                        _buildCharacteristicsRow(
-                                                            field),
-                                                    onToggleFavorite: () async {
-                                                      final id = '$lat,$lon';
-                                                      await _toggleFavorite(id);
-                                                      HapticsService
-                                                          .selectionClick();
-                                                    },
-                                                    onShare: () async {
-                                                      final name =
-                                                          await _getDisplayName(
-                                                              field);
-                                                      _shareLocation(
-                                                          name, lat, lon);
-                                                    },
-                                                    onDirections: () =>
-                                                        _openDirections(
-                                                            lat, lon),
-                                                  );
-                                                },
-                                                childCount:
-                                                    _filteredLocations.length,
-                                              ),
-                                            ),
+                                      sliver: _FieldsSliverList(
+                                        filteredLocations: _filteredLocations,
+                                        favoriteIds: _favoriteIds,
+                                        formatDistance: _formatDistance,
+                                        getDisplayName: _getDisplayName,
+                                        characteristicsBuilder:
+                                            _buildCharacteristicsRow,
+                                        onToggleFavorite: _toggleFavorite,
+                                        onDirections: _openDirections,
+                                        onShare: _shareLocation,
+                                      ),
                                     ),
                                     const SliverToBoxAdapter(
                                       child: SizedBox(height: AppHeights.reg),
@@ -712,4 +590,141 @@ class _PinnedHeaderDelegate extends SliverPersistentHeaderDelegate {
   @override
   bool shouldRebuild(covariant SliverPersistentHeaderDelegate oldDelegate) =>
       true;
+}
+
+// --- Extracted widgets ---
+
+class _SearchBar extends StatelessWidget {
+  final TextEditingController controller;
+  final bool isEmpty;
+  final void Function(String) onSubmitted;
+  final ValueChanged<String> onChanged;
+  final VoidCallback onOpenMap;
+  final VoidCallback onClear;
+
+  const _SearchBar({
+    required this.controller,
+    required this.isEmpty,
+    required this.onSubmitted,
+    required this.onChanged,
+    required this.onOpenMap,
+    required this.onClear,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: TextField(
+            controller: controller,
+            textInputAction: TextInputAction.search,
+            onSubmitted: onSubmitted,
+            decoration: InputDecoration(
+              hintText: 'search_by_name_address'.tr(),
+              filled: true,
+              fillColor: AppColors.lightgrey,
+              prefixIcon: const Icon(Icons.search),
+              suffixIcon: isEmpty
+                  ? IconButton(
+                      icon: const Icon(Icons.map), onPressed: onOpenMap)
+                  : SizedBox(
+                      width: 96,
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.clear),
+                            onPressed: onClear,
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.map),
+                            onPressed: onOpenMap,
+                          ),
+                        ],
+                      ),
+                    ),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(AppRadius.image),
+                borderSide: BorderSide.none,
+              ),
+            ),
+            onChanged: onChanged,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _FieldsSliverList extends StatelessWidget {
+  final List<Map<String, dynamic>> filteredLocations;
+  final Set<String> favoriteIds;
+  final String Function(double) formatDistance;
+  final Future<String> Function(Map<String, dynamic>) getDisplayName;
+  final Widget Function(Map<String, dynamic>) characteristicsBuilder;
+  final Future<void> Function(String id) onToggleFavorite;
+  final void Function(String lat, String lon) onDirections;
+  final Future<void> Function(String name, String lat, String lon) onShare;
+
+  const _FieldsSliverList({
+    required this.filteredLocations,
+    required this.favoriteIds,
+    required this.formatDistance,
+    required this.getDisplayName,
+    required this.characteristicsBuilder,
+    required this.onToggleFavorite,
+    required this.onDirections,
+    required this.onShare,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (filteredLocations.isEmpty) {
+      return SliverToBoxAdapter(
+        child: Padding(
+          padding: AppPaddings.allSuperBig,
+          child: Center(
+            child: Text(
+              'no_fields_found'.tr(),
+              textAlign: TextAlign.center,
+              style: AppTextStyles.cardTitle,
+            ),
+          ),
+        ),
+      );
+    }
+
+    return SliverList(
+      delegate: SliverChildBuilderDelegate(
+        (context, index) {
+          final field = filteredLocations[index];
+          final lat = field['lat']?.toString() ?? '';
+          final lon = field['lon']?.toString() ?? '';
+          final distance =
+              (field['distance'] as num?)?.toDouble() ?? double.infinity;
+
+          return SportFieldCard(
+            field: field,
+            isFavorite: favoriteIds.contains('$lat,$lon'),
+            distanceText: formatDistance(distance),
+            getDisplayName: getDisplayName,
+            characteristics: characteristicsBuilder(field),
+            onToggleFavorite: () async {
+              final id = '$lat,$lon';
+              await onToggleFavorite(id);
+              HapticsService.selectionClick();
+            },
+            onShare: () async {
+              final name = await getDisplayName(field);
+              await onShare(name, lat, lon);
+            },
+            onDirections: () => onDirections(lat, lon),
+          );
+        },
+        childCount: filteredLocations.length,
+      ),
+    );
+  }
 }

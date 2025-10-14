@@ -106,6 +106,12 @@ class _GamesDiscoveryScreenState extends State<GamesDiscoveryScreen> {
         }).toList();
       }
 
+      // Exclude games already joined by current user
+      final String myUid = AuthService.currentUserId ?? '';
+      if (myUid.isNotEmpty) {
+        games = games.where((g) => !g.players.contains(myUid)).toList();
+      }
+
       setState(() {
         _games = games;
         _isLoading = false;
@@ -134,8 +140,13 @@ class _GamesDiscoveryScreenState extends State<GamesDiscoveryScreen> {
     try {
       final invited = await CloudGamesService.getInvitedGamesForCurrentUser();
       if (!mounted) return;
+      // Exclude if already joined (defensive)
+      final String myUid = AuthService.currentUserId ?? '';
+      final filtered = myUid.isEmpty
+          ? invited
+          : invited.where((g) => !g.players.contains(myUid)).toList();
       setState(() {
-        _invitedGames = invited;
+        _invitedGames = filtered;
       });
     } catch (_) {}
   }
@@ -160,6 +171,11 @@ class _GamesDiscoveryScreenState extends State<GamesDiscoveryScreen> {
       if (success) {
         HapticsService.lightImpact();
         if (mounted) {
+          // Optimistically remove from lists so it disappears immediately
+          setState(() {
+            _games.removeWhere((g) => g.id == game.id);
+            _invitedGames.removeWhere((g) => g.id == game.id);
+          });
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text('joined_successfully'.tr()),
@@ -174,7 +190,7 @@ class _GamesDiscoveryScreenState extends State<GamesDiscoveryScreen> {
             ),
           );
         }
-        _loadGames(); // Refresh the list
+        _loadGames(); // Refresh the list (defensive)
       } else {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -390,16 +406,24 @@ class _GamesDiscoveryScreenState extends State<GamesDiscoveryScreen> {
 
   Widget _buildGameCard(Game game) {
     final bool isHighlighted = game.id == _highlightId;
+    final bool isInvited = _invitedGames.any((g) => g.id == game.id);
     return Card(
-      margin: const EdgeInsets.only(bottom: AppHeights.superbig),
-      elevation: 2,
+      margin: const EdgeInsets.only(bottom: AppHeights.reg),
+      elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppRadius.card),
+        side: BorderSide(
+          color: isInvited
+              ? AppColors.blue.withValues(alpha: 0.3)
+              : AppColors.lightgrey.withValues(alpha: 0.5),
+          width: isInvited ? 2 : 1,
+        ),
       ),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 300),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(AppRadius.card),
+          gradient: null,
           boxShadow: isHighlighted
               ? [
                   BoxShadow(
@@ -409,7 +433,13 @@ class _GamesDiscoveryScreenState extends State<GamesDiscoveryScreen> {
                     offset: const Offset(0, 4),
                   ),
                 ]
-              : const [],
+              : [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.04),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
         ),
         child: InkWell(
           onTap: () {},
@@ -419,6 +449,38 @@ class _GamesDiscoveryScreenState extends State<GamesDiscoveryScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                if (isInvited)
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: AppColors.blue,
+                      borderRadius: BorderRadius.circular(AppRadius.smallCard),
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppColors.blue.withValues(alpha: 0.25),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.mail, size: 14, color: Colors.white),
+                        const SizedBox(width: 6),
+                        Text(
+                          'Invited',
+                          style: AppTextStyles.small.copyWith(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 0.3,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 Row(
                   children: [
                     Container(
