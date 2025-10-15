@@ -41,8 +41,20 @@ class _GamesMyScreenState extends State<GamesMyScreen>
     _tab =
         TabController(length: 2, vsync: this, initialIndex: widget.initialTab);
     _highlightId = widget.highlightGameId;
+    // Auto-refresh when user switches to the Joining tab (index 0)
+    _tab.addListener(() {
+      if (!_tab.indexIsChanging && _tab.index == 0) {
+        _load();
+      }
+    });
     // Schedule load after first frame to ensure Navigator/Inheriteds are ready
     WidgetsBinding.instance.addPostFrameCallback((_) => _load());
+  }
+
+  @override
+  void dispose() {
+    _tab.dispose();
+    super.dispose();
   }
 
   void _scrollToHighlightedGame({int attempts = 0}) {

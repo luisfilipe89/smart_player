@@ -236,6 +236,11 @@ class _GamesDiscoveryScreenState extends State<GamesDiscoveryScreen> {
             _invitedGames.removeWhere((g) => g.id == game.id);
           });
           _showJoinedSnack();
+          MainScaffoldScope.maybeOf(context)?.openMyGames(
+            initialTab: 0,
+            highlightGameId: game.id,
+            popToRoot: true,
+          );
         }
         _loadGames(); // Refresh the list (defensive)
       } else {
@@ -688,6 +693,12 @@ class _GamesDiscoveryScreenState extends State<GamesDiscoveryScreen> {
                                           game.id);
                                   if (ok) {
                                     _showJoinedSnack();
+                                    MainScaffoldScope.maybeOf(context)
+                                        ?.openMyGames(
+                                      initialTab: 0,
+                                      highlightGameId: game.id,
+                                      popToRoot: true,
+                                    );
                                   } else if (context.mounted) {
                                     ScaffoldMessenger.of(context).showSnackBar(
                                       SnackBar(

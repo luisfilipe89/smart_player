@@ -490,13 +490,9 @@ class CloudGamesService {
       final gameData = gameSnapshot.value as Map<dynamic, dynamic>;
       final game = Game.fromJson(Map<String, dynamic>.from(gameData));
 
-      // Check if player is in the game
-      if (!game.players.contains(playerId)) {
-        // Player not in game
-        return false;
-      }
-
-      // Update game
+      // Proceed idempotently even if the player is not yet visible in the
+      // players list (RTDB eventual consistency right after accept).
+      // Update game: remove the player if present and recompute count.
       final updatedPlayers =
           game.players.where((id) => id != playerId).toList();
       await gameRef.update({
@@ -521,7 +517,7 @@ class CloudGamesService {
             .set('left');
       } catch (_) {}
 
-      // Player left game successfully
+      // Player left game successfully (or was already not listed) — treat as ok
       return true;
     } catch (e) {
       // Error leaving game
