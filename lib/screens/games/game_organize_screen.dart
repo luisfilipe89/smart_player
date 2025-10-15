@@ -283,6 +283,18 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
   }
 
   Future<void> _updateGame() async {
+    // If no changes in edit mode, show info and exit early
+    if (widget.initialGame != null && !_hasChanges) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('No changes were made'),
+            backgroundColor: AppColors.grey,
+          ),
+        );
+      }
+      return;
+    }
     // Final guard: block past date/time
     if (_selectedDate != null && _selectedTime != null) {
       final now = DateTime.now();
