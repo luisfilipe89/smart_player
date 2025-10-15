@@ -51,7 +51,11 @@ class CloudGamesService {
             currentPlayers: initialPlayers.length,
           )
           .toCloudJson();
-      gameData['updatedAt'] = DateTime.now().millisecondsSinceEpoch;
+      final int nowMs = DateTime.now().millisecondsSinceEpoch;
+      gameData['updatedAt'] = nowMs;
+      // Track last organizer-driven edit separately from generic updates
+      // so player joins/leaves don't trigger 'Modified' for invitees.
+      gameData['lastOrganizerEditAt'] = gameData['createdAt'] ?? nowMs;
 
       // Auto-enroll organizer as a player (already reflected in data)
 
@@ -339,8 +343,10 @@ class CloudGamesService {
       final String organizerId = data['organizerId']?.toString() ?? '';
       if (organizerId != uid) throw Exception('not_authorized');
 
+      final int nowMs = DateTime.now().millisecondsSinceEpoch;
       final Map<String, dynamic> updates = {
-        'updatedAt': DateTime.now().millisecondsSinceEpoch,
+        'updatedAt': nowMs,
+        'lastOrganizerEditAt': nowMs,
       };
       if (dateTime != null) updates['dateTime'] = dateTime.toIso8601String();
       if (location != null) updates['location'] = location;
@@ -523,6 +529,7 @@ class CloudGamesService {
         'players': updatedPlayers,
         'currentPlayers': updatedPlayers.length,
         'updatedAt': DateTime.now().millisecondsSinceEpoch,
+        // Note: do NOT touch lastOrganizerEditAt on join
       });
 
       // Add game to user's joined games
@@ -572,6 +579,7 @@ class CloudGamesService {
         'players': updatedPlayers,
         'currentPlayers': updatedPlayers.length,
         'updatedAt': DateTime.now().millisecondsSinceEpoch,
+        // Note: do NOT touch lastOrganizerEditAt on leave
       });
 
       // Remove game from user's joined games
@@ -701,6 +709,37 @@ class CloudGamesService {
       return games;
     } catch (e) {
       return [];
+    }
+  }
+
+  // Check if the organizer modified the game after the invite was sent to the current user
+  // Returns true if current user's invite exists and game's updatedAt > invite.ts, and status is not declined/left
+  static Future<bool> isInviteModifiedForCurrentUser(String gameId) async {
+    final uid = _currentUserId;
+    if (uid == null) return false;
+    try {
+      final DataSnapshot snap = await _gamesRef.child(gameId).get();
+      if (!snap.exists) return false;
+      final Map<dynamic, dynamic> data = snap.value as Map<dynamic, dynamic>;
+      final dynamic lastEditRaw = data['lastOrganizerEditAt'];
+      final int lastEdit = lastEditRaw is int
+          ? lastEditRaw
+          : int.tryParse(lastEditRaw?.toString() ?? '') ?? 0;
+      if (lastEdit == 0) return false;
+
+      final dynamic invites = data['invites'];
+      if (invites is! Map || !invites.containsKey(uid)) return false;
+      final dynamic entry = invites[uid];
+      if (entry is! Map) return false;
+      final String status = entry['status']?.toString() ?? 'pending';
+      if (status == 'declined' || status == 'left') return false;
+      final dynamic tsRaw = entry['ts'];
+      final int ts =
+          tsRaw is int ? tsRaw : int.tryParse(tsRaw?.toString() ?? '') ?? 0;
+      if (ts == 0) return false;
+      return lastEdit > ts;
+    } catch (_) {
+      return false;
     }
   }
 }

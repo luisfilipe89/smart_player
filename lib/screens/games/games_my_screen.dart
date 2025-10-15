@@ -712,6 +712,44 @@ class _GamesMyScreenState extends State<GamesMyScreen>
                               ],
                             ),
                           ),
+                        if (!isMine)
+                          FutureBuilder<bool>(
+                            future: CloudGamesService
+                                .isInviteModifiedForCurrentUser(game.id),
+                            builder: (context, snap) {
+                              final modified = snap.data == true;
+                              if (!modified) return const SizedBox.shrink();
+                              return Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: Colors.orange.withValues(alpha: 0.10),
+                                  border: const Border.fromBorderSide(
+                                      BorderSide(
+                                          color: AppColors.lightgrey,
+                                          width: 1)),
+                                  borderRadius: BorderRadius.circular(
+                                      AppRadius.smallCard),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Container(
+                                        width: 6,
+                                        height: 6,
+                                        decoration: const BoxDecoration(
+                                            color: Colors.orange,
+                                            shape: BoxShape.circle)),
+                                    const SizedBox(width: 6),
+                                    Text('Modified',
+                                        style: AppTextStyles.small.copyWith(
+                                            color: Colors.orange,
+                                            fontWeight: FontWeight.bold)),
+                                  ],
+                                ),
+                              );
+                            },
+                          ),
                         if (game.isFull)
                           Container(
                             padding: const EdgeInsets.symmetric(
