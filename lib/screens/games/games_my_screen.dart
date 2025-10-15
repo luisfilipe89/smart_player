@@ -129,13 +129,16 @@ class _GamesMyScreenState extends State<GamesMyScreen>
               final List<Widget> items = [];
               for (int i = 0; i < visibleCount; i++) {
                 final String uid = limited[i];
+                final bool inPlayers = basePlayerUids.contains(uid);
                 final String status = inviteStatuses[uid] ?? 'pending';
                 final bool isPending = invitedSet.contains(uid) &&
-                    !basePlayerUids.contains(uid) &&
+                    !inPlayers &&
                     status == 'pending';
-                final bool isAccepted = invitedSet.contains(uid) &&
-                    (status == 'accepted' || basePlayerUids.contains(uid));
+                // Joining overrides historical invite status
+                final bool isAccepted = inPlayers ||
+                    (invitedSet.contains(uid) && status == 'accepted');
                 final bool isDeclinedOrLeft = invitedSet.contains(uid) &&
+                    !inPlayers &&
                     (status == 'declined' || status == 'left');
                 final name = (profiles[i]['displayName'] ?? 'User').trim();
                 final photo = profiles[i]['photoURL'];

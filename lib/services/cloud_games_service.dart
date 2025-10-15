@@ -497,6 +497,15 @@ class CloudGamesService {
           .child(gameId)
           .set(true);
 
+      // Ensure any existing invite record is marked as accepted
+      try {
+        await gameRef
+            .child('invites')
+            .child(playerId)
+            .child('status')
+            .set('accepted');
+      } catch (_) {}
+
       // Player joined game successfully
       return true;
     } catch (e) {
