@@ -140,6 +140,56 @@ class CloudGamesService {
     }
   }
 
+  // Fetch invite status for current user for a specific game: 'pending' | 'accepted' | 'declined' | null
+  static Future<String?> getInviteStatusForCurrentUser(String gameId) async {
+    final uid = _currentUserId;
+    if (uid == null) return null;
+    try {
+      // Preferred path: explicit status node
+      final DataSnapshot s1 =
+          await _database.ref('games/$gameId/invites/$uid/status').get();
+      if (s1.exists) return s1.value?.toString();
+
+      // Fallback: entire invite entry
+      final DataSnapshot s2 =
+          await _database.ref('games/$gameId/invites/$uid').get();
+      if (!s2.exists) return null;
+      final dynamic v = s2.value;
+      if (v is Map && v['status'] != null) {
+        return v['status'].toString();
+      }
+      // Treat bare invite entries as pending by default
+      return 'pending';
+    } catch (_) {
+      return null;
+    }
+  }
+
+  // Realtime stream of pending invites count for current user (upcoming only)
+  static Stream<int> watchPendingInvitesCount({int limit = 200}) {
+    final uid = _currentUserId;
+    if (uid == null) return Stream<int>.value(0);
+    try {
+      final Query q =
+          _gamesRef.orderByChild('invites/$uid/status').equalTo('pending');
+      return q.onValue.map((event) {
+        if (!event.snapshot.exists) return 0;
+        int count = 0;
+        for (final child in event.snapshot.children) {
+          try {
+            final Map<dynamic, dynamic> gameData =
+                child.value as Map<dynamic, dynamic>;
+            final game = Game.fromJson(Map<String, dynamic>.from(gameData));
+            if (game.isUpcoming) count++;
+          } catch (_) {}
+        }
+        return count;
+      });
+    } catch (_) {
+      return Stream<int>.value(0);
+    }
+  }
+
   // List games where the current user has a pending invite
   static Future<List<Game>> getInvitedGamesForCurrentUser(
       {int limit = 100}) async {

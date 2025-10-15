@@ -594,8 +594,10 @@ class _GamesDiscoveryScreenState extends State<GamesDiscoveryScreen> {
                 const SizedBox(height: AppHeights.reg),
                 SizedBox(
                   width: double.infinity,
-                  child: Builder(
-                    builder: (context) {
+                  child: FutureBuilder<String?>(
+                    future: CloudGamesService.getInviteStatusForCurrentUser(
+                        game.id),
+                    builder: (context, statusSnap) {
                       final isOwnerOrAdmin = AuthService.isSignedIn &&
                           (AuthService.currentUserId == game.organizerId ||
                               (AuthService.currentUser?.email?.toLowerCase() ==
@@ -620,12 +622,14 @@ class _GamesDiscoveryScreenState extends State<GamesDiscoveryScreen> {
                           ),
                         );
                       }
+
                       final String myUid = AuthService.currentUserId ?? '';
-                      final bool isInvited =
-                          _invitedGames.any((g) => g.id == game.id);
                       final bool isJoined = myUid.isNotEmpty &&
                           game.players.any((p) => p == myUid);
-                      if (isInvited) {
+                      final String? inviteStatus = statusSnap.data;
+                      final bool isInvitedPending = inviteStatus == 'pending';
+
+                      if (isInvitedPending) {
                         return Row(
                           children: [
                             Expanded(
@@ -702,7 +706,9 @@ class _GamesDiscoveryScreenState extends State<GamesDiscoveryScreen> {
                             ),
                           ],
                         );
-                      } else if (isJoined) {
+                      }
+
+                      if (isJoined) {
                         return ElevatedButton(
                           onPressed: () async {
                             if (myUid.isEmpty) return;
@@ -734,6 +740,7 @@ class _GamesDiscoveryScreenState extends State<GamesDiscoveryScreen> {
                           child: Text('cancel_game'.tr()),
                         );
                       }
+
                       return ElevatedButton(
                         onPressed: game.hasSpace ? () => _joinGame(game) : null,
                         style: ElevatedButton.styleFrom(

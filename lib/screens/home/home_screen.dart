@@ -15,6 +15,7 @@ import 'package:move_young/screens/profile/profile_screen.dart';
 import 'package:move_young/screens/friends/friends_screen.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:move_young/services/cloud_games_service.dart';
+import 'dart:async';
 
 // Loading state for events
 enum _LoadState { idle, loading, success, error }
@@ -30,12 +31,17 @@ class _HomeScreenNewState extends State<HomeScreenNew> {
   List<Event> events = [];
   _LoadState _state = _LoadState.idle;
   int _pendingInvites = 0;
+  StreamSubscription<int>? _invitesSub;
 
   @override
   void initState() {
     super.initState();
     _fetch();
     _refreshInvites();
+    // Watch real-time pending invites count
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _watchPendingInvites();
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       precacheImage(
           const AssetImage('assets/images/general_public.jpg'), context);
@@ -44,6 +50,7 @@ class _HomeScreenNewState extends State<HomeScreenNew> {
 
   @override
   void dispose() {
+    _invitesSub?.cancel();
     super.dispose();
   }
 
@@ -74,6 +81,16 @@ class _HomeScreenNewState extends State<HomeScreenNew> {
       final invited = await CloudGamesService.getInvitedGamesForCurrentUser();
       if (!mounted) return;
       setState(() => _pendingInvites = invited.length);
+    } catch (_) {}
+  }
+
+  void _watchPendingInvites() {
+    _invitesSub?.cancel();
+    try {
+      _invitesSub = CloudGamesService.watchPendingInvitesCount().listen((n) {
+        if (!mounted) return;
+        setState(() => _pendingInvites = n);
+      });
     } catch (_) {}
   }
 
