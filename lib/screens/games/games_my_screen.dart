@@ -516,6 +516,16 @@ class _GamesMyScreenState extends State<GamesMyScreen>
   }
 
   Widget _buildGameTile(Game game) {
+    return StreamBuilder<Game?>(
+      stream: CloudGamesService.watchGame(game.id),
+      builder: (context, snap) {
+        final Game effective = snap.data ?? game;
+        return _buildGameTileBody(effective);
+      },
+    );
+  }
+
+  Widget _buildGameTileBody(Game game) {
     final key = _itemKeys.putIfAbsent(game.id, () => GlobalKey());
     final isMine = AuthService.currentUserId == game.organizerId;
     final expanded = _expanded.contains(game.id);
