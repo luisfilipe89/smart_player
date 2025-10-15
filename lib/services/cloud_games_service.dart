@@ -146,8 +146,8 @@ class CloudGamesService {
     final uid = _currentUserId;
     if (uid == null) return [];
     try {
-      Query query =
-          _gamesRef.orderByChild('isActive').equalTo(true).limitToFirst(limit);
+      // Fetch latest games to ensure newly created invites surface quickly
+      Query query = _gamesRef.orderByChild('createdAt').limitToLast(limit);
       final snapshot = await query.get();
       if (!snapshot.exists) return [];
       final List<Game> invited = [];
