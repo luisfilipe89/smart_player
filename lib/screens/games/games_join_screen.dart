@@ -9,6 +9,7 @@ import 'package:move_young/services/cloud_games_service.dart';
 import 'package:move_young/services/friends_service.dart' as friends;
 import 'package:move_young/services/auth_service.dart';
 import 'package:move_young/services/haptics_service.dart';
+import 'dart:async';
 import 'package:move_young/screens/main_scaffold.dart';
 
 class GamesDiscoveryScreen extends StatefulWidget {
@@ -32,6 +33,7 @@ class _GamesDiscoveryScreenState extends State<GamesDiscoveryScreen> {
   final ScrollController _listController = ScrollController();
   final Map<String, GlobalKey> _itemKeys = {};
   String? _highlightId;
+  StreamSubscription<List<Game>>? _publicGamesSub;
 
   final List<String> _sports = [
     'all',
@@ -50,6 +52,7 @@ class _GamesDiscoveryScreenState extends State<GamesDiscoveryScreen> {
     _highlightId = widget.highlightGameId;
     _loadGames();
     _loadInvitedGames();
+    _watchPublicGames();
   }
 
   // Try a few times to ensure the list is built before scrolling
@@ -80,6 +83,7 @@ class _GamesDiscoveryScreenState extends State<GamesDiscoveryScreen> {
   void dispose() {
     _searchController.dispose();
     _listController.dispose();
+    _publicGamesSub?.cancel();
     super.dispose();
   }
 
@@ -134,6 +138,41 @@ class _GamesDiscoveryScreenState extends State<GamesDiscoveryScreen> {
         );
       }
     }
+  }
+
+  void _watchPublicGames() {
+    try {
+      _publicGamesSub?.cancel();
+      _publicGamesSub =
+          CloudGamesService.watchPublicGames(limit: 200).listen((all) {
+        // Keep only upcoming & active, then apply current filters
+        final now = DateTime.now();
+        List<Game> games =
+            all.where((g) => g.dateTime.isAfter(now) && g.isActive).toList();
+
+        if (_selectedSport != 'all') {
+          games = games.where((g) => g.sport == _selectedSport).toList();
+        }
+
+        if (_searchQuery.isNotEmpty) {
+          final q = _searchQuery.toLowerCase();
+          games = games.where((game) {
+            return game.location.toLowerCase().contains(q) ||
+                game.organizerName.toLowerCase().contains(q);
+          }).toList();
+        }
+
+        final String myUid = AuthService.currentUserId ?? '';
+        if (myUid.isNotEmpty) {
+          games = games.where((g) => !g.players.contains(myUid)).toList();
+        }
+
+        if (!mounted) return;
+        setState(() {
+          _games = games;
+        });
+      });
+    } catch (_) {}
   }
 
   Future<void> _loadInvitedGames() async {
@@ -628,6 +667,7 @@ class _GamesDiscoveryScreenState extends State<GamesDiscoveryScreen> {
                           game.players.any((p) => p == myUid);
                       final String? inviteStatus = statusSnap.data;
                       final bool isInvitedPending = inviteStatus == 'pending';
+                      final bool isLeft = inviteStatus == 'left';
 
                       if (isInvitedPending) {
                         return Row(
@@ -702,6 +742,63 @@ class _GamesDiscoveryScreenState extends State<GamesDiscoveryScreen> {
                                   ),
                                 ),
                                 child: Text('decline'.tr()),
+                              ),
+                            ),
+                          ],
+                        );
+                      }
+
+                      if (isLeft) {
+                        return Row(
+                          children: [
+                            Expanded(
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 10, vertical: 8),
+                                decoration: BoxDecoration(
+                                  color: AppColors.lightgrey,
+                                  borderRadius: BorderRadius.circular(
+                                      AppRadius.smallCard),
+                                ),
+                                child: Text(
+                                  'You left this invited game',
+                                  style: AppTextStyles.small,
+                                  textAlign: TextAlign.center,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: ElevatedButton(
+                                onPressed: () async {
+                                  final ok =
+                                      await CloudGamesService.acceptInvite(
+                                          game.id);
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(ok
+                                            ? 'joined_successfully'.tr()
+                                            : 'loading_error'.tr()),
+                                        backgroundColor: ok
+                                            ? AppColors.green
+                                            : AppColors.red,
+                                      ),
+                                    );
+                                  }
+                                  await _loadInvitedGames();
+                                  await _loadGames();
+                                },
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppColors.blue,
+                                  foregroundColor: Colors.white,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius:
+                                        BorderRadius.circular(AppRadius.card),
+                                  ),
+                                  elevation: 0,
+                                ),
+                                child: const Text('Rejoin'),
                               ),
                             ),
                           ],
