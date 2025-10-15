@@ -350,6 +350,16 @@ class GamesService {
     );
   }
 
+  // Remove local record for a specific game (used for hiding canceled games locally)
+  static Future<void> removeLocalGame(String gameId) async {
+    final db = await database;
+    await db.delete(
+      _tableName,
+      where: 'id = ?',
+      whereArgs: [gameId],
+    );
+  }
+
   // Search games by sport
   static Future<List<Game>> searchGamesBySport(String sport) async {
     final db = await database;

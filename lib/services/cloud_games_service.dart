@@ -180,7 +180,8 @@ class CloudGamesService {
             final Map<dynamic, dynamic> gameData =
                 child.value as Map<dynamic, dynamic>;
             final game = Game.fromJson(Map<String, dynamic>.from(gameData));
-            if (game.isUpcoming) count++;
+            // Only count invites for active, upcoming games
+            if (game.isActive && game.isUpcoming) count++;
           } catch (_) {}
         }
         return count;
@@ -211,8 +212,8 @@ class CloudGamesService {
             if (entry is Map &&
                 (entry['status']?.toString() ?? 'pending') == 'pending') {
               final game = Game.fromJson(Map<String, dynamic>.from(gameData));
-              // Only show upcoming invites
-              if (game.isUpcoming) invited.add(game);
+              // Only show upcoming, active invites
+              if (game.isActive && game.isUpcoming) invited.add(game);
             }
           }
         } catch (_) {}
@@ -352,6 +353,20 @@ class CloudGamesService {
       // Error deleting game from cloud
       rethrow;
     }
+  }
+
+  // Remove only my mapping to a joined game (does not modify the game itself)
+  static Future<void> removeFromMyJoined(String gameId) async {
+    final uid = _currentUserId;
+    if (uid == null) return;
+    await _usersRef.child(uid).child('joinedGames').child(gameId).remove();
+  }
+
+  // Remove only my mapping to a created game (organizer view cleanup)
+  static Future<void> removeFromMyCreated(String gameId) async {
+    final uid = _currentUserId;
+    if (uid == null) return;
+    await _usersRef.child(uid).child('createdGames').child(gameId).remove();
   }
 
   // Get all public games

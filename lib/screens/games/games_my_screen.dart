@@ -355,6 +355,58 @@ class _GamesMyScreenState extends State<GamesMyScreen>
     if (ok) await _load();
   }
 
+  Future<void> _removeFromJoined(Game game) async {
+    try {
+      if (AuthService.isSignedIn) {
+        await CloudGamesService.removeFromMyJoined(game.id);
+      }
+      await GamesService.removeLocalGame(game.id);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Removed from My Games'),
+          backgroundColor: AppColors.grey,
+        ),
+      );
+      await _load();
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('action_failed'.tr()),
+          backgroundColor: AppColors.red,
+        ),
+      );
+    }
+  }
+
+  Future<void> _removeFromCreated(Game game) async {
+    try {
+      if (AuthService.isSignedIn) {
+        await CloudGamesService.removeFromMyCreated(game.id);
+        // Organizer is auto-joined; also remove from my joined mapping
+        await CloudGamesService.removeFromMyJoined(game.id);
+      }
+      await GamesService.removeLocalGame(game.id);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Removed from My Games'),
+          backgroundColor: AppColors.grey,
+        ),
+      );
+      await _load();
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('action_failed'.tr()),
+          backgroundColor: AppColors.red,
+        ),
+      );
+    }
+  }
+
   Future<void> _messageOrganizer(Game game) async {
     final info = game.contactInfo?.trim();
     if (info == null || info.isEmpty) return;
@@ -906,7 +958,9 @@ class _GamesMyScreenState extends State<GamesMyScreen>
                         if (!isMine && _isUserJoined(game)) ...[
                           Expanded(
                             child: ElevatedButton.icon(
-                              onPressed: () => _leaveGame(game),
+                              onPressed: () => game.isActive
+                                  ? _leaveGame(game)
+                                  : _removeFromJoined(game),
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: AppColors.red,
                                 foregroundColor: Colors.white,
@@ -916,8 +970,12 @@ class _GamesMyScreenState extends State<GamesMyScreen>
                                 textStyle: AppTextStyles.small,
                                 iconSize: 16,
                               ),
-                              icon: const Icon(Icons.logout, size: 16),
-                              label: const Text('Leave'),
+                              icon: Icon(
+                                  game.isActive
+                                      ? Icons.logout
+                                      : Icons.delete_outline,
+                                  size: 16),
+                              label: Text(game.isActive ? 'Leave' : 'Remove'),
                             ),
                           ),
                           const SizedBox(width: 6),
@@ -926,6 +984,10 @@ class _GamesMyScreenState extends State<GamesMyScreen>
                           Expanded(
                             child: ElevatedButton.icon(
                               onPressed: () async {
+                                if (!game.isActive) {
+                                  await _removeFromCreated(game);
+                                  return;
+                                }
                                 final confirmed = await showDialog<bool>(
                                   context: context,
                                   builder: (ctx) => AlertDialog(
@@ -986,8 +1048,13 @@ class _GamesMyScreenState extends State<GamesMyScreen>
                                 iconSize: 16,
                                 elevation: 0,
                               ),
-                              icon: const Icon(Icons.cancel, size: 16),
-                              label: Text('cancel'.tr()),
+                              icon: Icon(
+                                  game.isActive
+                                      ? Icons.cancel
+                                      : Icons.delete_outline,
+                                  size: 16),
+                              label: Text(
+                                  game.isActive ? 'cancel'.tr() : 'Remove'),
                             ),
                           ),
                           const SizedBox(width: 6),
