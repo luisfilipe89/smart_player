@@ -236,11 +236,6 @@ class _GamesDiscoveryScreenState extends State<GamesDiscoveryScreen> {
             _invitedGames.removeWhere((g) => g.id == game.id);
           });
           _showJoinedSnack();
-          MainScaffoldScope.maybeOf(context)?.openMyGames(
-            initialTab: 0,
-            highlightGameId: game.id,
-            popToRoot: true,
-          );
         }
         _loadGames(); // Refresh the list (defensive)
       } else {
