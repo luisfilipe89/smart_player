@@ -175,6 +175,26 @@ class _GamesDiscoveryScreenState extends State<GamesDiscoveryScreen> {
     } catch (_) {}
   }
 
+  void _showJoinedSnack() {
+    if (!mounted) return;
+    final messenger =
+        ScaffoldMessenger.maybeOf(context) ?? ScaffoldMessenger.of(context);
+    messenger.clearSnackBars();
+    messenger.showSnackBar(
+      SnackBar(
+        content: const Text('Joined! Find it under My Games > Joining'),
+        backgroundColor: AppColors.green,
+        action: SnackBarAction(
+          label: 'view_in_my_games'.tr(),
+          onPressed: () {
+            MainScaffoldScope.maybeOf(context)
+                ?.switchToTab(kTabJoin, popToRoot: true);
+          },
+        ),
+      ),
+    );
+  }
+
   Future<void> _loadInvitedGames() async {
     try {
       final invited = await CloudGamesService.getInvitedGamesForCurrentUser();
@@ -215,19 +235,7 @@ class _GamesDiscoveryScreenState extends State<GamesDiscoveryScreen> {
             _games.removeWhere((g) => g.id == game.id);
             _invitedGames.removeWhere((g) => g.id == game.id);
           });
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('joined_successfully'.tr()),
-              backgroundColor: AppColors.green,
-              action: SnackBarAction(
-                label: 'view_in_my_games'.tr(),
-                onPressed: () {
-                  MainScaffoldScope.maybeOf(context)
-                      ?.switchToTab(kTabJoin, popToRoot: true);
-                },
-              ),
-            ),
-          );
+          _showJoinedSnack();
         }
         _loadGames(); // Refresh the list (defensive)
       } else {
@@ -678,26 +686,13 @@ class _GamesDiscoveryScreenState extends State<GamesDiscoveryScreen> {
                                   final ok =
                                       await CloudGamesService.acceptInvite(
                                           game.id);
-                                  if (context.mounted) {
+                                  if (ok) {
+                                    _showJoinedSnack();
+                                  } else if (context.mounted) {
                                     ScaffoldMessenger.of(context).showSnackBar(
                                       SnackBar(
-                                        content: Text(ok
-                                            ? 'joined_successfully'.tr()
-                                            : 'loading_error'.tr()),
-                                        backgroundColor: ok
-                                            ? AppColors.green
-                                            : AppColors.red,
-                                        action: ok
-                                            ? SnackBarAction(
-                                                label: 'view_in_my_games'.tr(),
-                                                onPressed: () {
-                                                  MainScaffoldScope.maybeOf(
-                                                          context)
-                                                      ?.switchToTab(kTabJoin,
-                                                          popToRoot: true);
-                                                },
-                                              )
-                                            : null,
+                                        content: Text('loading_error'.tr()),
+                                        backgroundColor: AppColors.red,
                                       ),
                                     );
                                   }
@@ -774,15 +769,13 @@ class _GamesDiscoveryScreenState extends State<GamesDiscoveryScreen> {
                                   final ok =
                                       await CloudGamesService.acceptInvite(
                                           game.id);
-                                  if (context.mounted) {
+                                  if (ok) {
+                                    _showJoinedSnack();
+                                  } else if (context.mounted) {
                                     ScaffoldMessenger.of(context).showSnackBar(
                                       SnackBar(
-                                        content: Text(ok
-                                            ? 'joined_successfully'.tr()
-                                            : 'loading_error'.tr()),
-                                        backgroundColor: ok
-                                            ? AppColors.green
-                                            : AppColors.red,
+                                        content: Text('loading_error'.tr()),
+                                        backgroundColor: AppColors.red,
                                       ),
                                     );
                                   }
