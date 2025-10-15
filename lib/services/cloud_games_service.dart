@@ -319,6 +319,20 @@ class CloudGamesService {
     }
   }
 
+  // Cancel (soft-delete) a game: mark as inactive and keep record for invitees
+  static Future<void> cancelGame(String gameId) async {
+    try {
+      await _gamesRef.child(gameId).update({
+        'isActive': false,
+        'updatedAt': DateTime.now().millisecondsSinceEpoch,
+        'canceledAt': DateTime.now().millisecondsSinceEpoch,
+        if (_currentUserId != null) 'canceledBy': _currentUserId,
+      });
+    } catch (e) {
+      rethrow;
+    }
+  }
+
   // Delete a game
   static Future<void> deleteGame(String gameId) async {
     try {
@@ -589,7 +603,8 @@ class CloudGamesService {
           final Map<dynamic, dynamic> gameData =
               gameSnap.value as Map<dynamic, dynamic>;
           final game = Game.fromJson(Map<String, dynamic>.from(gameData));
-          if (game.isActive && game.isUpcoming) {
+          // Include upcoming games even if they were canceled, so Joining shows them
+          if (game.isUpcoming) {
             games.add(game);
           }
         } catch (_) {}
@@ -616,7 +631,7 @@ class CloudGamesService {
             final Map<dynamic, dynamic> gameData =
                 gameSnapshot.value as Map<dynamic, dynamic>;
             final game = Game.fromJson(Map<String, dynamic>.from(gameData));
-            if (game.isActive && game.isUpcoming) {
+            if (game.isUpcoming) {
               games.add(game);
             }
           }

@@ -289,7 +289,7 @@ class _GamesDiscoveryScreenState extends State<GamesDiscoveryScreen> {
 
     try {
       if (AuthService.isSignedIn) {
-        await CloudGamesService.deleteGame(game.id);
+        await CloudGamesService.cancelGame(game.id);
       }
       await GamesService.cancelGame(game.id);
       if (mounted) {

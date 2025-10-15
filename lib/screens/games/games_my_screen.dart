@@ -413,7 +413,7 @@ class _GamesMyScreenState extends State<GamesMyScreen>
       final Map<String, Game> byId = {
         for (final g in [...joined, ...created]) g.id: g
       };
-      final all = byId.values.where((g) => g.isActive && g.isUpcoming).toList()
+      final all = byId.values.where((g) => g.isUpcoming).toList()
         ..sort((a, b) => a.dateTime.compareTo(b.dateTime));
 
       setState(() {
@@ -446,7 +446,7 @@ class _GamesMyScreenState extends State<GamesMyScreen>
       final Map<String, Game> byId = {
         for (final g in [..._created, ...games]) g.id: g
       };
-      final all = byId.values.where((g) => g.isActive && g.isUpcoming).toList()
+      final all = byId.values.where((g) => g.isUpcoming).toList()
         ..sort((a, b) => a.dateTime.compareTo(b.dateTime));
       setState(() {
         _joined = all
@@ -595,9 +595,12 @@ class _GamesMyScreenState extends State<GamesMyScreen>
         margin: const EdgeInsets.only(bottom: AppHeights.reg),
         color: AppColors.white,
         child: Container(
-          decoration: const BoxDecoration(
+          decoration: BoxDecoration(
             border: Border(
-              left: BorderSide(color: AppColors.green, width: 6),
+              left: BorderSide(
+                color: game.isActive ? AppColors.green : AppColors.red,
+                width: 6,
+              ),
             ),
           ),
           child: Column(
@@ -626,6 +629,34 @@ class _GamesMyScreenState extends State<GamesMyScreen>
                       spacing: 6,
                       runSpacing: 6,
                       children: [
+                        if (!game.isActive)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: AppColors.red.withValues(alpha: 0.08),
+                              border: const Border.fromBorderSide(BorderSide(
+                                  color: AppColors.lightgrey, width: 1)),
+                              borderRadius:
+                                  BorderRadius.circular(AppRadius.smallCard),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Container(
+                                    width: 6,
+                                    height: 6,
+                                    decoration: const BoxDecoration(
+                                        color: AppColors.red,
+                                        shape: BoxShape.circle)),
+                                const SizedBox(width: 6),
+                                Text('Canceled',
+                                    style: AppTextStyles.small.copyWith(
+                                        color: AppColors.red,
+                                        fontWeight: FontWeight.bold)),
+                              ],
+                            ),
+                          ),
                         if (game.isFull)
                           Container(
                             padding: const EdgeInsets.symmetric(
@@ -915,7 +946,7 @@ class _GamesMyScreenState extends State<GamesMyScreen>
                                 if (confirmed == true) {
                                   try {
                                     if (AuthService.isSignedIn) {
-                                      await CloudGamesService.deleteGame(
+                                      await CloudGamesService.cancelGame(
                                           game.id);
                                     }
                                     await GamesService.cancelGame(game.id);
