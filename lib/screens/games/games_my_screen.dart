@@ -119,6 +119,8 @@ class _GamesMyScreenState extends State<GamesMyScreen>
                     status == 'pending';
                 final bool isAccepted = invitedSet.contains(uid) &&
                     (status == 'accepted' || basePlayerUids.contains(uid));
+                final bool isDeclinedOrLeft = invitedSet.contains(uid) &&
+                    (status == 'declined' || status == 'left');
                 final name = (profiles[i]['displayName'] ?? 'User').trim();
                 final photo = profiles[i]['photoURL'];
                 final initials = _initialsFromName(name);
@@ -180,6 +182,24 @@ class _GamesMyScreenState extends State<GamesMyScreen>
                             ),
                             child: const Icon(
                               Icons.check,
+                              size: 10,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                      if (isDeclinedOrLeft)
+                        Positioned(
+                          right: -2,
+                          bottom: -2,
+                          child: Container(
+                            width: 14,
+                            height: 14,
+                            decoration: const BoxDecoration(
+                              color: Colors.red,
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.close,
                               size: 10,
                               color: Colors.white,
                             ),

@@ -512,6 +512,15 @@ class CloudGamesService {
           .child(gameId)
           .remove();
 
+      // Best-effort: if there is an invite entry, mark it as 'left'
+      try {
+        await gameRef
+            .child('invites')
+            .child(playerId)
+            .child('status')
+            .set('left');
+      } catch (_) {}
+
       // Player left game successfully
       return true;
     } catch (e) {
