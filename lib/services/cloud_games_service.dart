@@ -320,6 +320,41 @@ class CloudGamesService {
     }
   }
 
+  // Update only allowed fields for an existing game (organizer-only)
+  static Future<void> updateGameFields(
+    String gameId, {
+    DateTime? dateTime,
+    String? location,
+    String? address,
+    double? latitude,
+    double? longitude,
+  }) async {
+    try {
+      // Organizer check
+      final uid = _currentUserId;
+      if (uid == null) throw Exception('not_authenticated');
+      final DataSnapshot snap = await _gamesRef.child(gameId).get();
+      if (!snap.exists) throw Exception('game_not_found');
+      final Map<dynamic, dynamic> data = snap.value as Map<dynamic, dynamic>;
+      final String organizerId = data['organizerId']?.toString() ?? '';
+      if (organizerId != uid) throw Exception('not_authorized');
+
+      final Map<String, dynamic> updates = {
+        'updatedAt': DateTime.now().millisecondsSinceEpoch,
+      };
+      if (dateTime != null) updates['dateTime'] = dateTime.toIso8601String();
+      if (location != null) updates['location'] = location;
+      if (address != null) updates['address'] = address;
+      if (latitude != null) updates['latitude'] = latitude;
+      if (longitude != null) updates['longitude'] = longitude;
+      if (updates.length <= 1) return; // nothing to update
+
+      await _gamesRef.child(gameId).update(updates);
+    } catch (e) {
+      rethrow;
+    }
+  }
+
   // Cancel (soft-delete) a game: mark as inactive and keep record for invitees
   static Future<void> cancelGame(String gameId) async {
     try {

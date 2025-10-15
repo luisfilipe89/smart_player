@@ -282,6 +282,26 @@ class GamesService {
     );
   }
 
+  // Partial local update: update only allowed fields
+  static Future<void> updateGameFieldsLocal(
+    String gameId, {
+    DateTime? dateTime,
+    String? location,
+    String? address,
+    double? latitude,
+    double? longitude,
+  }) async {
+    final db = await database;
+    final Map<String, dynamic> map = {};
+    if (dateTime != null) map['dateTime'] = dateTime.toIso8601String();
+    if (location != null) map['location'] = location;
+    if (address != null) map['address'] = address;
+    if (latitude != null) map['latitude'] = latitude;
+    if (longitude != null) map['longitude'] = longitude;
+    if (map.isEmpty) return;
+    await db.update(_tableName, map, where: 'id = ?', whereArgs: [gameId]);
+  }
+
   // Join a game (add player) - local + cloud sync
   static Future<bool> joinGame(
       String gameId, String playerId, String playerName) async {

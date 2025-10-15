@@ -44,6 +44,8 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
 
   // Friend invites (selected friend UIDs)
   final Set<String> _selectedFriendUids = <String>{};
+  // Locked invited users when editing an existing game
+  final Set<String> _lockedInvitedUids = <String>{};
 
   // Original values for change detection when editing
   String? _originalSport;
@@ -335,23 +337,33 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
       );
 
       final current = widget.initialGame!;
-      final updated = current.copyWith(
-        sport: _selectedSport!,
-        dateTime: combinedDateTime,
-        location: _selectedField?['name'] ?? current.location,
-        address: _selectedField?['address'] ?? current.address,
-        latitude: _selectedField?['latitude']?.toDouble() ?? current.latitude,
-        longitude:
-            _selectedField?['longitude']?.toDouble() ?? current.longitude,
-        maxPlayers: _maxPlayers,
-      );
+      final String newLocation = _selectedField?['name'] ?? current.location;
+      final String? newAddress = _selectedField?['address'] ?? current.address;
+      final double? newLat =
+          _selectedField?['latitude']?.toDouble() ?? current.latitude;
+      final double? newLon =
+          _selectedField?['longitude']?.toDouble() ?? current.longitude;
 
-      // Update local first
-      await GamesService.updateGame(updated);
-      // Best-effort cloud sync if signed in
+      // Local partial update first
+      await GamesService.updateGameFieldsLocal(
+        current.id,
+        dateTime: combinedDateTime,
+        location: newLocation,
+        address: newAddress,
+        latitude: newLat,
+        longitude: newLon,
+      );
+      // Best-effort cloud partial sync if signed in
       if (AuthService.isSignedIn) {
         try {
-          await CloudGamesService.updateGame(updated);
+          await CloudGamesService.updateGameFields(
+            current.id,
+            dateTime: combinedDateTime,
+            location: newLocation,
+            address: newAddress,
+            latitude: newLat,
+            longitude: newLon,
+          );
         } catch (_) {}
       }
 
@@ -366,7 +378,7 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
         // Navigate to My Games (Organizing tab) and highlight the updated game
         MainScaffoldScope.maybeOf(context)?.openMyGames(
           initialTab: 1,
-          highlightGameId: updated.id,
+          highlightGameId: current.id,
           popToRoot: true,
         );
       }
@@ -580,6 +592,7 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
     required Map<String, dynamic> sport,
     required bool isSelected,
     required VoidCallback onTap,
+    bool disabled = false,
   }) {
     return Container(
       decoration: BoxDecoration(
@@ -609,16 +622,22 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
                   child: Container(
                     width: double.infinity,
                     decoration: BoxDecoration(
-                      color: isSelected
-                          ? AppColors.blue.withValues(alpha: 0.1)
-                          : (sport['color'] as Color).withValues(alpha: 0.1),
+                      color: disabled
+                          ? AppColors.grey.withValues(alpha: 0.06)
+                          : (isSelected
+                              ? AppColors.blue.withValues(alpha: 0.1)
+                              : (sport['color'] as Color)
+                                  .withValues(alpha: 0.1)),
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: Icon(
                       sport['icon'] as IconData,
                       size: 20,
-                      color:
-                          isSelected ? AppColors.blue : sport['color'] as Color,
+                      color: disabled
+                          ? AppColors.grey
+                          : (isSelected
+                              ? AppColors.blue
+                              : sport['color'] as Color),
                     ),
                   ),
                 ),
@@ -631,7 +650,9 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
                   child: Text(
                     sport['key'].toString().tr(),
                     style: AppTextStyles.superSmall.copyWith(
-                      color: isSelected ? AppColors.blue : AppColors.blackText,
+                      color: disabled
+                          ? AppColors.grey
+                          : (isSelected ? AppColors.blue : AppColors.blackText),
                       fontWeight: FontWeight.w600,
                       fontSize: 10,
                     ),
@@ -643,11 +664,11 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
 
                 // Selection indicator - smaller
                 if (isSelected)
-                  const Padding(
-                    padding: EdgeInsets.only(top: 2),
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
                     child: Icon(
                       Icons.check_circle,
-                      color: AppColors.blue,
+                      color: disabled ? AppColors.grey : AppColors.blue,
                       size: 10,
                     ),
                   ),
@@ -919,6 +940,8 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
 
       // Load fields for the selected sport
       _loadFields();
+      // Load existing invites to lock them in edit mode
+      _loadLockedInvites();
     }
     return Scaffold(
       appBar: AppBar(
@@ -973,6 +996,8 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
                                         final isSelected =
                                             _selectedSport == sport['key'];
 
+                                        final bool isEdit =
+                                            widget.initialGame != null;
                                         return Padding(
                                           padding: EdgeInsets.only(
                                             right: index < _sports.length - 1
@@ -982,21 +1007,26 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
                                           child: SizedBox(
                                             width:
                                                 70, // Slightly wider for bigger icons
-                                            child: _buildSportCard(
-                                              sport: sport,
-                                              isSelected: isSelected,
-                                              onTap: () {
-                                                HapticFeedback.lightImpact();
-                                                setState(() {
-                                                  _selectedSport = sport['key'];
-                                                  _selectedField = null;
-                                                  _selectedDate = null;
-                                                  _selectedTime = null;
-                                                  _availableFields = [];
-                                                  _weatherData = {};
-                                                });
-                                                _loadFields();
-                                              },
+                                            child: IgnorePointer(
+                                              ignoring: isEdit,
+                                              child: _buildSportCard(
+                                                sport: sport,
+                                                isSelected: isSelected,
+                                                disabled: isEdit,
+                                                onTap: () {
+                                                  HapticFeedback.lightImpact();
+                                                  setState(() {
+                                                    _selectedSport =
+                                                        sport['key'];
+                                                    _selectedField = null;
+                                                    _selectedDate = null;
+                                                    _selectedTime = null;
+                                                    _availableFields = [];
+                                                    _weatherData = {};
+                                                  });
+                                                  _loadFields();
+                                                },
+                                              ),
                                             ),
                                           ),
                                         );
@@ -1107,14 +1137,34 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
                                           child: SliderTheme(
                                             data: SliderTheme.of(context)
                                                 .copyWith(
-                                              activeTrackColor: AppColors.blue,
-                                              inactiveTrackColor: AppColors.blue
-                                                  .withValues(alpha: 0.2),
-                                              thumbColor: AppColors.blue,
-                                              overlayColor: AppColors.blue
-                                                  .withValues(alpha: 0.1),
+                                              activeTrackColor:
+                                                  (widget.initialGame != null)
+                                                      ? AppColors.grey
+                                                          .withValues(
+                                                              alpha: 0.4)
+                                                      : AppColors.blue,
+                                              inactiveTrackColor: (widget
+                                                          .initialGame !=
+                                                      null)
+                                                  ? AppColors.grey
+                                                      .withValues(alpha: 0.2)
+                                                  : AppColors.blue
+                                                      .withValues(alpha: 0.2),
+                                              thumbColor:
+                                                  (widget.initialGame != null)
+                                                      ? AppColors.grey
+                                                      : AppColors.blue,
+                                              overlayColor: (widget
+                                                          .initialGame !=
+                                                      null)
+                                                  ? AppColors.grey
+                                                      .withValues(alpha: 0.1)
+                                                  : AppColors.blue
+                                                      .withValues(alpha: 0.1),
                                               valueIndicatorColor:
-                                                  AppColors.blue,
+                                                  (widget.initialGame != null)
+                                                      ? AppColors.grey
+                                                      : AppColors.blue,
                                             ),
                                             child: Slider(
                                               value: _maxPlayers.toDouble(),
@@ -1122,11 +1172,14 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
                                               max: 10,
                                               divisions: 8,
                                               label: _maxPlayers.toString(),
-                                              onChanged: (v) {
-                                                setState(() {
-                                                  _maxPlayers = v.round();
-                                                });
-                                              },
+                                              onChanged: (widget.initialGame !=
+                                                      null)
+                                                  ? null
+                                                  : (v) {
+                                                      setState(() {
+                                                        _maxPlayers = v.round();
+                                                      });
+                                                    },
                                             ),
                                           ),
                                         ),
@@ -1314,7 +1367,15 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
                               child: _FriendPicker(
                                 currentUid: AuthService.currentUserId!,
                                 initiallySelected: _selectedFriendUids,
+                                lockedUids: widget.initialGame != null
+                                    ? _lockedInvitedUids
+                                    : const <String>{},
                                 onToggle: (uid, selected) {
+                                  // Prevent toggling locked invites in edit mode
+                                  if (widget.initialGame != null &&
+                                      _lockedInvitedUids.contains(uid)) {
+                                    return;
+                                  }
                                   setState(() {
                                     if (selected) {
                                       _selectedFriendUids.add(uid);
@@ -1392,16 +1453,33 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
       ),
     );
   }
+
+  Future<void> _loadLockedInvites() async {
+    if (widget.initialGame == null) return;
+    try {
+      final statuses = await CloudGamesService.getInviteStatuses(
+        widget.initialGame!.id,
+      );
+      if (!mounted) return;
+      setState(() {
+        _lockedInvitedUids
+          ..clear()
+          ..addAll(statuses.keys);
+      });
+    } catch (_) {}
+  }
 }
 
 class _FriendPicker extends StatelessWidget {
   final String currentUid;
   final Set<String> initiallySelected;
+  final Set<String> lockedUids;
   final void Function(String uid, bool selected) onToggle;
 
   const _FriendPicker({
     required this.currentUid,
     required this.initiallySelected,
+    required this.lockedUids,
     required this.onToggle,
   });
 
@@ -1440,6 +1518,7 @@ class _FriendPicker extends StatelessWidget {
                   final name = data['displayName'] ?? 'User';
                   final photo = data['photoURL'];
                   final selected = initiallySelected.contains(uid);
+                  final locked = lockedUids.contains(uid);
                   return ListTile(
                     leading: CircleAvatar(
                       backgroundColor: AppColors.superlightgrey,
@@ -1450,12 +1529,15 @@ class _FriendPicker extends StatelessWidget {
                           ? Text(name.isNotEmpty ? name[0].toUpperCase() : '?')
                           : null,
                     ),
-                    title: Text(name, style: AppTextStyles.body),
+                    title: Text(name,
+                        style: AppTextStyles.body
+                            .copyWith(color: locked ? AppColors.grey : null)),
                     trailing: Checkbox(
-                      value: selected,
-                      onChanged: (v) => onToggle(uid, v == true),
+                      value: selected || locked,
+                      onChanged:
+                          locked ? null : (v) => onToggle(uid, v == true),
                     ),
-                    onTap: () => onToggle(uid, !selected),
+                    onTap: locked ? null : () => onToggle(uid, !selected),
                   );
                 },
               );
