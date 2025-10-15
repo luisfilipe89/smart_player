@@ -12,6 +12,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:move_young/services/friends_service.dart' as friends;
 import 'package:move_young/services/weather_service.dart';
+import 'dart:async';
 
 class GamesMyScreen extends StatefulWidget {
   final String? highlightGameId;
@@ -49,10 +50,13 @@ class _GamesMyScreenState extends State<GamesMyScreen>
     });
     // Schedule load after first frame to ensure Navigator/Inheriteds are ready
     WidgetsBinding.instance.addPostFrameCallback((_) => _load());
+    // Start realtime watch for Joining tab
+    WidgetsBinding.instance.addPostFrameCallback((_) => _startWatchingJoined());
   }
 
   @override
   void dispose() {
+    _joinedSub?.cancel();
     _tab.dispose();
     super.dispose();
   }
@@ -427,6 +431,29 @@ class _GamesMyScreenState extends State<GamesMyScreen>
     } catch (_) {
       setState(() => _loading = false);
     }
+  }
+
+  // Realtime: watch current user's joined games to auto-refresh Joining tab
+  StreamSubscription<List<Game>>? _joinedSub;
+
+  void _startWatchingJoined() {
+    _joinedSub?.cancel();
+    final uid = AuthService.currentUserId;
+    if (uid == null || uid.isEmpty) return;
+    _joinedSub = CloudGamesService.watchUserJoinedGames(uid).listen((games) {
+      if (!mounted) return;
+      // Merge with created list and re-derive state similarly to _load
+      final Map<String, Game> byId = {
+        for (final g in [..._created, ...games]) g.id: g
+      };
+      final all = byId.values.where((g) => g.isActive && g.isUpcoming).toList()
+        ..sort((a, b) => a.dateTime.compareTo(b.dateTime));
+      setState(() {
+        _joined = all
+            .where((g) => !(AuthService.currentUserId == g.organizerId))
+            .toList();
+      });
+    });
   }
 
   void _toggleExpanded(String gameId) {

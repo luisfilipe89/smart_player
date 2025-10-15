@@ -572,6 +572,33 @@ class CloudGamesService {
     });
   }
 
+  // Watch the current user's joined games in real time
+  static Stream<List<Game>> watchUserJoinedGames(String userId,
+      {int limit = 100}) {
+    final DatabaseReference joinedRef =
+        _usersRef.child(userId).child('joinedGames');
+    return joinedRef.onValue.asyncMap((event) async {
+      if (!event.snapshot.exists) return <Game>[];
+      final List<Game> games = [];
+      for (final child in event.snapshot.children) {
+        final String? gameId = child.key;
+        if (gameId == null) continue;
+        try {
+          final DataSnapshot gameSnap = await _gamesRef.child(gameId).get();
+          if (!gameSnap.exists) continue;
+          final Map<dynamic, dynamic> gameData =
+              gameSnap.value as Map<dynamic, dynamic>;
+          final game = Game.fromJson(Map<String, dynamic>.from(gameData));
+          if (game.isActive && game.isUpcoming) {
+            games.add(game);
+          }
+        } catch (_) {}
+      }
+      games.sort((a, b) => a.dateTime.compareTo(b.dateTime));
+      return games.take(limit).toList();
+    });
+  }
+
   // Get user's joined games
   static Future<List<Game>> getUserJoinedGames(String userId) async {
     try {
