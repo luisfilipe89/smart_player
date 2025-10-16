@@ -36,6 +36,7 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
   List<Map<String, dynamic>> _availableFields = [];
   Map<String, dynamic>? _selectedField;
   bool _isLoadingFields = false;
+  bool _isPublic = true;
 
   // Weather data
   Map<String, String> _weatherData = {};
@@ -418,15 +419,14 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
     try {
       final name = (_selectedField?['name'] as String?) ?? '';
       if (name.isEmpty) return;
-      // Combine local bookings (source of truth locally). Cloud inclusion can be added here in future.
-      final games =
-          await GamesService.getGamesForFieldOnDate(name, _selectedDate!);
+      // Use cloud busy slots as source of truth to avoid stale local entries
+      final cloudBusy = await CloudGamesService.getBusySlotsForFieldOnDate(
+        name,
+        _selectedDate!,
+        fieldId: _selectedField?['id']?.toString(),
+      );
       final times = <String>{};
-      for (final g in games) {
-        final hh = g.dateTime.hour.toString().padLeft(2, '0');
-        final mm = g.dateTime.minute.toString().padLeft(2, '0');
-        times.add('$hh:$mm');
-      }
+      times.addAll(cloudBusy);
       if (mounted) {
         setState(() {
           _bookedTimes
@@ -531,18 +531,33 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
         address: _selectedField?['address'],
         latitude: _selectedField?['latitude']?.toDouble(),
         longitude: _selectedField?['longitude']?.toDouble(),
+        fieldId: _selectedField?['id']?.toString(),
         maxPlayers: _maxPlayers,
         description: '',
         organizerId: organizerId,
         organizerName: organizerName,
         createdAt: DateTime.now(),
+        isPublic: _isPublic,
         currentPlayers: 1,
         players: [organizerId], // Creator is counted as the first player
       );
 
       // Save game to SQLite database (cloud-first ID already handled in service)
       debugPrint('Creating game with data: ${game.toJson()}');
-      final createdId = await GamesService.createGame(game);
+      String createdId;
+      try {
+        createdId = await GamesService.createGame(game);
+      } catch (e) {
+        if (e.toString().contains('slot_already_booked')) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                content: Text('time_slot_unavailable'.tr()),
+                backgroundColor: AppColors.red));
+          }
+          return;
+        }
+        rethrow;
+      }
       // If cloud created a new id, keep local object id for navigation highlight
       final effectiveGame =
           game.id == createdId ? game : game.copyWith(id: createdId);
@@ -1051,6 +1066,31 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
                           ),
                           //const SizedBox(height: AppHeights.reg),
 
+                          // Visibility toggle (create only)
+                          if (widget.initialGame == null) ...[
+                            PanelHeader('visibility'.tr()),
+                            Padding(
+                              padding: AppPaddings.symmHorizontalReg,
+                              child: Row(
+                                children: [
+                                  ChoiceChip(
+                                    label: const Text('Public'),
+                                    selected: _isPublic,
+                                    onSelected: (s) =>
+                                        setState(() => _isPublic = true),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  ChoiceChip(
+                                    label: const Text('Private'),
+                                    selected: !_isPublic,
+                                    onSelected: (s) =>
+                                        setState(() => _isPublic = false),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+
                           // Available Fields Section (only show if sport is selected)
                           if (_selectedSport != null) ...[
                             PanelHeader(
@@ -1116,7 +1156,11 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
                                                   HapticsService.lightImpact();
                                                   setState(() {
                                                     _selectedField = field;
+                                                    // Clear previous field's busy times and selected time
+                                                    _bookedTimes.clear();
+                                                    _selectedTime = null;
                                                   });
+                                                  _loadBookedSlots();
                                                 },
                                               ),
                                             );

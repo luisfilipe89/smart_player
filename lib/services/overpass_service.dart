@@ -143,6 +143,8 @@ out center tags qt;
     return elements
         .map<Map<String, dynamic>>((e) {
           final tags = Map<String, dynamic>.from(e['tags'] ?? {});
+          final String elementType = (e['type'] ?? '').toString();
+          final String elementId = (e['id'] ?? '').toString();
           final num? nLat = e['lat'] as num?;
           final num? nLon = e['lon'] as num?;
           final num? cLat =
@@ -157,6 +159,9 @@ out center tags qt;
           }
 
           return {
+            'id': elementId.isNotEmpty
+                ? '${elementType.isNotEmpty ? '$elementType:' : ''}$elementId'
+                : null,
             'name': tags['name'] ?? 'Unnamed Field',
             'lat': lat,
             'lon': lon,

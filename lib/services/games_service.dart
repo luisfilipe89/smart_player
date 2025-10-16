@@ -29,7 +29,7 @@ class GamesService {
       // Try to create the database
       final db = await openDatabase(
         path,
-        version: 2,
+        version: 4,
         onCreate: _onCreate,
         onUpgrade: _onUpgrade,
       );
@@ -45,7 +45,7 @@ class GamesService {
         final altPath = 'games.db';
         final altDb = await openDatabase(
           altPath,
-          version: 2,
+          version: 4,
           onCreate: _onCreate,
           onUpgrade: _onUpgrade,
         );
@@ -66,6 +66,7 @@ class GamesService {
         sport TEXT NOT NULL,
         dateTime TEXT NOT NULL,
         location TEXT NOT NULL,
+        fieldId TEXT,
         maxPlayers INTEGER NOT NULL,
         currentPlayers INTEGER NOT NULL,
         description TEXT,
@@ -81,7 +82,8 @@ class GamesService {
         contactInfo TEXT,
         imageUrl TEXT,
         players TEXT,
-        isActive INTEGER DEFAULT 1
+        isActive INTEGER DEFAULT 1,
+        isPublic INTEGER NOT NULL DEFAULT 1
       )
     ''');
     // Database table created successfully
@@ -96,6 +98,15 @@ class GamesService {
       await db.execute(
           'ALTER TABLE $_tableName ADD COLUMN currentPlayers INTEGER NOT NULL DEFAULT 0');
       // currentPlayers column added successfully
+    }
+    if (oldVersion < 3) {
+      // Add isPublic column with default 1 (true)
+      await db.execute(
+          'ALTER TABLE $_tableName ADD COLUMN isPublic INTEGER NOT NULL DEFAULT 1');
+    }
+    if (oldVersion < 4) {
+      // Add fieldId column for canonical field matching
+      await db.execute('ALTER TABLE $_tableName ADD COLUMN fieldId TEXT');
     }
   }
 
@@ -147,8 +158,43 @@ class GamesService {
           final cloudId = await CloudGamesService.createGame(game);
           finalId = cloudId;
           toStore = game.copyWith(id: cloudId);
-        } catch (_) {
-          // If cloud creation fails, keep local id; can add retry later
+        } catch (e) {
+          // When signed in, we require cloud creation to succeed so others can see it.
+          // Propagate all errors (UI will show a failure message).
+          rethrow;
+        }
+      }
+
+      // Local conflict guard (works offline as well)
+      try {
+        final List<Map<String, dynamic>> conflicts = await db.query(
+          _tableName,
+          where:
+              'isActive = 1 AND dateTime = ? AND ((fieldId IS NOT NULL AND fieldId = ?) OR (fieldId IS NULL AND location = ?))',
+          whereArgs: [
+            game.dateTime.toIso8601String(),
+            game.fieldId,
+            game.location,
+          ],
+          limit: 1,
+        );
+        if (conflicts.isNotEmpty) {
+          throw Exception('slot_already_booked');
+        }
+      } catch (e) {
+        // If SQLite doesn't have fieldId column yet, fall back to location-only
+        if (!e.toString().contains('slot_already_booked')) {
+          final List<Map<String, dynamic>> conflicts = await db.query(
+            _tableName,
+            where: 'isActive = 1 AND dateTime = ? AND location = ?',
+            whereArgs: [game.dateTime.toIso8601String(), game.location],
+            limit: 1,
+          );
+          if (conflicts.isNotEmpty) {
+            throw Exception('slot_already_booked');
+          }
+        } else {
+          rethrow;
         }
       }
 

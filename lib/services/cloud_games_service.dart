@@ -5,6 +5,7 @@ import 'package:move_young/models/game.dart';
 import 'package:move_young/db/db_paths.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart' as path;
+import 'dart:convert';
 
 class CloudGamesService {
   static FirebaseDatabase get _database => FirebaseDatabase.instance;
@@ -16,6 +17,20 @@ class CloudGamesService {
 
   // Get current user ID
   static String? get _currentUserId => _auth.currentUser?.uid;
+
+  // --- Helpers for slot keys ---
+  static String _formatDateKey(DateTime dt) {
+    final d = DateTime(dt.year, dt.month, dt.day);
+    final mm = d.month.toString().padLeft(2, '0');
+    final dd = d.day.toString().padLeft(2, '0');
+    return '${d.year}-$mm-$dd';
+  }
+
+  static String _formatTimeKey(DateTime dt) {
+    final hh = dt.hour.toString().padLeft(2, '0');
+    final mm = dt.minute.toString().padLeft(2, '0');
+    return '$hh$mm';
+  }
 
   // Create a new game in the cloud
   static Future<String> createGame(Game game) async {
@@ -38,6 +53,19 @@ class CloudGamesService {
       final gameRef = _gamesRef.push();
       final gameId = gameRef.key!;
 
+      // Atomic slot claim via RTDB rules: slots/<date>/<field>/<HHmm> = true
+      final String dateKey = _formatDateKey(game.dateTime);
+      final String fieldKey = (game.fieldId != null && game.fieldId!.isNotEmpty)
+          ? game.fieldId!
+          : base64Url.encode(utf8.encode(game.location));
+      final String timeKey = _formatTimeKey(game.dateTime);
+      try {
+        await _database.ref('slots/$dateKey/$fieldKey/$timeKey').set(true);
+      } catch (e) {
+        // Permission denied -> already claimed
+        throw Exception('slot_already_booked');
+      }
+
       // Prepare cloud data with proper types
       // Reuse organizerUid from above
       final initialPlayers =
@@ -57,9 +85,24 @@ class CloudGamesService {
       // so player joins/leaves don't trigger 'Modified' for invitees.
       gameData['lastOrganizerEditAt'] = gameData['createdAt'] ?? nowMs;
 
+      // Persist slot keys for cleanup on cancel/update
+      gameData['slotDate'] = dateKey;
+      gameData['slotField'] = fieldKey;
+      gameData['slotTime'] = timeKey;
+
       // Auto-enroll organizer as a player (already reflected in data)
 
       await gameRef.set(gameData);
+      // Also index under users/<uid>/createdGames for discoverability and organizer UI
+      if (organizerUid.isNotEmpty) {
+        try {
+          await _usersRef
+              .child(organizerUid)
+              .child('createdGames')
+              .child(gameId)
+              .set(true);
+        } catch (_) {}
+      }
 
       // Add game to user's created games
       if (_currentUserId != null) {
@@ -348,12 +391,63 @@ class CloudGamesService {
         'updatedAt': nowMs,
         'lastOrganizerEditAt': nowMs,
       };
-      if (dateTime != null) updates['dateTime'] = dateTime.toIso8601String();
+      String? newDateKey;
+      String? newTimeKey;
+      String? newFieldKey;
+      if (dateTime != null) {
+        updates['dateTime'] = dateTime.toIso8601String();
+        updates['dateTimeUtc'] = dateTime.toUtc().toIso8601String();
+        newDateKey = _formatDateKey(dateTime);
+        newTimeKey = _formatTimeKey(dateTime);
+      }
       if (location != null) updates['location'] = location;
       if (address != null) updates['address'] = address;
       if (latitude != null) updates['latitude'] = latitude;
       if (longitude != null) updates['longitude'] = longitude;
       if (updates.length <= 1) return; // nothing to update
+
+      // If time/field changed, attempt to move the slot lock atomically
+      if ((newDateKey != null && newTimeKey != null) || location != null) {
+        final String oldDate = data['slotDate']?.toString() ?? '';
+        final String oldField = data['slotField']?.toString() ?? '';
+        final String oldTime = data['slotTime']?.toString() ?? '';
+        // Derive new field key (prefer existing fieldId)
+        final String fieldId = data['fieldId']?.toString() ?? '';
+        newFieldKey = fieldId.isNotEmpty
+            ? fieldId
+            : base64Url.encode(
+                utf8.encode(location ?? data['location']?.toString() ?? ''));
+
+        final String targetDate = newDateKey ?? oldDate;
+        final String targetTime = newTimeKey ?? oldTime;
+        final String targetField = newFieldKey;
+
+        if (targetDate.isNotEmpty &&
+            targetTime.isNotEmpty &&
+            targetField.isNotEmpty) {
+          try {
+            await _database
+                .ref('slots/$targetDate/$targetField/$targetTime')
+                .set(true);
+            // Success: write new slot keys and release old
+            updates['slotDate'] = targetDate;
+            updates['slotField'] = targetField;
+            updates['slotTime'] = targetTime;
+            if (oldDate.isNotEmpty &&
+                oldField.isNotEmpty &&
+                oldTime.isNotEmpty) {
+              try {
+                await _database
+                    .ref('slots/$oldDate/$oldField/$oldTime')
+                    .remove();
+              } catch (_) {}
+            }
+          } catch (e) {
+            // New slot already claimed
+            throw Exception('slot_already_booked');
+          }
+        }
+      }
 
       await _gamesRef.child(gameId).update(updates);
     } catch (e) {
@@ -364,12 +458,30 @@ class CloudGamesService {
   // Cancel (soft-delete) a game: mark as inactive and keep record for invitees
   static Future<void> cancelGame(String gameId) async {
     try {
+      final DataSnapshot snap = await _gamesRef.child(gameId).get();
+      String? slotDate;
+      String? slotField;
+      String? slotTime;
+      if (snap.exists) {
+        final Map<dynamic, dynamic> data = snap.value as Map<dynamic, dynamic>;
+        slotDate = data['slotDate']?.toString();
+        slotField = data['slotField']?.toString();
+        slotTime = data['slotTime']?.toString();
+      }
+
       await _gamesRef.child(gameId).update({
         'isActive': false,
         'updatedAt': DateTime.now().millisecondsSinceEpoch,
         'canceledAt': DateTime.now().millisecondsSinceEpoch,
         if (_currentUserId != null) 'canceledBy': _currentUserId,
       });
+
+      // Release slot lock
+      if (slotDate != null && slotField != null && slotTime != null) {
+        try {
+          await _database.ref('slots/$slotDate/$slotField/$slotTime').remove();
+        } catch (_) {}
+      }
     } catch (e) {
       rethrow;
     }
@@ -417,8 +529,10 @@ class CloudGamesService {
     int limit = 50,
   }) async {
     try {
-      Query query =
-          _gamesRef.orderByChild('isActive').equalTo(true).limitToFirst(limit);
+      // Fetch the most recently created games to ensure new ones appear,
+      // then filter client-side by upcoming/public/active
+      final int fetch = (limit * 4).clamp(50, 400);
+      Query query = _gamesRef.orderByChild('createdAt').limitToLast(fetch);
 
       final snapshot = await query.get();
 
@@ -433,6 +547,8 @@ class CloudGamesService {
           final gameData = child.value as Map<dynamic, dynamic>;
           final game = Game.fromJson(Map<String, dynamic>.from(gameData));
 
+          // Only public, active, upcoming games are discoverable
+          if (!game.isPublic || !game.isActive || !game.isUpcoming) continue;
           // Apply filters
           if (sport != null && game.sport != sport) continue;
           if (searchQuery != null &&
@@ -452,8 +568,10 @@ class CloudGamesService {
         }
       }
 
+      // Sort by date/time ascending
+      games.sort((a, b) => a.dateTime.compareTo(b.dateTime));
       // Retrieved games from cloud successfully
-      return games;
+      return games.take(limit).toList();
     } catch (e) {
       // Error getting public games
       return [];
@@ -521,6 +639,21 @@ class CloudGamesService {
       if (game.players.contains(playerId)) {
         // Player already joined
         return false;
+      }
+
+      // For private games, only allow invited users to join
+      if (!game.isPublic) {
+        try {
+          final DataSnapshot inv =
+              await gameRef.child('invites/$playerId/status').get();
+          final String status =
+              (inv.exists ? inv.value?.toString() : null) ?? 'pending';
+          if (status != 'accepted') {
+            return false;
+          }
+        } catch (_) {
+          return false;
+        }
       }
 
       // Update game
@@ -626,8 +759,8 @@ class CloudGamesService {
     String? sport,
     int limit = 50,
   }) {
-    Query query =
-        _gamesRef.orderByChild('isActive').equalTo(true).limitToFirst(limit);
+    final int fetch = (limit * 4).clamp(50, 400);
+    Query query = _gamesRef.orderByChild('createdAt').limitToLast(fetch);
 
     return query.onValue.map((event) {
       if (!event.snapshot.exists) return <Game>[];
@@ -639,6 +772,8 @@ class CloudGamesService {
           final gameData = child.value as Map<dynamic, dynamic>;
           final game = Game.fromJson(Map<String, dynamic>.from(gameData));
 
+          // Only public, active, upcoming games are discoverable
+          if (!game.isPublic || !game.isActive || !game.isUpcoming) continue;
           // Apply sport filter
           if (sport != null && game.sport != sport) continue;
 
@@ -649,7 +784,8 @@ class CloudGamesService {
         }
       }
 
-      return games;
+      games.sort((a, b) => a.dateTime.compareTo(b.dateTime));
+      return games.take(limit).toList();
     });
   }
 
@@ -711,6 +847,70 @@ class CloudGamesService {
       return [];
     }
   }
+
+  // Busy slots for a field on a specific date (includes private and public, active only)
+  static Future<Set<String>> getBusySlotsForFieldOnDate(
+      String fieldName, DateTime date,
+      {String? fieldId, int recentLimit = 300}) async {
+    try {
+      // Prefer canonical fieldId if provided
+      if (fieldId != null && fieldId.isNotEmpty) {
+        try {
+          final Query byId = _gamesRef.orderByChild('fieldId').equalTo(fieldId);
+          final DataSnapshot sId = await byId.get();
+          final Set<String> byIdTimes = {};
+          if (sId.exists) {
+            for (final child in sId.children) {
+              try {
+                final Map<dynamic, dynamic> map =
+                    child.value as Map<dynamic, dynamic>;
+                final game = Game.fromJson(Map<String, dynamic>.from(map));
+                // Exclude canceled games from busy slots
+                if (!game.isActive) continue;
+                final DateTime d = game.dateTime;
+                if (d.year == date.year &&
+                    d.month == date.month &&
+                    d.day == date.day) {
+                  final hh = game.dateTime.hour.toString().padLeft(2, '0');
+                  final mm = game.dateTime.minute.toString().padLeft(2, '0');
+                  byIdTimes.add('$hh:$mm');
+                }
+              } catch (_) {}
+            }
+          }
+          if (byIdTimes.isNotEmpty) return byIdTimes;
+        } catch (_) {}
+      }
+
+      final Query q = _gamesRef.orderByChild('location').equalTo(fieldName);
+      final DataSnapshot snap = await q.get();
+      if (!snap.exists) return <String>{};
+      final Set<String> times = {};
+      for (final child in snap.children) {
+        try {
+          final Map<dynamic, dynamic> map =
+              child.value as Map<dynamic, dynamic>;
+          final game = Game.fromJson(Map<String, dynamic>.from(map));
+          if (!game.isActive) continue;
+          final DateTime d = game.dateTime;
+          if (d.year == date.year &&
+              d.month == date.month &&
+              d.day == date.day) {
+            final hh = d.hour.toString().padLeft(2, '0');
+            final mm = d.minute.toString().padLeft(2, '0');
+            times.add('$hh:$mm');
+          }
+        } catch (_) {}
+      }
+
+      // Removed proximity fallback to avoid nearby-field collisions
+      return times;
+    } catch (_) {
+      return <String>{};
+    }
+  }
+
+  // Proximity helper removed after switching to fieldId-based matching
 
   // Check if the organizer modified the game after the invite was sent to the current user
   // Returns true if current user's invite exists and game's updatedAt > invite.ts, and status is not declined/left

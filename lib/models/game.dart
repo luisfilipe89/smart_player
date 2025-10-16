@@ -8,6 +8,7 @@ class Game {
   final String? address;
   final double? latitude;
   final double? longitude;
+  final String? fieldId; // canonical field identifier (e.g., OSM id)
   final int maxPlayers;
   final int currentPlayers;
   final String description;
@@ -15,6 +16,7 @@ class Game {
   final String organizerName;
   final DateTime createdAt;
   final bool isActive;
+  final bool isPublic;
   final String? imageUrl;
   final List<String>
       skillLevels; // e.g., ['beginner', 'intermediate', 'advanced']
@@ -31,6 +33,7 @@ class Game {
     this.address,
     this.latitude,
     this.longitude,
+    this.fieldId,
     required this.maxPlayers,
     this.currentPlayers = 0,
     required this.description,
@@ -38,6 +41,7 @@ class Game {
     required this.organizerName,
     required this.createdAt,
     this.isActive = true,
+    this.isPublic = true,
     this.imageUrl,
     this.skillLevels = const [],
     this.equipment,
@@ -55,6 +59,7 @@ class Game {
     String? address,
     double? latitude,
     double? longitude,
+    String? fieldId,
     int? maxPlayers,
     int? currentPlayers,
     String? description,
@@ -62,6 +67,7 @@ class Game {
     String? organizerName,
     DateTime? createdAt,
     bool? isActive,
+    bool? isPublic,
     String? imageUrl,
     List<String>? skillLevels,
     String? equipment,
@@ -77,6 +83,7 @@ class Game {
       address: address ?? this.address,
       latitude: latitude ?? this.latitude,
       longitude: longitude ?? this.longitude,
+      fieldId: fieldId ?? this.fieldId,
       maxPlayers: maxPlayers ?? this.maxPlayers,
       currentPlayers: currentPlayers ?? this.currentPlayers,
       description: description ?? this.description,
@@ -84,6 +91,7 @@ class Game {
       organizerName: organizerName ?? this.organizerName,
       createdAt: createdAt ?? this.createdAt,
       isActive: isActive ?? this.isActive,
+      isPublic: isPublic ?? this.isPublic,
       imageUrl: imageUrl ?? this.imageUrl,
       skillLevels: skillLevels ?? this.skillLevels,
       equipment: equipment ?? this.equipment,
@@ -103,6 +111,7 @@ class Game {
       'address': address,
       'latitude': latitude,
       'longitude': longitude,
+      'fieldId': fieldId,
       'maxPlayers': maxPlayers,
       'currentPlayers': currentPlayers,
       'description': description,
@@ -110,6 +119,7 @@ class Game {
       'organizerName': organizerName,
       'createdAt': createdAt.toIso8601String(),
       'isActive': isActive ? 1 : 0, // Convert bool to int for SQLite
+      'isPublic': isPublic ? 1 : 0,
       'imageUrl': imageUrl,
       'skillLevels': jsonEncode(skillLevels), // Convert list to JSON string
       'equipment': equipment,
@@ -124,11 +134,14 @@ class Game {
     return {
       'id': id,
       'sport': sport,
+      // Store both local ISO and UTC ISO for cross-timezone correctness
       'dateTime': dateTime.toIso8601String(),
+      'dateTimeUtc': dateTime.toUtc().toIso8601String(),
       'location': location,
       'address': address,
       'latitude': latitude,
       'longitude': longitude,
+      'fieldId': fieldId,
       'maxPlayers': maxPlayers,
       'currentPlayers': currentPlayers,
       'description': description,
@@ -136,6 +149,7 @@ class Game {
       'organizerName': organizerName,
       'createdAt': createdAt.millisecondsSinceEpoch,
       'isActive': isActive,
+      'isPublic': isPublic,
       'imageUrl': imageUrl,
       'skillLevels': skillLevels,
       'equipment': equipment,
@@ -156,6 +170,9 @@ class Game {
     final dynamic isActiveRaw = json['isActive'];
     final bool isActiveParsed =
         isActiveRaw is bool ? isActiveRaw : ((isActiveRaw ?? 1) == 1);
+    final dynamic isPublicRaw = json['isPublic'];
+    final bool isPublicParsed =
+        isPublicRaw is bool ? isPublicRaw : ((isPublicRaw ?? 1) == 1);
 
     // Players can be a List (cloud) or JSON string (local)
     final dynamic playersRaw = json['players'];
@@ -185,12 +202,18 @@ class Game {
       } catch (_) {}
     }
 
+    // Prefer UTC field if present to avoid cross-timezone shifts
+    final String? dtUtcStr = json['dateTimeUtc']?.toString();
+    final DateTime dtParsed = dtUtcStr != null && dtUtcStr.isNotEmpty
+        ? DateTime.parse(dtUtcStr).toLocal()
+        : (DateTime.tryParse(json['dateTime']?.toString() ??
+                DateTime.now().toIso8601String()) ??
+            DateTime.now());
+
     return Game(
       id: json['id']?.toString() ?? '',
       sport: json['sport']?.toString() ?? '',
-      dateTime: DateTime.tryParse(json['dateTime']?.toString() ??
-              DateTime.now().toIso8601String()) ??
-          DateTime.now(),
+      dateTime: dtParsed,
       location: json['location']?.toString() ?? '',
       address: json['address']?.toString(),
       latitude: (json['latitude'] is num)
@@ -199,6 +222,7 @@ class Game {
       longitude: (json['longitude'] is num)
           ? (json['longitude'] as num).toDouble()
           : double.tryParse(json['longitude']?.toString() ?? ''),
+      fieldId: json['fieldId']?.toString(),
       maxPlayers: int.tryParse(json['maxPlayers']?.toString() ?? '') ?? 0,
       currentPlayers:
           int.tryParse(json['currentPlayers']?.toString() ?? '') ?? 0,
@@ -207,6 +231,7 @@ class Game {
       organizerName: json['organizerName']?.toString() ?? '',
       createdAt: createdAtParsed,
       isActive: isActiveParsed,
+      isPublic: isPublicParsed,
       imageUrl: json['imageUrl']?.toString(),
       skillLevels: skillsParsed,
       equipment: json['equipment']?.toString(),
