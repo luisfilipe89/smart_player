@@ -32,6 +32,121 @@ class CloudGamesService {
     return '$hh$mm';
   }
 
+  // Attempt to clear an orphaned slot lock when no active game actually occupies it.
+  // This can happen if the slot removal failed during cancellation due to transient errors or rules.
+  static Future<bool> _clearOrphanedSlotIfNoActiveGame({
+    required Game game,
+    required String dateKey,
+    required String fieldKey,
+    required String timeKey,
+  }) async {
+    try {
+      // Determine if any active game truly occupies the same field/time
+      bool activeExists = false;
+
+      if ((game.fieldId ?? '').isNotEmpty) {
+        try {
+          final Query byId =
+              _gamesRef.orderByChild('fieldId').equalTo(game.fieldId);
+          final DataSnapshot sId = await byId.get();
+          if (sId.exists) {
+            for (final child in sId.children) {
+              try {
+                final Map<dynamic, dynamic> map =
+                    child.value as Map<dynamic, dynamic>;
+                final g = Game.fromJson(Map<String, dynamic>.from(map));
+                if (!g.isActive) continue;
+                if (g.dateTime.year == game.dateTime.year &&
+                    g.dateTime.month == game.dateTime.month &&
+                    g.dateTime.day == game.dateTime.day &&
+                    g.dateTime.hour == game.dateTime.hour &&
+                    g.dateTime.minute == game.dateTime.minute) {
+                  activeExists = true;
+                  break;
+                }
+              } catch (_) {}
+            }
+          }
+        } catch (_) {}
+      }
+
+      // Fallback check by location if fieldId check found nothing
+      if (!activeExists) {
+        try {
+          final Query byLocation =
+              _gamesRef.orderByChild('location').equalTo(game.location);
+          final DataSnapshot sLoc = await byLocation.get();
+          if (sLoc.exists) {
+            for (final child in sLoc.children) {
+              try {
+                final Map<dynamic, dynamic> map =
+                    child.value as Map<dynamic, dynamic>;
+                final g = Game.fromJson(Map<String, dynamic>.from(map));
+                if (!g.isActive) continue;
+                if (g.dateTime.year == game.dateTime.year &&
+                    g.dateTime.month == game.dateTime.month &&
+                    g.dateTime.day == game.dateTime.day &&
+                    g.dateTime.hour == game.dateTime.hour &&
+                    g.dateTime.minute == game.dateTime.minute) {
+                  activeExists = true;
+                  break;
+                }
+              } catch (_) {}
+            }
+          }
+        } catch (_) {}
+      }
+
+      if (activeExists) return false;
+
+      // Build candidate field keys that might have been used historically
+      final List<String> candidateFieldKeys = <String>{
+        fieldKey,
+        if ((game.fieldId ?? '').isNotEmpty) game.fieldId!,
+        base64Url.encode(utf8.encode(game.location)),
+        base64Url.encode(utf8.encode(game.location.trim())),
+        base64Url.encode(
+            utf8.encode(game.location.replaceAll(RegExp(r'\s+'), ' ').trim())),
+      }.where((k) => k.isNotEmpty).toList();
+
+      // Try removing each candidate path directly
+      for (final k in candidateFieldKeys) {
+        try {
+          await _database.ref('slots/$dateKey/$k/$timeKey').remove();
+          return true;
+        } catch (_) {}
+      }
+
+      // As a last resort, inspect the date bucket and try to match a child that looks like ours
+      try {
+        final DataSnapshot daySnap =
+            await _database.ref('slots/$dateKey').get();
+        if (daySnap.exists) {
+          for (final child in daySnap.children) {
+            final String k = child.key ?? '';
+            if (k.isEmpty) continue;
+            // Quick filter: only consider keys that are in our candidate list, otherwise skip
+            if (!candidateFieldKeys.contains(k)) continue;
+            try {
+              final DataSnapshot timeSnap =
+                  await _database.ref('slots/$dateKey/$k/$timeKey').get();
+              if (timeSnap.exists) {
+                try {
+                  await _database.ref('slots/$dateKey/$k/$timeKey').remove();
+                  return true;
+                } catch (_) {}
+              }
+            } catch (_) {}
+          }
+        }
+      } catch (_) {}
+
+      return false;
+    } catch (_) {
+      return false;
+    }
+  }
+
   // Create a new game in the cloud
   static Future<String> createGame(Game game) async {
     try {
@@ -63,7 +178,22 @@ class CloudGamesService {
         await _database.ref('slots/$dateKey/$fieldKey/$timeKey').set(true);
       } catch (e) {
         // Permission denied -> already claimed
-        throw Exception('slot_already_booked');
+        // Best-effort recovery: clear orphaned lock and retry once
+        final cleared = await _clearOrphanedSlotIfNoActiveGame(
+          game: game,
+          dateKey: dateKey,
+          fieldKey: fieldKey,
+          timeKey: timeKey,
+        );
+        if (cleared) {
+          try {
+            await _database.ref('slots/$dateKey/$fieldKey/$timeKey').set(true);
+          } catch (_) {
+            throw Exception('slot_already_booked');
+          }
+        } else {
+          throw Exception('slot_already_booked');
+        }
       }
 
       // Prepare cloud data with proper types
@@ -354,12 +484,44 @@ class CloudGamesService {
   // Update an existing game
   static Future<void> updateGame(Game game) async {
     try {
-      final gameData = {
-        ...game.toJson(),
-        'updatedAt': DateTime.now().millisecondsSinceEpoch,
-      };
+      // Merge only safe fields and never resurrect canceled games accidentally
+      final DataSnapshot snap = await _gamesRef.child(game.id).get();
+      bool existingIsActive = true;
+      if (snap.exists) {
+        final Map<dynamic, dynamic> data = snap.value as Map<dynamic, dynamic>;
+        final dynamic ia = data['isActive'];
+        existingIsActive = ia is bool ? ia : ((ia ?? 1) == 1);
+      }
 
-      await _gamesRef.child(game.id).update(gameData);
+      final Map<String, dynamic> payload = {
+        // Do not write isActive here; preserve server value
+        'updatedAt': DateTime.now().millisecondsSinceEpoch,
+        'sport': game.sport,
+        'dateTime': game.dateTime.toIso8601String(),
+        'dateTimeUtc': game.dateTime.toUtc().toIso8601String(),
+        'location': game.location,
+        'address': game.address,
+        'latitude': game.latitude,
+        'longitude': game.longitude,
+        'maxPlayers': game.maxPlayers,
+        'currentPlayers': game.currentPlayers,
+        'description': game.description,
+        'organizerId': game.organizerId,
+        'organizerName': game.organizerName,
+        'imageUrl': game.imageUrl,
+        'skillLevels': game.skillLevels,
+        'equipment': game.equipment,
+        'cost': game.cost,
+        'contactInfo': game.contactInfo,
+        'players': game.players,
+      }..removeWhere((k, v) => v == null);
+
+      // If existing was inactive, ensure we do not flip it back
+      if (!existingIsActive) {
+        payload['isActive'] = false;
+      }
+
+      await _gamesRef.child(game.id).update(payload);
       // Game updated in cloud successfully
     } catch (e) {
       // Error updating game in cloud
@@ -462,11 +624,35 @@ class CloudGamesService {
       String? slotDate;
       String? slotField;
       String? slotTime;
+      String? fallbackFieldKey;
       if (snap.exists) {
         final Map<dynamic, dynamic> data = snap.value as Map<dynamic, dynamic>;
         slotDate = data['slotDate']?.toString();
         slotField = data['slotField']?.toString();
         slotTime = data['slotTime']?.toString();
+        // Build fallbacks from game properties if slot keys were not present (legacy games)
+        if (slotDate == null || slotTime == null || slotField == null) {
+          try {
+            final game = Game.fromJson(Map<String, dynamic>.from(data));
+            slotDate ??= _formatDateKey(game.dateTime);
+            slotTime ??= _formatTimeKey(game.dateTime);
+            if (game.fieldId != null && game.fieldId!.isNotEmpty) {
+              slotField ??= game.fieldId;
+            }
+            // Also compute a base64(location) fallback so we can remove old-style locks
+            fallbackFieldKey = base64Url.encode(utf8.encode(game.location));
+          } catch (_) {}
+        }
+        // If still no field key, attempt deriving from current data['location'] even without Game parse
+        if ((slotField == null || slotField.isEmpty) &&
+            fallbackFieldKey == null) {
+          try {
+            final String loc = data['location']?.toString() ?? '';
+            if (loc.isNotEmpty) {
+              fallbackFieldKey = base64Url.encode(utf8.encode(loc));
+            }
+          } catch (_) {}
+        }
       }
 
       await _gamesRef.child(gameId).update({
@@ -476,10 +662,36 @@ class CloudGamesService {
         if (_currentUserId != null) 'canceledBy': _currentUserId,
       });
 
-      // Release slot lock
-      if (slotDate != null && slotField != null && slotTime != null) {
+      // Release slot lock (try both stored key and fallback location-based key)
+      if (slotDate != null && slotTime != null) {
+        if (slotField != null && slotField.isNotEmpty) {
+          try {
+            await _database
+                .ref('slots/$slotDate/$slotField/$slotTime')
+                .remove();
+          } catch (_) {}
+        }
+        if (fallbackFieldKey != null && fallbackFieldKey.isNotEmpty) {
+          try {
+            await _database
+                .ref('slots/$slotDate/$fallbackFieldKey/$slotTime')
+                .remove();
+          } catch (_) {}
+        }
+        // As a final guard, if we had both keys identical or neither worked, ensure no duplicate residue by attempting both again silently
         try {
-          await _database.ref('slots/$slotDate/$slotField/$slotTime').remove();
+          if (slotField != null && slotField.isNotEmpty) {
+            await _database
+                .ref('slots/$slotDate/$slotField/$slotTime')
+                .remove();
+          }
+        } catch (_) {}
+        try {
+          if (fallbackFieldKey != null && fallbackFieldKey.isNotEmpty) {
+            await _database
+                .ref('slots/$slotDate/$fallbackFieldKey/$slotTime')
+                .remove();
+          }
         } catch (_) {}
       }
     } catch (e) {

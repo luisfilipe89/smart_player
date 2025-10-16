@@ -9,7 +9,6 @@ plugins {
 android {
     namespace = "com.example.sportappdenbosch"
     compileSdk = 36
-    ndkVersion = "27.0.12077973"
 
     compileOptions {
         // Use Java 17 to eliminate Java 8 toolchain warnings
@@ -21,7 +20,8 @@ android {
     kotlinOptions {
         jvmTarget = JavaVersion.VERSION_17.toString()
     }
-
+    // Use NDK 26.1 (Flutter stable recommendation). Avoid multiple ndkVersion assignments.
+    ndkVersion = "26.1.10909125"
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId = "com.example.sportappdenbosch"
