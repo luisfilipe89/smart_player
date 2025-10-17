@@ -662,37 +662,58 @@ class CloudGamesService {
         if (_currentUserId != null) 'canceledBy': _currentUserId,
       });
 
-      // Release slot lock (try both stored key and fallback location-based key)
+      // Release slot lock with comprehensive cleanup and verification
+      bool slotReleased = false;
       if (slotDate != null && slotTime != null) {
+        // Try primary slot key
         if (slotField != null && slotField.isNotEmpty) {
           try {
-            await _database
-                .ref('slots/$slotDate/$slotField/$slotTime')
-                .remove();
-          } catch (_) {}
+            final path = 'slots/$slotDate/$slotField/$slotTime';
+            await _database.ref(path).remove();
+            // Verify deletion
+            final verify = await _database.ref(path).get();
+            if (!verify.exists) {
+              slotReleased = true;
+            }
+          } catch (e) {
+            // Slot removal failed, continue to fallback
+          }
         }
-        if (fallbackFieldKey != null && fallbackFieldKey.isNotEmpty) {
+
+        // Try fallback key if primary failed
+        if (!slotReleased &&
+            fallbackFieldKey != null &&
+            fallbackFieldKey.isNotEmpty) {
           try {
-            await _database
-                .ref('slots/$slotDate/$fallbackFieldKey/$slotTime')
-                .remove();
-          } catch (_) {}
+            final path = 'slots/$slotDate/$fallbackFieldKey/$slotTime';
+            await _database.ref(path).remove();
+            // Verify deletion
+            final verify = await _database.ref(path).get();
+            if (!verify.exists) {
+              slotReleased = true;
+            }
+          } catch (e) {
+            // Fallback also failed
+          }
         }
-        // As a final guard, if we had both keys identical or neither worked, ensure no duplicate residue by attempting both again silently
-        try {
+
+        // Best-effort: try one more time with both keys to ensure cleanup
+        if (!slotReleased) {
           if (slotField != null && slotField.isNotEmpty) {
-            await _database
-                .ref('slots/$slotDate/$slotField/$slotTime')
-                .remove();
+            try {
+              await _database
+                  .ref('slots/$slotDate/$slotField/$slotTime')
+                  .remove();
+            } catch (_) {}
           }
-        } catch (_) {}
-        try {
           if (fallbackFieldKey != null && fallbackFieldKey.isNotEmpty) {
-            await _database
-                .ref('slots/$slotDate/$fallbackFieldKey/$slotTime')
-                .remove();
+            try {
+              await _database
+                  .ref('slots/$slotDate/$fallbackFieldKey/$slotTime')
+                  .remove();
+            } catch (_) {}
           }
-        } catch (_) {}
+        }
       }
     } catch (e) {
       rethrow;
@@ -1065,58 +1086,90 @@ class CloudGamesService {
       String fieldName, DateTime date,
       {String? fieldId, int recentLimit = 300}) async {
     try {
+      final Set<String> busyTimes = {};
+
       // Prefer canonical fieldId if provided
       if (fieldId != null && fieldId.isNotEmpty) {
         try {
           final Query byId = _gamesRef.orderByChild('fieldId').equalTo(fieldId);
           final DataSnapshot sId = await byId.get();
-          final Set<String> byIdTimes = {};
           if (sId.exists) {
             for (final child in sId.children) {
               try {
                 final Map<dynamic, dynamic> map =
                     child.value as Map<dynamic, dynamic>;
                 final game = Game.fromJson(Map<String, dynamic>.from(map));
-                // Exclude canceled games from busy slots
-                if (!game.isActive) continue;
+                // Only include active, upcoming games
+                if (!game.isActive || !game.isUpcoming) continue;
                 final DateTime d = game.dateTime;
                 if (d.year == date.year &&
                     d.month == date.month &&
                     d.day == date.day) {
                   final hh = game.dateTime.hour.toString().padLeft(2, '0');
                   final mm = game.dateTime.minute.toString().padLeft(2, '0');
-                  byIdTimes.add('$hh:$mm');
+                  busyTimes.add('$hh:$mm');
                 }
               } catch (_) {}
             }
           }
-          if (byIdTimes.isNotEmpty) return byIdTimes;
+          if (busyTimes.isNotEmpty) return busyTimes;
         } catch (_) {}
       }
 
+      // Fallback to location-based matching
       final Query q = _gamesRef.orderByChild('location').equalTo(fieldName);
       final DataSnapshot snap = await q.get();
       if (!snap.exists) return <String>{};
-      final Set<String> times = {};
+
       for (final child in snap.children) {
         try {
           final Map<dynamic, dynamic> map =
               child.value as Map<dynamic, dynamic>;
           final game = Game.fromJson(Map<String, dynamic>.from(map));
-          if (!game.isActive) continue;
+          // Only include active, upcoming games
+          if (!game.isActive || !game.isUpcoming) continue;
           final DateTime d = game.dateTime;
           if (d.year == date.year &&
               d.month == date.month &&
               d.day == date.day) {
             final hh = d.hour.toString().padLeft(2, '0');
             final mm = d.minute.toString().padLeft(2, '0');
-            times.add('$hh:$mm');
+            busyTimes.add('$hh:$mm');
           }
         } catch (_) {}
       }
 
-      // Removed proximity fallback to avoid nearby-field collisions
-      return times;
+      // Cross-reference with slots collection to filter orphaned slots
+      try {
+        final String dateKey = _formatDateKey(date);
+        final String fieldKey = (fieldId != null && fieldId.isNotEmpty)
+            ? fieldId
+            : base64Url.encode(utf8.encode(fieldName));
+
+        final DataSnapshot slotsSnap =
+            await _database.ref('slots/$dateKey/$fieldKey').get();
+
+        if (slotsSnap.exists) {
+          // Get all slots that exist in the slots collection
+          final Set<String> slotTimes = {};
+          for (final child in slotsSnap.children) {
+            final String timeKey = child.key ?? '';
+            if (timeKey.length == 4) {
+              // HHMM format
+              final hh = timeKey.substring(0, 2);
+              final mm = timeKey.substring(2, 4);
+              slotTimes.add('$hh:$mm');
+            }
+          }
+
+          // Only return times that are both busy AND have active slot locks
+          busyTimes.retainWhere((time) => slotTimes.contains(time));
+        }
+      } catch (_) {
+        // If slots verification fails, return the original busy times
+      }
+
+      return busyTimes;
     } catch (_) {
       return <String>{};
     }

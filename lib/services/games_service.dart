@@ -414,6 +414,16 @@ class GamesService {
       where: 'id = ?',
       whereArgs: [gameId],
     );
+
+    // Also cancel in cloud if user is signed in
+    if (AuthService.isSignedIn) {
+      try {
+        await CloudGamesService.cancelGame(gameId);
+      } catch (e) {
+        // Cloud cancellation failed, but local cancellation succeeded
+        // This is acceptable as the local database is the primary source
+      }
+    }
   }
 
   // Remove local record for a specific game (used for hiding canceled games locally)

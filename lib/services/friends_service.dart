@@ -168,6 +168,10 @@ class FriendsService {
       return true;
     } catch (e) {
       debugPrint('🔍 Error creating friend request: $e');
+      // Provide more specific error feedback
+      if (e.toString().contains('permission-denied')) {
+        debugPrint('🔍 Permission denied - database rules may need updating');
+      }
       return false;
     }
   }

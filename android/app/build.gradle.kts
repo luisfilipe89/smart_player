@@ -20,8 +20,7 @@ android {
     kotlinOptions {
         jvmTarget = JavaVersion.VERSION_17.toString()
     }
-    // Use NDK 26.1 (Flutter stable recommendation). Avoid multiple ndkVersion assignments.
-    ndkVersion = "26.1.10909125"
+    // NDK version will be automatically managed by Flutter
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId = "com.example.sportappdenbosch"
