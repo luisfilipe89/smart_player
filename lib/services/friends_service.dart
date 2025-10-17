@@ -8,6 +8,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:uuid/uuid.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:move_young/services/notification_service.dart';
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:move_young/db/db_paths.dart';
 
@@ -164,6 +165,23 @@ class FriendsService {
 
     try {
       await _db.ref().update(updates);
+
+      // Write notification data for friend request
+      try {
+        await NotificationService.writeNotificationData(
+          recipientUid: toUid,
+          type: 'friend_request',
+          data: {
+            'fromUid': fromUid,
+            'fromName': 'Unknown', // You might want to get the actual name
+            'message': 'sent you a friend request',
+          },
+        );
+      } catch (e) {
+        debugPrint('🔍 Error writing notification data: $e');
+        // Don't fail the friend request if notification writing fails
+      }
+
       debugPrint('🔍 Friend request created successfully');
       return true;
     } catch (e) {
@@ -262,6 +280,24 @@ class FriendsService {
       debugPrint('🔍 acceptFriendRequest: removed sender sent');
     } catch (e) {
       debugPrint('🔍 acceptFriendRequest: could not remove sender sent: $e');
+    }
+
+    // Write notification data for friend request acceptance
+    if (ok) {
+      try {
+        await NotificationService.writeNotificationData(
+          recipientUid: fromUid,
+          type: 'friend_request_accepted',
+          data: {
+            'fromUid': myUid,
+            'fromName': 'Unknown', // You might want to get the actual name
+            'message': 'accepted your friend request',
+          },
+        );
+      } catch (e) {
+        debugPrint('🔍 Error writing notification data: $e');
+        // Don't fail the friend acceptance if notification writing fails
+      }
     }
 
     debugPrint('🔍 acceptFriendRequest: end return=$ok');

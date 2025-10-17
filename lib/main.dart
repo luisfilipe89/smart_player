@@ -3,7 +3,9 @@ import 'package:flutter/services.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_app_check/firebase_app_check.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'dart:async';
+import 'dart:convert';
 import 'package:move_young/screens/welcome/welcome_screen.dart';
 import 'package:move_young/theme/_theme.dart';
 import 'package:move_young/services/notification_service.dart';
@@ -39,9 +41,14 @@ void main() async {
     // App Check initialization failed; safe to proceed in dev
   }
 
+  // Register background message handler
+  FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+
   // Notifications
   try {
-    await NotificationService.initialize();
+    await NotificationService.initialize(
+      onNotificationTap: _handleNotificationTap,
+    );
   } catch (_) {}
 
   // Haptics (load persisted preference)
@@ -142,5 +149,26 @@ class _MoveYoungAppState extends State<MoveYoungApp> {
       scrollBehavior: AppScrollBehavior(),
       home: const WelcomeScreen(),
     );
+  }
+}
+
+// Handle notification taps and navigate to appropriate screen
+void _handleNotificationTap(String? payload) {
+  if (payload == null) return;
+
+  try {
+    final data = jsonDecode(payload) as Map<String, dynamic>;
+    final type = data['type'] as String?;
+    final route = data['route'] as String?;
+
+    // Store the notification data for navigation when app is ready
+    // This will be handled by the main scaffold when it's available
+    debugPrint('Notification tapped: $type -> $route');
+
+    // For now, just log the notification data
+    // In a real implementation, you'd navigate to the appropriate screen
+    // based on the notification type and route
+  } catch (e) {
+    debugPrint('Error handling notification tap: $e');
   }
 }

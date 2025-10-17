@@ -1,10 +1,12 @@
 // lib/services/games_service.dart
 import 'dart:math';
+import 'package:flutter/foundation.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import 'package:move_young/models/game.dart';
 import 'package:move_young/services/cloud_games_service.dart';
 import 'package:move_young/services/auth_service.dart';
+import 'package:move_young/services/notification_service.dart';
 
 class GamesService {
   static Database? _database;
@@ -201,6 +203,14 @@ class GamesService {
       // Save to local database with final ID
       await db.insert(_tableName, toStore.toJson());
 
+      // Schedule notification reminders for the game
+      try {
+        await NotificationService.scheduleGameReminder(toStore);
+      } catch (e) {
+        // Don't fail game creation if notification scheduling fails
+        debugPrint('Failed to schedule game reminders: $e');
+      }
+
       return finalId;
     } catch (e) {
       // Error in GamesService.createGame
@@ -365,6 +375,14 @@ class GamesService {
               players.add(playerId);
               final updatedGame = game.copyWith(players: players);
               await updateGame(updatedGame);
+
+              // Schedule notification reminders for the joined game
+              try {
+                await NotificationService.scheduleGameReminder(updatedGame);
+              } catch (e) {
+                // Don't fail game joining if notification scheduling fails
+                debugPrint('Failed to schedule game reminders: $e');
+              }
             }
           }
           return true;
@@ -381,6 +399,15 @@ class GamesService {
         players.add(playerId);
         final updatedGame = game.copyWith(players: players);
         await updateGame(updatedGame);
+
+        // Schedule notification reminders for the joined game
+        try {
+          await NotificationService.scheduleGameReminder(updatedGame);
+        } catch (e) {
+          // Don't fail game joining if notification scheduling fails
+          debugPrint('Failed to schedule game reminders: $e');
+        }
+
         return true;
       }
       return false;
@@ -400,6 +427,15 @@ class GamesService {
       players.remove(playerId);
       final updatedGame = game.copyWith(players: players);
       await updateGame(updatedGame);
+
+      // Cancel notification reminders when leaving game
+      try {
+        await NotificationService.cancelGameReminders(gameId);
+      } catch (e) {
+        // Don't fail game leaving if notification cancellation fails
+        debugPrint('Failed to cancel game reminders: $e');
+      }
+
       return true;
     }
     return false;
@@ -423,6 +459,14 @@ class GamesService {
         // Cloud cancellation failed, but local cancellation succeeded
         // This is acceptable as the local database is the primary source
       }
+    }
+
+    // Cancel notification reminders when game is cancelled
+    try {
+      await NotificationService.cancelGameReminders(gameId);
+    } catch (e) {
+      // Don't fail game cancellation if notification cancellation fails
+      debugPrint('Failed to cancel game reminders: $e');
     }
   }
 
