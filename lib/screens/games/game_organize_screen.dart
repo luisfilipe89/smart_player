@@ -182,11 +182,17 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
   bool get _hasChanges {
     if (widget.initialGame == null) return false;
 
+    // Check if new friends were invited (exclude locked ones)
+    final newInvites = _selectedFriendUids
+        .where((uid) => !_lockedInvitedUids.contains(uid))
+        .toSet();
+
     return _selectedSport != _originalSport ||
         _selectedDate != _originalDate ||
         _selectedTime != _originalTime ||
         _maxPlayers != _originalMaxPlayers ||
-        _selectedField?['name'] != _originalField?['name'];
+        _selectedField?['name'] != _originalField?['name'] ||
+        newInvites.isNotEmpty; // New check for friend invitations
   }
 
   // Load fields for the selected sport
@@ -963,6 +969,52 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
     );
   }
 
+  Widget _buildVisibilityCard({
+    required String title,
+    required IconData icon,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(AppRadius.card),
+      child: Container(
+        height: 60, // Much smaller
+        decoration: BoxDecoration(
+          color:
+              isSelected ? AppColors.blue.withValues(alpha: 0.1) : Colors.white,
+          borderRadius: BorderRadius.circular(AppRadius.card),
+          border: Border.all(
+            color: isSelected
+                ? AppColors.blue
+                : AppColors.grey.withValues(alpha: 0.3),
+            width: isSelected ? 2 : 1,
+          ),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              icon,
+              size: 20,
+              color: isSelected ? AppColors.blue : AppColors.grey,
+            ),
+            const SizedBox(width: 8),
+            Text(
+              title,
+              style: AppTextStyles.body.copyWith(
+                color: isSelected ? AppColors.blue : AppColors.blackText,
+                fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                fontSize: 14,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     // Pre-fill form if initial game provided and fields not set yet
@@ -1093,31 +1145,6 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
                             ),
                           ),
                           //const SizedBox(height: AppHeights.reg),
-
-                          // Visibility toggle (create only)
-                          if (widget.initialGame == null) ...[
-                            PanelHeader('visibility'.tr()),
-                            Padding(
-                              padding: AppPaddings.symmHorizontalReg,
-                              child: Row(
-                                children: [
-                                  ChoiceChip(
-                                    label: const Text('Public'),
-                                    selected: _isPublic,
-                                    onSelected: (s) =>
-                                        setState(() => _isPublic = true),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  ChoiceChip(
-                                    label: const Text('Private'),
-                                    selected: !_isPublic,
-                                    onSelected: (s) =>
-                                        setState(() => _isPublic = false),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
 
                           // Available Fields Section (only show if sport is selected)
                           if (_selectedSport != null) ...[
@@ -1440,6 +1467,47 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
                               ),
                             ),
                             //const SizedBox(height: AppHeights.huge),
+                          ],
+
+                          // Visibility Selection (create only, after time is chosen)
+                          if (_selectedTime != null &&
+                              widget.initialGame == null) ...[
+                            PanelHeader('choose_visibility'.tr()),
+                            Padding(
+                              padding: AppPaddings.symmHorizontalReg,
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: _buildVisibilityCard(
+                                          title: 'public'.tr(),
+                                          icon: Icons.public,
+                                          isSelected: _isPublic,
+                                          onTap: () {
+                                            HapticFeedback.lightImpact();
+                                            setState(() => _isPublic = true);
+                                          },
+                                        ),
+                                      ),
+                                      const SizedBox(width: AppWidths.regular),
+                                      Expanded(
+                                        child: _buildVisibilityCard(
+                                          title: 'private'.tr(),
+                                          icon: Icons.lock,
+                                          isSelected: !_isPublic,
+                                          onTap: () {
+                                            HapticFeedback.lightImpact();
+                                            setState(() => _isPublic = false);
+                                          },
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
                           ],
 
                           // Invite Friends Section (optional, after time is chosen)
