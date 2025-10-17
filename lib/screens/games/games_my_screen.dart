@@ -195,12 +195,16 @@ class _GamesMyScreenState extends State<GamesMyScreen>
                           child: Container(
                             width: 14,
                             height: 14,
-                            decoration: const BoxDecoration(
-                              color: Colors.green,
+                            decoration: BoxDecoration(
+                              color: game.isPlayerOnBench(uid)
+                                  ? Colors.blue
+                                  : Colors.green,
                               shape: BoxShape.circle,
                             ),
-                            child: const Icon(
-                              Icons.check,
+                            child: Icon(
+                              game.isPlayerOnBench(uid)
+                                  ? Icons.event_seat
+                                  : Icons.check,
                               size: 10,
                               color: Colors.white,
                             ),
@@ -845,7 +849,9 @@ class _GamesMyScreenState extends State<GamesMyScreen>
                           ),
                           const SizedBox(width: 4),
                           Text(
-                            '${game.currentPlayers}/${game.maxPlayers}',
+                            game.benchCount > 0
+                                ? '${game.maxPlayers}/${game.maxPlayers} + ${game.benchCount} bench'
+                                : '${game.currentPlayers}/${game.maxPlayers}',
                             style: AppTextStyles.small.copyWith(
                               color: game.hasSpace
                                   ? AppColors.green

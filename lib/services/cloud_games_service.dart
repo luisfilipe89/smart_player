@@ -404,9 +404,10 @@ class CloudGamesService {
   }
 
   // Accept invite: mark as accepted and join game
-  static Future<bool> acceptInvite(String gameId) async {
+  // Returns player status: {'joined': true, 'status': 'active'|'bench', 'position': 5, 'maxPlayers': 10}
+  static Future<Map<String, dynamic>?> acceptInvite(String gameId) async {
     final uid = _currentUserId;
-    if (uid == null) return false;
+    if (uid == null) return null;
     try {
       // Attempt to join first; if successful, mark invite accepted
       final displayName = _auth.currentUser?.displayName ?? 'User';
@@ -423,24 +424,36 @@ class CloudGamesService {
               .set('accepted');
         } catch (_) {}
 
+        // Get updated game to determine player position and status
+        final gameSnapshot = await _gamesRef.child(gameId).get();
+        if (!gameSnapshot.exists) return null;
+
+        final gameData = gameSnapshot.value as Map<dynamic, dynamic>;
+        final game = Game.fromJson(Map<String, dynamic>.from(gameData));
+
+        final playerIndex = game.players.indexOf(uid);
+        final isActive = playerIndex >= 0 && playerIndex < game.maxPlayers;
+        final position = playerIndex + 1;
+
         // Sync the game to local database
         try {
-          final gameSnapshot = await _gamesRef.child(gameId).get();
-          if (gameSnapshot.exists) {
-            final gameData = gameSnapshot.value as Map<dynamic, dynamic>;
-            final game = Game.fromJson(Map<String, dynamic>.from(gameData));
-
-            // Insert into local SQLite database
-            await _syncGameToLocalDb(game);
-          }
+          // Insert into local SQLite database
+          await _syncGameToLocalDb(game);
         } catch (_) {
           // Local sync failed, but cloud join succeeded
         }
+
+        return {
+          'joined': true,
+          'status': isActive ? 'active' : 'bench',
+          'position': position,
+          'maxPlayers': game.maxPlayers,
+        };
       }
 
-      return joined;
+      return null;
     } catch (e) {
-      return false;
+      return null;
     }
   }
 
@@ -856,11 +869,8 @@ class CloudGamesService {
       final gameData = gameSnapshot.value as Map<dynamic, dynamic>;
       final game = Game.fromJson(Map<String, dynamic>.from(gameData));
 
-      // Check if game is full
-      if (game.currentPlayers >= game.maxPlayers) {
-        // Game is full
-        return false;
-      }
+      // REMOVED: Max players check - now allow unlimited joins (bench system)
+      // Players beyond maxPlayers will be on the bench
 
       // Check if player already joined
       if (game.players.contains(playerId)) {

@@ -582,7 +582,9 @@ class _GamesDiscoveryScreenState extends State<GamesDiscoveryScreen> {
                           ),
                           const SizedBox(width: 4),
                           Text(
-                            '${game.currentPlayers}/${game.maxPlayers}',
+                            game.benchCount > 0
+                                ? '${game.maxPlayers}/${game.maxPlayers} + ${game.benchCount} bench'
+                                : '${game.currentPlayers}/${game.maxPlayers}',
                             style: AppTextStyles.small.copyWith(
                               color: game.hasSpace
                                   ? AppColors.green
@@ -696,11 +698,38 @@ class _GamesDiscoveryScreenState extends State<GamesDiscoveryScreen> {
                             Expanded(
                               child: ElevatedButton(
                                 onPressed: () async {
-                                  final ok =
+                                  final result =
                                       await CloudGamesService.acceptInvite(
                                           game.id);
-                                  if (ok) {
-                                    _showJoinedSnack();
+                                  if (result != null &&
+                                      result['joined'] == true) {
+                                    final status = result['status'];
+                                    final position = result['position'];
+
+                                    if (context.mounted) {
+                                      String message;
+                                      Color bgColor;
+                                      if (status == 'active') {
+                                        message =
+                                            'You joined the game as player $position!';
+                                        bgColor = AppColors.green;
+                                      } else {
+                                        // On bench
+                                        message =
+                                            'You were accepted as player #$position (on the bench). You\'ll play if a spot opens up!';
+                                        bgColor = AppColors.blue;
+                                      }
+
+                                      ScaffoldMessenger.of(context)
+                                          .showSnackBar(
+                                        SnackBar(
+                                          content: Text(message),
+                                          backgroundColor: bgColor,
+                                          duration: const Duration(seconds: 4),
+                                        ),
+                                      );
+                                    }
+
                                     MainScaffoldScope.maybeOf(context)
                                         ?.openMyGames(
                                       initialTab: 0,
@@ -785,11 +814,37 @@ class _GamesDiscoveryScreenState extends State<GamesDiscoveryScreen> {
                             Expanded(
                               child: ElevatedButton(
                                 onPressed: () async {
-                                  final ok =
+                                  final result =
                                       await CloudGamesService.acceptInvite(
                                           game.id);
-                                  if (ok) {
-                                    _showJoinedSnack();
+                                  if (result != null &&
+                                      result['joined'] == true) {
+                                    final status = result['status'];
+                                    final position = result['position'];
+
+                                    if (context.mounted) {
+                                      String message;
+                                      Color bgColor;
+                                      if (status == 'active') {
+                                        message =
+                                            'You joined the game as player $position!';
+                                        bgColor = AppColors.green;
+                                      } else {
+                                        // On bench
+                                        message =
+                                            'You were accepted as player #$position (on the bench). You\'ll play if a spot opens up!';
+                                        bgColor = AppColors.blue;
+                                      }
+
+                                      ScaffoldMessenger.of(context)
+                                          .showSnackBar(
+                                        SnackBar(
+                                          content: Text(message),
+                                          backgroundColor: bgColor,
+                                          duration: const Duration(seconds: 4),
+                                        ),
+                                      );
+                                    }
                                   } else if (context.mounted) {
                                     ScaffoldMessenger.of(context).showSnackBar(
                                       SnackBar(

@@ -248,6 +248,35 @@ class Game {
   bool get hasSpace => currentPlayers < maxPlayers;
   int get availableSpots => maxPlayers - currentPlayers;
 
+  // Bench/Waitlist system helpers
+  // Active players are the first maxPlayers in the list
+  List<String> get activePlayers => players.take(maxPlayers).toList();
+
+  // Bench players are those beyond maxPlayers
+  List<String> get benchPlayers =>
+      players.length > maxPlayers ? players.skip(maxPlayers).toList() : [];
+
+  int get activeCount => activePlayers.length;
+  int get benchCount => benchPlayers.length;
+
+  // Check if a specific player is on the bench
+  bool isPlayerOnBench(String playerId) {
+    final index = players.indexOf(playerId);
+    return index >= 0 && index >= maxPlayers;
+  }
+
+  // Check if a specific player is active
+  bool isPlayerActive(String playerId) {
+    final index = players.indexOf(playerId);
+    return index >= 0 && index < maxPlayers;
+  }
+
+  // Get player position (1-indexed)
+  int? getPlayerPosition(String playerId) {
+    final index = players.indexOf(playerId);
+    return index >= 0 ? index + 1 : null;
+  }
+
   // Check if game is in the future
   bool get isUpcoming => dateTime.isAfter(DateTime.now());
 
