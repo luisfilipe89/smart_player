@@ -553,14 +553,9 @@ class CloudGamesService {
         'updatedAt': nowMs,
         'lastOrganizerEditAt': nowMs,
       };
-      String? newDateKey;
-      String? newTimeKey;
-      String? newFieldKey;
       if (dateTime != null) {
         updates['dateTime'] = dateTime.toIso8601String();
         updates['dateTimeUtc'] = dateTime.toUtc().toIso8601String();
-        newDateKey = _formatDateKey(dateTime);
-        newTimeKey = _formatTimeKey(dateTime);
       }
       if (location != null) updates['location'] = location;
       if (address != null) updates['address'] = address;
@@ -568,46 +563,45 @@ class CloudGamesService {
       if (longitude != null) updates['longitude'] = longitude;
       if (updates.length <= 1) return; // nothing to update
 
-      // If time/field changed, attempt to move the slot lock atomically
-      if ((newDateKey != null && newTimeKey != null) || location != null) {
-        final String oldDate = data['slotDate']?.toString() ?? '';
-        final String oldField = data['slotField']?.toString() ?? '';
-        final String oldTime = data['slotTime']?.toString() ?? '';
-        // Derive new field key (prefer existing fieldId)
-        final String fieldId = data['fieldId']?.toString() ?? '';
-        newFieldKey = fieldId.isNotEmpty
-            ? fieldId
-            : base64Url.encode(
-                utf8.encode(location ?? data['location']?.toString() ?? ''));
+      // Check if slot-relevant fields changed
+      final oldGame = Game.fromJson(Map<String, dynamic>.from(data));
+      bool slotChanged = false;
 
-        final String targetDate = newDateKey ?? oldDate;
-        final String targetTime = newTimeKey ?? oldTime;
-        final String targetField = newFieldKey;
+      if (dateTime != null && dateTime != oldGame.dateTime) slotChanged = true;
+      if (location != null && location != oldGame.location) slotChanged = true;
 
-        if (targetDate.isNotEmpty &&
-            targetTime.isNotEmpty &&
-            targetField.isNotEmpty) {
-          try {
-            await _database
-                .ref('slots/$targetDate/$targetField/$targetTime')
-                .set(true);
-            // Success: write new slot keys and release old
-            updates['slotDate'] = targetDate;
-            updates['slotField'] = targetField;
-            updates['slotTime'] = targetTime;
-            if (oldDate.isNotEmpty &&
-                oldField.isNotEmpty &&
-                oldTime.isNotEmpty) {
-              try {
-                await _database
-                    .ref('slots/$oldDate/$oldField/$oldTime')
-                    .remove();
-              } catch (_) {}
-            }
-          } catch (e) {
-            // New slot already claimed
-            throw Exception('slot_already_booked');
-          }
+      if (slotChanged) {
+        // Build old and new slot keys
+        final oldDateKey = _formatDateKey(oldGame.dateTime);
+        final oldFieldKey = (oldGame.fieldId?.isNotEmpty ?? false)
+            ? oldGame.fieldId!
+            : base64Url.encode(utf8.encode(oldGame.location));
+        final oldTimeKey = _formatTimeKey(oldGame.dateTime);
+
+        final newDateTime = dateTime ?? oldGame.dateTime;
+        final newLocation = location ?? oldGame.location;
+        final newDateKey = _formatDateKey(newDateTime);
+        final newFieldKey = (oldGame.fieldId?.isNotEmpty ?? false)
+            ? oldGame.fieldId!
+            : base64Url.encode(utf8.encode(newLocation));
+        final newTimeKey = _formatTimeKey(newDateTime);
+
+        // Try to claim new slot first
+        try {
+          await _database
+              .ref('slots/$newDateKey/$newFieldKey/$newTimeKey')
+              .set(true);
+        } catch (e) {
+          throw Exception('new_slot_unavailable');
+        }
+
+        // Remove old slot (best effort)
+        try {
+          await _database
+              .ref('slots/$oldDateKey/$oldFieldKey/$oldTimeKey')
+              .remove();
+        } catch (_) {
+          // Log but don't fail - new slot claimed successfully
         }
       }
 

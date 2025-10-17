@@ -380,6 +380,27 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
         } catch (_) {}
       }
 
+      // Send invites to newly selected friends
+      if (AuthService.isSignedIn && _selectedFriendUids.isNotEmpty) {
+        // Filter out already-invited friends (locked ones)
+        final newInvites = _selectedFriendUids
+            .where((uid) => !_lockedInvitedUids.contains(uid))
+            .toList();
+
+        if (newInvites.isNotEmpty) {
+          try {
+            await CloudGamesService.invitePlayers(
+              current.id,
+              newInvites,
+              sport: current.sport,
+              dateTime: combinedDateTime,
+            );
+          } catch (_) {
+            // Silent fail for invites - game update succeeded
+          }
+        }
+      }
+
       if (mounted) {
         HapticsService.lightImpact();
         ScaffoldMessenger.of(context).showSnackBar(
@@ -397,9 +418,16 @@ class _GameOrganizeScreenState extends State<GameOrganizeScreen> {
       }
     } catch (e) {
       if (mounted) {
+        String errorMsg = 'game_creation_failed'.tr();
+        if (e.toString().contains('new_slot_unavailable')) {
+          errorMsg = 'time_slot_unavailable'.tr();
+        } else if (e.toString().contains('not_authorized')) {
+          errorMsg = 'not_authorized'.tr();
+        }
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('${'game_creation_failed'.tr()}: $e'),
+            content: Text(errorMsg),
             backgroundColor: AppColors.red,
             duration: const Duration(seconds: 5),
           ),
