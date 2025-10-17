@@ -834,13 +834,26 @@ class _GamesMyScreenState extends State<GamesMyScreen>
                         borderRadius:
                             BorderRadius.circular(AppRadius.smallCard),
                       ),
-                      child: Text(
-                        '${game.currentPlayers}/${game.maxPlayers}',
-                        style: AppTextStyles.small.copyWith(
-                          color:
-                              game.hasSpace ? AppColors.green : AppColors.red,
-                          fontWeight: FontWeight.bold,
-                        ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            game.isPublic ? Icons.lock_open : Icons.lock,
+                            size: 14,
+                            color:
+                                game.hasSpace ? AppColors.green : AppColors.red,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            '${game.currentPlayers}/${game.maxPlayers}',
+                            style: AppTextStyles.small.copyWith(
+                              color: game.hasSpace
+                                  ? AppColors.green
+                                  : AppColors.red,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                     const SizedBox(width: 6),
