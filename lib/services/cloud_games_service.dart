@@ -1235,4 +1235,26 @@ class CloudGamesService {
       return false;
     }
   }
+
+  // Check if the organizer modified their own game after creation
+  // Returns true if game's lastOrganizerEditAt > createdAt
+  static Future<bool> isGameModifiedByOrganizer(String gameId) async {
+    try {
+      final DataSnapshot snap = await _gamesRef.child(gameId).get();
+      if (!snap.exists) return false;
+      final Map<dynamic, dynamic> data = snap.value as Map<dynamic, dynamic>;
+      final dynamic lastEditRaw = data['lastOrganizerEditAt'];
+      final int lastEdit = lastEditRaw is int
+          ? lastEditRaw
+          : int.tryParse(lastEditRaw?.toString() ?? '') ?? 0;
+      final dynamic createdAtRaw = data['createdAt'];
+      final int createdAt = createdAtRaw is int
+          ? createdAtRaw
+          : int.tryParse(createdAtRaw?.toString() ?? '') ?? 0;
+      // Game was modified if lastOrganizerEditAt > createdAt
+      return lastEdit > createdAt;
+    } catch (_) {
+      return false;
+    }
+  }
 }
