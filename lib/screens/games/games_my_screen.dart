@@ -688,7 +688,7 @@ class _GamesMyScreenState extends State<GamesMyScreen>
                       spacing: 6,
                       runSpacing: 6,
                       children: [
-                        if (!game.isActive)
+                        if (!game.isActive) ...[
                           Container(
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 8, vertical: 4),
@@ -716,18 +716,95 @@ class _GamesMyScreenState extends State<GamesMyScreen>
                               ],
                             ),
                           ),
-                        if (!isMine)
-                          FutureBuilder<bool>(
-                            future: CloudGamesService
-                                .isInviteModifiedForCurrentUser(game.id),
-                            builder: (context, snap) {
-                              final modified = snap.data == true;
-                              if (!modified) return const SizedBox.shrink();
+                        ] else ...[
+                          if (!isMine)
+                            FutureBuilder<bool>(
+                              future: CloudGamesService
+                                  .isInviteModifiedForCurrentUser(game.id),
+                              builder: (context, snap) {
+                                final modified = snap.data == true;
+                                if (!modified) return const SizedBox.shrink();
+                                return Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 8, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color:
+                                        Colors.orange.withValues(alpha: 0.10),
+                                    border: const Border.fromBorderSide(
+                                        BorderSide(
+                                            color: AppColors.lightgrey,
+                                            width: 1)),
+                                    borderRadius: BorderRadius.circular(
+                                        AppRadius.smallCard),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Container(
+                                          width: 6,
+                                          height: 6,
+                                          decoration: const BoxDecoration(
+                                              color: Colors.orange,
+                                              shape: BoxShape.circle)),
+                                      const SizedBox(width: 6),
+                                      Text('Modified',
+                                          style: AppTextStyles.small.copyWith(
+                                              color: Colors.orange,
+                                              fontWeight: FontWeight.bold)),
+                                    ],
+                                  ),
+                                );
+                              },
+                            ),
+                          if (game.isFull)
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: AppColors.red.withValues(alpha: 0.1),
+                                border: const Border.fromBorderSide(BorderSide(
+                                    color: AppColors.lightgrey, width: 1)),
+                                borderRadius:
+                                    BorderRadius.circular(AppRadius.smallCard),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Container(
+                                      width: 6,
+                                      height: 6,
+                                      decoration: const BoxDecoration(
+                                          color: AppColors.red,
+                                          shape: BoxShape.circle)),
+                                  const SizedBox(width: 6),
+                                  Text('Full',
+                                      style: AppTextStyles.small.copyWith(
+                                          color: AppColors.red,
+                                          fontWeight: FontWeight.bold)),
+                                ],
+                              ),
+                            ),
+                          StreamBuilder<int>(
+                            stream: Stream.periodic(
+                                const Duration(minutes: 1), (i) => i),
+                            initialData: 0,
+                            builder: (context, snapshot) {
+                              final remaining = game.timeUntilGame;
+                              if (remaining.isNegative ||
+                                  remaining > const Duration(hours: 8)) {
+                                return const SizedBox.shrink();
+                              }
+                              final bool urgent =
+                                  remaining < const Duration(hours: 1);
+                              final hours = remaining.inHours;
+                              final minutes = remaining.inMinutes % 60;
                               return Container(
                                 padding: const EdgeInsets.symmetric(
                                     horizontal: 8, vertical: 4),
                                 decoration: BoxDecoration(
-                                  color: Colors.orange.withValues(alpha: 0.10),
+                                  color: urgent
+                                      ? Colors.amber.withValues(alpha: 0.12)
+                                      : AppColors.blue.withValues(alpha: 0.1),
                                   border: const Border.fromBorderSide(
                                       BorderSide(
                                           color: AppColors.lightgrey,
@@ -735,88 +812,16 @@ class _GamesMyScreenState extends State<GamesMyScreen>
                                   borderRadius: BorderRadius.circular(
                                       AppRadius.smallCard),
                                 ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Container(
-                                        width: 6,
-                                        height: 6,
-                                        decoration: const BoxDecoration(
-                                            color: Colors.orange,
-                                            shape: BoxShape.circle)),
-                                    const SizedBox(width: 6),
-                                    Text('Modified',
-                                        style: AppTextStyles.small.copyWith(
-                                            color: Colors.orange,
-                                            fontWeight: FontWeight.bold)),
-                                  ],
-                                ),
+                                child: Text('Starts in ${hours}h ${minutes}m',
+                                    style: AppTextStyles.small.copyWith(
+                                        color: urgent
+                                            ? Colors.amber.shade800
+                                            : AppColors.blue,
+                                        fontWeight: FontWeight.bold)),
                               );
                             },
                           ),
-                        if (game.isFull)
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: AppColors.red.withValues(alpha: 0.1),
-                              border: const Border.fromBorderSide(BorderSide(
-                                  color: AppColors.lightgrey, width: 1)),
-                              borderRadius:
-                                  BorderRadius.circular(AppRadius.smallCard),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Container(
-                                    width: 6,
-                                    height: 6,
-                                    decoration: const BoxDecoration(
-                                        color: AppColors.red,
-                                        shape: BoxShape.circle)),
-                                const SizedBox(width: 6),
-                                Text('Full',
-                                    style: AppTextStyles.small.copyWith(
-                                        color: AppColors.red,
-                                        fontWeight: FontWeight.bold)),
-                              ],
-                            ),
-                          ),
-                        StreamBuilder<int>(
-                          stream: Stream.periodic(
-                              const Duration(minutes: 1), (i) => i),
-                          initialData: 0,
-                          builder: (context, snapshot) {
-                            final remaining = game.timeUntilGame;
-                            if (remaining.isNegative ||
-                                remaining > const Duration(hours: 8)) {
-                              return const SizedBox.shrink();
-                            }
-                            final bool urgent =
-                                remaining < const Duration(hours: 1);
-                            final hours = remaining.inHours;
-                            final minutes = remaining.inMinutes % 60;
-                            return Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 8, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: urgent
-                                    ? Colors.amber.withValues(alpha: 0.12)
-                                    : AppColors.blue.withValues(alpha: 0.1),
-                                border: const Border.fromBorderSide(BorderSide(
-                                    color: AppColors.lightgrey, width: 1)),
-                                borderRadius:
-                                    BorderRadius.circular(AppRadius.smallCard),
-                              ),
-                              child: Text('Starts in ${hours}h ${minutes}m',
-                                  style: AppTextStyles.small.copyWith(
-                                      color: urgent
-                                          ? Colors.amber.shade800
-                                          : AppColors.blue,
-                                      fontWeight: FontWeight.bold)),
-                            );
-                          },
-                        ),
+                        ],
                       ],
                     ),
                   ],
