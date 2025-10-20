@@ -54,11 +54,16 @@ export const sendNotification = onValueCreated(
           data.route = "/friends";
           break;
 
-        case 'game_invite':
-          title = 'Game Invitation';
-          body = `${notification.data?.fromName || 'Someone'} invited you to a ${notification.data?.sport || 'game'}`;
-          data.route = '/my-games';
-          data.gameId = notification.data?.gameId || '';
+        case "game_invite":
+          title = "Game Invitation";
+          {
+            const fromName = notification.data?.fromName || "Someone";
+            const rawSport = (notification.data?.sport || "game").toString();
+            const sportWord = rawSport.toLowerCase() === "soccer" ? "football" : rawSport;
+            body = `${fromName} invited you to play a ${sportWord} match!`;
+          }
+          data.route = "/my-games";
+          data.gameId = notification.data?.gameId || "";
           break;
 
         case "game_cancelled":
@@ -95,51 +100,125 @@ export const sendNotification = onValueCreated(
 
       if (response.failureCount > 0) {
         console.log(`Failed to send to ${response.failureCount} tokens`);
-
-        // Clean up invalid tokens
         const invalidTokens: string[] = [];
         response.responses.forEach((resp, idx) => {
           if (!resp.success && resp.error) {
-            const errorCode = resp.error.code;
-            if (errorCode === 'messaging/invalid-registration-token' ||
-              errorCode === 'messaging/registration-token-not-registered') {
+            const code = resp.error.code;
+            if (
+              code === "messaging/invalid-registration-token" ||
+              code === "messaging/registration-token-not-registered"
+            ) {
               invalidTokens.push(tokenList[idx]);
             }
           }
         });
-
-        // Remove invalid tokens from database
         if (invalidTokens.length > 0) {
           const updates: { [key: string]: null } = {};
-          invalidTokens.forEach(token => {
-            updates[`/users/${userId}/fcmTokens/${token}`] = null;
+          invalidTokens.forEach((t) => {
+            updates[`/users/${userId}/fcmTokens/${t}`] = null;
           });
           await admin.database().ref().update(updates);
           console.log(`Removed ${invalidTokens.length} invalid tokens`);
         }
       }
-
-      return null;
     } catch (error) {
-      console.error('Error sending notification:', error);
-      return null;
+      console.error("Error sending notification:", error);
     }
-  });
+  }
+);
 
-// Clean up old notifications (older than 30 days)
-export const cleanupOldNotifications = functions.pubsub
-  .schedule('0 2 * * *') // Run daily at 2 AM
-  .timeZone('Europe/Amsterdam')
-  .onRun(async (context) => {
-    const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
+// Invite trigger → push directly to invitee
+export const onGameInviteCreate = onValueCreated(
+  "/games/{gameId}/invites/{inviteeUid}",
+  async (event) => {
+    const inviteeUid = event.params.inviteeUid as string;
+    const gameId = event.params.gameId as string;
+    const invite = event.data.val() || {};
 
     try {
-      const usersSnapshot = await admin.database()
-        .ref('/users')
-        .once('value');
+      const tokensSnap = await admin
+        .database()
+        .ref(`/users/${inviteeUid}/fcmTokens`)
+        .once("value");
+      const tokensObj = tokensSnap.val() || {};
+      const tokens = Object.keys(tokensObj);
+      if (!tokens.length) {
+        console.log(`No tokens for invitee ${inviteeUid}`);
+        return;
+      }
 
+      // Resolve organizer display name with graceful fallbacks
+      const organizerId = (invite.organizerId as string | undefined) || undefined;
+      let organizerName: string =
+        invite.organizerName || invite.fromName || "Someone";
+      if (organizerName === "Someone" && organizerId) {
+        try {
+          const user = await admin.auth().getUser(organizerId);
+          if (user.displayName) organizerName = user.displayName;
+        } catch (_) { }
+      }
+
+      // Map soccer to "football"; otherwise use sport value
+      const rawSport = (invite.sport || "game").toString();
+      const sportWord = rawSport.toLowerCase() === "soccer" ? "football" : rawSport;
+
+      const message: admin.messaging.MulticastMessage = {
+        notification: {
+          title: "Game Invitation",
+          body: `${organizerName} invited you to play a ${sportWord} match!`,
+        },
+        data: {
+          type: "game_invite",
+          route: "/my-games",
+          gameId,
+        },
+        tokens,
+      };
+
+      const res = await admin.messaging().sendEachForMulticast(message);
+      console.log(
+        `Invite push: sent ${res.successCount} of ${tokens.length} to invitee ${inviteeUid} for game ${gameId}`
+      );
+
+      if (res.failureCount > 0) {
+        const invalid: string[] = [];
+        res.responses.forEach((r, i) => {
+          if (!r.success && r.error) {
+            const code = r.error.code;
+            if (
+              code === "messaging/invalid-registration-token" ||
+              code === "messaging/registration-token-not-registered"
+            ) {
+              invalid.push(tokens[i]);
+            }
+          }
+        });
+        if (invalid.length) {
+          const updates: { [key: string]: null } = {};
+          invalid.forEach((t) => {
+            updates[`/users/${inviteeUid}/fcmTokens/${t}`] = null;
+          });
+          await admin.database().ref().update(updates);
+          console.log(
+            `Removed ${invalid.length} invalid tokens for ${inviteeUid}`
+          );
+        }
+      }
+    } catch (err) {
+      console.error("Error sending invite push:", err);
+    }
+  }
+);
+
+// Nightly cleanup
+export const cleanupOldNotifications = onSchedule(
+  { schedule: "0 2 * * *", timeZone: "Europe/Amsterdam" },
+  async () => {
+    const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
+    try {
+      const usersSnapshot = await admin.database().ref("/users").once("value");
       const users = usersSnapshot.val();
-      if (!users) return null;
+      if (!users) return;
 
       const updates: { [key: string]: null } = {};
 
@@ -174,4 +253,4 @@ export const cleanupOldNotifications = functions.pubsub
       console.error("Error cleaning up old notifications:", error);
     }
   }
-  );
+);
