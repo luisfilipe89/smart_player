@@ -383,6 +383,24 @@ class GamesService {
                 // Don't fail game joining if notification scheduling fails
                 debugPrint('Failed to schedule game reminders: $e');
               }
+
+              // Notify organizer that a player joined
+              try {
+                await NotificationService.writeNotificationData(
+                  recipientUid: updatedGame.organizerId,
+                  type: 'game_player_joined',
+                  data: {
+                    'fromUid': playerId,
+                    'fromName': playerName,
+                    'gameId': gameId,
+                    'sport': updatedGame.sport,
+                    'location': updatedGame.location,
+                    'gameTime': updatedGame.dateTime.toIso8601String(),
+                  },
+                );
+              } catch (e) {
+                debugPrint('Failed to send player joined notification: $e');
+              }
             }
           }
           return true;
@@ -467,6 +485,31 @@ class GamesService {
     } catch (e) {
       // Don't fail game cancellation if notification cancellation fails
       debugPrint('Failed to cancel game reminders: $e');
+    }
+
+    // Notify all players that the game was cancelled
+    try {
+      final game = await getGameById(gameId);
+      if (game != null) {
+        for (final playerId in game.players) {
+          if (playerId != game.organizerId) {
+            await NotificationService.writeNotificationData(
+              recipientUid: playerId,
+              type: 'game_cancelled',
+              data: {
+                'fromUid': game.organizerId,
+                'fromName': 'Game Organizer',
+                'gameId': gameId,
+                'sport': game.sport,
+                'location': game.location,
+                'gameTime': game.dateTime.toIso8601String(),
+              },
+            );
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('Failed to send game cancelled notifications: $e');
     }
   }
 
