@@ -14,6 +14,10 @@ class NotificationSettingsScreen extends StatefulWidget {
 class _NotificationSettingsScreenState
     extends State<NotificationSettingsScreen> {
   bool _notificationsEnabled = true;
+  bool _gameReminders = true;
+  bool _friendRequests = true;
+  bool _gameInvites = true;
+  bool _gameUpdates = true;
   bool _isLoading = true;
 
   @override
@@ -25,9 +29,22 @@ class _NotificationSettingsScreenState
   Future<void> _loadSettings() async {
     try {
       final enabled = await NotificationService.isNotificationsEnabled();
+      final gameReminders =
+          await NotificationService.isCategoryEnabled('game_reminders');
+      final friendRequests =
+          await NotificationService.isCategoryEnabled('friend_requests');
+      final gameInvites =
+          await NotificationService.isCategoryEnabled('game_invites');
+      final gameUpdates =
+          await NotificationService.isCategoryEnabled('game_updates');
+
       if (mounted) {
         setState(() {
           _notificationsEnabled = enabled;
+          _gameReminders = gameReminders;
+          _friendRequests = friendRequests;
+          _gameInvites = gameInvites;
+          _gameUpdates = gameUpdates;
           _isLoading = false;
         });
       }
@@ -67,6 +84,29 @@ class _NotificationSettingsScreenState
         _notificationsEnabled = !value;
       });
 
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('settings_save_error'.tr()),
+            backgroundColor: AppColors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _toggleCategory(String category, bool value) async {
+    try {
+      await NotificationService.setCategoryEnabled(category, value);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('settings_prefs_saved'.tr()),
+            backgroundColor: AppColors.green,
+          ),
+        );
+      }
+    } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -140,7 +180,7 @@ class _NotificationSettingsScreenState
 
                   const SizedBox(height: 24),
 
-                  // Notification types info
+                  // Notification categories
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
@@ -156,22 +196,56 @@ class _NotificationSettingsScreenState
                           style: AppTextStyles.h3,
                         ),
                         const SizedBox(height: 16),
-                        _buildNotificationTypeItem(
-                          icon: Icons.people,
-                          title: 'settings_notif_friends'.tr(),
-                          description: 'settings_notif_friends_desc'.tr(),
-                        ),
-                        const SizedBox(height: 12),
-                        _buildNotificationTypeItem(
-                          icon: Icons.sports,
-                          title: 'settings_notif_games'.tr(),
-                          description: 'settings_notif_games_desc'.tr(),
-                        ),
-                        const SizedBox(height: 12),
-                        _buildNotificationTypeItem(
+                        _buildCategoryToggle(
                           icon: Icons.schedule,
-                          title: 'settings_notif_reminders'.tr(),
+                          title: 'settings_notif_game_reminders'.tr(),
                           description: 'settings_notif_reminders_desc'.tr(),
+                          value: _gameReminders,
+                          onChanged: (value) {
+                            setState(() {
+                              _gameReminders = value;
+                            });
+                            _toggleCategory('game_reminders', value);
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                        _buildCategoryToggle(
+                          icon: Icons.people,
+                          title: 'settings_notif_friend_requests'.tr(),
+                          description: 'settings_notif_friends_desc'.tr(),
+                          value: _friendRequests,
+                          onChanged: (value) {
+                            setState(() {
+                              _friendRequests = value;
+                            });
+                            _toggleCategory('friend_requests', value);
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                        _buildCategoryToggle(
+                          icon: Icons.sports,
+                          title: 'settings_notif_game_invites'.tr(),
+                          description: 'settings_notif_games_desc'.tr(),
+                          value: _gameInvites,
+                          onChanged: (value) {
+                            setState(() {
+                              _gameInvites = value;
+                            });
+                            _toggleCategory('game_invites', value);
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                        _buildCategoryToggle(
+                          icon: Icons.update,
+                          title: 'settings_notif_game_updates'.tr(),
+                          description: 'settings_notif_game_updates_desc'.tr(),
+                          value: _gameUpdates,
+                          onChanged: (value) {
+                            setState(() {
+                              _gameUpdates = value;
+                            });
+                            _toggleCategory('game_updates', value);
+                          },
                         ),
                       ],
                     ),
@@ -211,16 +285,20 @@ class _NotificationSettingsScreenState
     );
   }
 
-  Widget _buildNotificationTypeItem({
+  Widget _buildCategoryToggle({
     required IconData icon,
     required String title,
     required String description,
+    required bool value,
+    required ValueChanged<bool> onChanged,
   }) {
     return Row(
       children: [
         Icon(
           icon,
-          color: _notificationsEnabled ? AppColors.primary : AppColors.grey,
+          color: _notificationsEnabled && value
+              ? AppColors.primary
+              : AppColors.grey,
           size: 20,
         ),
         const SizedBox(width: 12),
@@ -232,8 +310,9 @@ class _NotificationSettingsScreenState
                 title,
                 style: AppTextStyles.body.copyWith(
                   fontWeight: FontWeight.w500,
-                  color:
-                      _notificationsEnabled ? AppColors.text : AppColors.grey,
+                  color: _notificationsEnabled && value
+                      ? AppColors.text
+                      : AppColors.grey,
                 ),
               ),
               const SizedBox(height: 2),
@@ -243,6 +322,11 @@ class _NotificationSettingsScreenState
               ),
             ],
           ),
+        ),
+        Switch(
+          value: value,
+          onChanged: _notificationsEnabled ? onChanged : null,
+          activeColor: AppColors.primary,
         ),
       ],
     );

@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:firebase_database/firebase_database.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
@@ -8,6 +10,9 @@ import 'package:move_young/services/auth_service.dart';
 import 'package:move_young/models/game.dart';
 import 'package:timezone/data/latest_all.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:permission_handler/permission_handler.dart'
+    as permission_handler;
 
 // Top-level function for background message handling
 @pragma('vm:entry-point')
@@ -23,6 +28,7 @@ class NotificationService {
   static final FirebaseDatabase _db = FirebaseDatabase.instance;
   static final FlutterLocalNotificationsPlugin _local =
       FlutterLocalNotificationsPlugin();
+  static StreamSubscription? _authStateSubscription;
 
   // Navigation callback for handling notification taps
   static Function(String? payload)? _onNotificationTap;
@@ -62,7 +68,8 @@ class NotificationService {
     enableVibration: true,
   );
 
-  static Future<void> initialize({Function(String? payload)? onNotificationTap}) async {
+  static Future<void> initialize(
+      {Function(String? payload)? onNotificationTap}) async {
     _onNotificationTap = onNotificationTap;
 
     // Initialize timezone data for scheduled notifications
@@ -81,7 +88,7 @@ class NotificationService {
         requestSoundPermission: true,
       ),
     );
-    
+
     await _local.initialize(
       initSettings,
       onDidReceiveNotificationResponse: (NotificationResponse response) {
@@ -101,15 +108,42 @@ class NotificationService {
       await androidImplementation.createNotificationChannel(_channelReminders);
     }
 
-    // Ask permission (iOS) and get token
+    // Ask permission (iOS) and request Android 13+ notification permission
     await _messaging.requestPermission(
       alert: true,
       badge: true,
       sound: true,
       provisional: false,
     );
+
+    // On Android 13+ an explicit runtime permission is required
+    if (!kIsWeb && Platform.isAndroid) {
+      try {
+        await permission_handler.Permission.notification.request();
+      } catch (_) {}
+    }
+
+    // On iOS, ensure notifications are shown when app is in foreground
+    try {
+      await _messaging.setForegroundNotificationPresentationOptions(
+        alert: true,
+        badge: true,
+        sound: true,
+      );
+    } catch (_) {}
     await _saveCurrentToken();
     _messaging.onTokenRefresh.listen((token) => _saveToken(token));
+
+    // Keep FCM token in sync with authentication state (saves right after login)
+    try {
+      await _authStateSubscription?.cancel();
+      _authStateSubscription =
+          AuthService.authStateChanges.listen((user) async {
+        if (user != null) {
+          await _saveCurrentToken();
+        }
+      });
+    } catch (_) {}
 
     // Foreground messages → show local notification
     FirebaseMessaging.onMessage.listen((RemoteMessage message) async {
@@ -124,7 +158,7 @@ class NotificationService {
       final notifType = message.data['type'] ?? 'default';
       String channelId = 'smartplayer_default';
       String channelName = 'General';
-      
+
       if (notifType.contains('friend')) {
         channelId = 'smartplayer_friends';
         channelName = 'Friends';
@@ -163,6 +197,11 @@ class NotificationService {
     if (initialMessage != null) {
       _onNotificationTap?.call(jsonEncode(initialMessage.data));
     }
+  }
+
+  // Public helper to force-sync current device token to the signed-in user
+  static Future<void> syncFcmToken() async {
+    await _saveCurrentToken();
   }
 
   static Future<void> _saveCurrentToken() async {
@@ -280,9 +319,10 @@ class NotificationService {
   static Future<bool> isNotificationsEnabled() async {
     final uid = AuthService.currentUserId;
     if (uid == null) return true; // Default to enabled for guests
-    
+
     try {
-      final snapshot = await _db.ref('users/$uid/settings/notifications/enabled').get();
+      final snapshot =
+          await _db.ref('users/$uid/settings/notifications/enabled').get();
       return snapshot.value != false; // Default to true
     } catch (_) {
       return true;
@@ -298,7 +338,7 @@ class NotificationService {
   static Stream<bool> notificationsEnabledStream() {
     final uid = AuthService.currentUserId;
     if (uid == null) return Stream.value(true);
-    
+
     return _db
         .ref('users/$uid/settings/notifications/enabled')
         .onValue
@@ -339,5 +379,16 @@ class NotificationService {
     } catch (e) {
       debugPrint('Error writing notification data: $e');
     }
+  }
+
+  // Category preference methods
+  static Future<bool> isCategoryEnabled(String category) async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool('notifications_$category') ?? true;
+  }
+
+  static Future<void> setCategoryEnabled(String category, bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('notifications_$category', enabled);
   }
 }

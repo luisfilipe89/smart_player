@@ -168,12 +168,25 @@ class FriendsService {
 
       // Write notification data for friend request
       try {
+        // Get the sender's display name
+        String fromName = 'Unknown';
+        try {
+          final userSnap = await _db.ref('users/$fromUid').get();
+          if (userSnap.exists) {
+            final userData = userSnap.value as Map<dynamic, dynamic>?;
+            fromName =
+                userData?['displayName'] ?? userData?['email'] ?? 'Unknown';
+          }
+        } catch (e) {
+          debugPrint('🔍 Error fetching user name: $e');
+        }
+
         await NotificationService.writeNotificationData(
           recipientUid: toUid,
           type: 'friend_request',
           data: {
             'fromUid': fromUid,
-            'fromName': 'Unknown', // You might want to get the actual name
+            'fromName': fromName,
             'message': 'sent you a friend request',
           },
         );
@@ -285,12 +298,25 @@ class FriendsService {
     // Write notification data for friend request acceptance
     if (ok) {
       try {
+        // Get the accepter's display name
+        String fromName = 'Unknown';
+        try {
+          final userSnap = await _db.ref('users/$myUid').get();
+          if (userSnap.exists) {
+            final userData = userSnap.value as Map<dynamic, dynamic>?;
+            fromName =
+                userData?['displayName'] ?? userData?['email'] ?? 'Unknown';
+          }
+        } catch (e) {
+          debugPrint('🔍 Error fetching user name: $e');
+        }
+
         await NotificationService.writeNotificationData(
           recipientUid: fromUid,
           type: 'friend_request_accepted',
           data: {
             'fromUid': myUid,
-            'fromName': 'Unknown', // You might want to get the actual name
+            'fromName': fromName,
             'message': 'accepted your friend request',
           },
         );

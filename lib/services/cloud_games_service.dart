@@ -3,6 +3,7 @@ import 'package:firebase_database/firebase_database.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:move_young/models/game.dart';
 import 'package:move_young/db/db_paths.dart';
+import 'package:move_young/services/notification_service.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart' as path;
 import 'dart:convert';
@@ -262,16 +263,39 @@ class CloudGamesService {
     // Write only under the game node to avoid cross-user writes blocked by rules
     final DatabaseReference invitesRef = _database.ref('games/$gameId/invites');
     final Map<String, Object?> batch = {};
+    final String organizerName = _auth.currentUser?.displayName ?? 'Someone';
     for (final uid in userIds) {
       batch[uid] = {
         'status': 'pending',
         'organizerId': organizerId,
+        'organizerName': organizerName,
         if (sport != null) 'sport': sport,
         if (dateTime != null) 'dateTime': dateTime.toIso8601String(),
         'ts': DateTime.now().millisecondsSinceEpoch,
       };
     }
     await invitesRef.update(batch);
+
+    // Send push notifications to invitees via RTDB-triggered Cloud Function
+    try {
+      final String fromName = _auth.currentUser?.displayName ?? 'Someone';
+      for (final String uid in userIds) {
+        if (uid == organizerId) continue; // avoid self-notification
+        try {
+          await NotificationService.writeNotificationData(
+            recipientUid: uid,
+            type: 'game_invite',
+            data: {
+              'fromUid': organizerId,
+              'fromName': fromName,
+              'gameId': gameId,
+              if (sport != null) 'sport': sport,
+              if (dateTime != null) 'gameTime': dateTime.toIso8601String(),
+            },
+          );
+        } catch (_) {}
+      }
+    } catch (_) {}
   }
 
   // Fetch pending invited user IDs for a game (organizer-side display)

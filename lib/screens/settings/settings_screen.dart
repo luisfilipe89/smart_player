@@ -5,6 +5,7 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:move_young/theme/app_back_button.dart';
 import 'package:move_young/services/haptics_service.dart';
 import 'package:move_young/services/profile_settings_service.dart';
+import 'package:move_young/screens/settings/notification_settings_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -267,10 +268,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             const SizedBox(height: AppSpacing.lg),
             _buildSectionCard(
-              title: 'settings_notifications_tba'.tr(),
-              child: Text(
-                '',
-                style: AppTextStyles.smallMuted,
+              title: 'settings_notifications'.tr(),
+              child: ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.notifications_outlined),
+                title: Text('settings_notifications'.tr()),
+                subtitle: Text('settings_notifications_enabled_desc'.tr()),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const NotificationSettingsScreen(),
+                    ),
+                  );
+                },
               ),
             ),
             const SizedBox(height: AppSpacing.lg),
