@@ -1,6 +1,7 @@
 import * as admin from "firebase-admin";
 import { setGlobalOptions } from "firebase-functions/v2";
 import { onValueCreated } from "firebase-functions/v2/database";
+import { onValueWritten } from "firebase-functions/v2/database";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 
 admin.initializeApp();
@@ -77,6 +78,20 @@ export const sendNotification = onValueCreated(
         case "game_player_joined":
           title = "Player Joined Your Game";
           body = `${notification.data?.fromName || "Someone"} joined your ${notification.data?.sport || "game"}`;
+          data.route = "/my-games";
+          data.gameId = notification.data?.gameId || "";
+          break;
+
+        case "invite_accepted":
+          title = "Invite Accepted";
+          body = `${notification.data?.fromName || "Someone"} accepted your ${notification.data?.sport || "game"} invite`;
+          data.route = "/my-games";
+          data.gameId = notification.data?.gameId || "";
+          break;
+
+        case "invite_declined":
+          title = "Invite Declined";
+          body = `${notification.data?.fromName || "Someone"} declined your ${notification.data?.sport || "game"} invite`;
           data.route = "/my-games";
           data.gameId = notification.data?.gameId || "";
           break;
@@ -251,6 +266,92 @@ export const cleanupOldNotifications = onSchedule(
       }
     } catch (error) {
       console.error("Error cleaning up old notifications:", error);
+    }
+  }
+);
+
+// Invite status change → notify organizer (accepted/declined)
+export const onInviteStatusChange = onValueWritten(
+  "/games/{gameId}/invites/{inviteeUid}/status",
+  async (event) => {
+    const gameId = event.params.gameId as string;
+    const inviteeUid = event.params.inviteeUid as string;
+    const before = (event.data.before.val() || "").toString();
+    const after = (event.data.after.val() || "").toString();
+
+    if (!after || after === before) return; // no-op
+    if (after !== "accepted" && after !== "declined") return; // only these
+
+    try {
+      // Load game to find organizer and sport
+      const gameSnap = await admin.database().ref(`/games/${gameId}`).once("value");
+      if (!gameSnap.exists()) return;
+      const game = gameSnap.val() || {};
+      const organizerId: string = (game.organizerId || "").toString();
+      if (!organizerId || organizerId === inviteeUid) return;
+      const rawSport = (game.sport || "game").toString();
+      const sportWord = rawSport.toLowerCase() === "soccer" ? "football" : rawSport;
+
+      // Resolve invitee display name
+      let fromName = "Someone";
+      try {
+        const user = await admin.auth().getUser(inviteeUid);
+        if (user.displayName) fromName = user.displayName;
+      } catch (_) { }
+
+      // Organizer tokens
+      const tokensSnap = await admin
+        .database()
+        .ref(`/users/${organizerId}/fcmTokens`)
+        .once("value");
+      const tokensObj = tokensSnap.val() || {};
+      const tokens: string[] = Object.keys(tokensObj);
+      if (!tokens.length) return;
+
+      const isAccepted = after === "accepted";
+      const title = isAccepted ? "Invite Accepted" : "Invite Declined";
+      const body = isAccepted
+        ? `${fromName} accepted your ${sportWord} invite`
+        : `${fromName} declined your ${sportWord} invite`;
+
+      const msg: admin.messaging.MulticastMessage = {
+        notification: { title, body },
+        data: {
+          type: isAccepted ? "invite_accepted" : "invite_declined",
+          route: "/my-games",
+          gameId,
+        },
+        tokens,
+      };
+
+      const res = await admin.messaging().sendEachForMulticast(msg);
+      console.log(
+        `Invite status ${after}: sent ${res.successCount}/${tokens.length} to organizer ${organizerId} for game ${gameId}`
+      );
+
+      if (res.failureCount > 0) {
+        const invalid: string[] = [];
+        res.responses.forEach((r, i) => {
+          if (!r.success && r.error) {
+            const code = r.error.code;
+            if (
+              code === "messaging/invalid-registration-token" ||
+              code === "messaging/registration-token-not-registered"
+            ) {
+              invalid.push(tokens[i]);
+            }
+          }
+        });
+        if (invalid.length) {
+          const updates: { [key: string]: null } = {};
+          invalid.forEach((t) => {
+            updates[`/users/${organizerId}/fcmTokens/${t}`] = null;
+          });
+          await admin.database().ref().update(updates);
+        }
+      }
+    } catch (e) {
+      console.error("Error processing invite status change:", e);
     }
   }
 );

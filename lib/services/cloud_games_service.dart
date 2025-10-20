@@ -459,6 +459,22 @@ class CloudGamesService {
         final isActive = playerIndex >= 0 && playerIndex < game.maxPlayers;
         final position = playerIndex + 1;
 
+        // Notify organizer that invite was accepted (and player joined)
+        try {
+          if (game.organizerId.isNotEmpty && game.organizerId != uid) {
+            await NotificationService.writeNotificationData(
+              recipientUid: game.organizerId,
+              type: 'invite_accepted',
+              data: {
+                'fromUid': uid,
+                'fromName': displayName,
+                'gameId': gameId,
+                'sport': game.sport,
+              },
+            );
+          }
+        } catch (_) {}
+
         // Sync the game to local database
         try {
           // Insert into local SQLite database
@@ -512,6 +528,29 @@ class CloudGamesService {
           .child(uid)
           .child('status')
           .set('declined');
+
+      // Fetch game to notify organizer
+      try {
+        final gameSnapshot = await _gamesRef.child(gameId).get();
+        if (gameSnapshot.exists) {
+          final Map<dynamic, dynamic> gameData =
+              gameSnapshot.value as Map<dynamic, dynamic>;
+          final game = Game.fromJson(Map<String, dynamic>.from(gameData));
+          final fromName = _auth.currentUser?.displayName ?? 'User';
+          if (game.organizerId.isNotEmpty && game.organizerId != uid) {
+            await NotificationService.writeNotificationData(
+              recipientUid: game.organizerId,
+              type: 'invite_declined',
+              data: {
+                'fromUid': uid,
+                'fromName': fromName,
+                'gameId': gameId,
+                'sport': game.sport,
+              },
+            );
+          }
+        }
+      } catch (_) {}
       return true;
     } catch (e) {
       return false;
