@@ -3,6 +3,9 @@
     "source": "functions",
     "predeploy": []
   },
+  "database": {
+    "rules": "database.rules.json"
+  },
   "hosting": {
     "public": "public",
     "ignore": [

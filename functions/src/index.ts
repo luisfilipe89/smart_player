@@ -7,6 +7,41 @@ import { onSchedule } from "firebase-functions/v2/scheduler";
 admin.initializeApp();
 setGlobalOptions({ region: "europe-west1" });
 
+// Process notification requests and write to user's notifications
+export const processNotificationRequest = onValueCreated(
+  "/notification_requests/{requestId}",
+  async (event) => {
+    const request = event.data.val();
+    const requestId = event.params.requestId as string;
+
+    if (!request) return;
+
+    try {
+      const { recipientUid, type, data, timestamp, read } = request;
+
+      // Write the notification to the user's notifications path
+      await admin.database()
+        .ref(`/users/${recipientUid}/notifications/${requestId}`)
+        .set({
+          type,
+          data,
+          timestamp,
+          read,
+        });
+
+      console.log(`Notification request processed for user ${recipientUid}, type: ${type}`);
+
+      // Clean up the request
+      await admin.database()
+        .ref(`/notification_requests/${requestId}`)
+        .remove();
+
+    } catch (error) {
+      console.error("Error processing notification request:", error);
+    }
+  }
+);
+
 // RTDB → push notifications
 export const sendNotification = onValueCreated(
   "/users/{userId}/notifications/{notificationId}",
@@ -92,6 +127,14 @@ export const sendNotification = onValueCreated(
         case "invite_declined":
           title = "Invite Declined";
           body = `${notification.data?.fromName || "Someone"} declined your ${notification.data?.sport || "game"} invite`;
+          data.route = "/my-games";
+          data.gameId = notification.data?.gameId || "";
+          break;
+
+        case "game_edited":
+          title = "Game Updated";
+          const changes = notification.data?.changes || "details";
+          body = `${notification.data?.fromName || "Organizer"} changed the game ${changes}`;
           data.route = "/my-games";
           data.gameId = notification.data?.gameId || "";
           break;

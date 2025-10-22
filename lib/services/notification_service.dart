@@ -33,6 +33,9 @@ class NotificationService {
   // Navigation callback for handling notification taps
   static Function(String? payload)? _onNotificationTap;
 
+  // Global navigation handler for deep linking
+  static Function(Map<String, dynamic>)? _onDeepLinkNavigation;
+
   // Notification channels
   static const AndroidNotificationChannel _channelDefault =
       AndroidNotificationChannel(
@@ -69,8 +72,10 @@ class NotificationService {
   );
 
   static Future<void> initialize(
-      {Function(String? payload)? onNotificationTap}) async {
+      {Function(String? payload)? onNotificationTap,
+      Function(Map<String, dynamic>)? onDeepLinkNavigation}) async {
     _onNotificationTap = onNotificationTap;
+    _onDeepLinkNavigation = onDeepLinkNavigation;
 
     // Initialize timezone data for scheduled notifications
     try {
@@ -197,6 +202,11 @@ class NotificationService {
     if (initialMessage != null) {
       _onNotificationTap?.call(jsonEncode(initialMessage.data));
     }
+  }
+
+  // Handle deep link navigation from notifications
+  static void handleDeepLinkNavigation(Map<String, dynamic> data) {
+    _onDeepLinkNavigation?.call(data);
   }
 
   // Public helper to force-sync current device token to the signed-in user
@@ -369,15 +379,24 @@ class NotificationService {
     required Map<String, dynamic> data,
   }) async {
     try {
+      print(
+          '🔔 [DEBUG] writeNotificationData called - recipient: $recipientUid, type: $type, data: $data');
       final notificationId = DateTime.now().millisecondsSinceEpoch.toString();
-      await _db.ref('users/$recipientUid/notifications/$notificationId').set({
+
+      // Write to notification_requests path instead of directly to user's notifications
+      // This allows the client to write, and a Cloud Function will process it
+      final requestRef = _db.ref('notification_requests/$notificationId');
+      await requestRef.set({
+        'recipientUid': recipientUid,
         'type': type,
         'data': data,
         'timestamp': ServerValue.timestamp,
         'read': false,
       });
+      print('🔔 [DEBUG] Notification request written successfully to RTDB');
     } catch (e) {
-      debugPrint('Error writing notification data: $e');
+      print('🔔 [DEBUG] Error writing notification request: $e');
+      debugPrint('Error writing notification request: $e');
     }
   }
 

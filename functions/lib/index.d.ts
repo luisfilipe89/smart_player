@@ -1,3 +1,6 @@
+export declare const processNotificationRequest: import("firebase-functions/core").CloudFunction<import("firebase-functions/v2/database").DatabaseEvent<import("firebase-functions/v2/database").DataSnapshot, {
+    requestId: string;
+}>>;
 export declare const sendNotification: import("firebase-functions/core").CloudFunction<import("firebase-functions/v2/database").DatabaseEvent<import("firebase-functions/v2/database").DataSnapshot, {
     userId: string;
     notificationId: string;

@@ -31,6 +31,19 @@ class MainScaffoldController {
       _switchToTab(kTabJoin, popToRoot: popToRoot);
     }
   }
+
+  // Static method to find the controller from context
+  static MainScaffoldController? maybeOf(BuildContext context) {
+    final scope =
+        context.dependOnInheritedWidgetOfExactType<MainScaffoldScope>();
+    return scope?.controller;
+  }
+
+  // Static method to navigate to a specific game from notifications
+  static void navigateToGame(String gameId) {
+    debugPrint('Navigating to game: $gameId');
+    // This will be implemented to work with the current controller instance
+  }
 }
 
 class MainScaffoldScope extends InheritedWidget {
@@ -126,6 +139,11 @@ class MainScaffoldState extends State<MainScaffold> {
         });
       },
     );
+
+    // Handle pending notifications after the scaffold is ready
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _handlePendingNotifications();
+    });
   }
 
   void switchToTab(int index, {bool popToRoot = false}) {
@@ -151,6 +169,24 @@ class MainScaffoldState extends State<MainScaffold> {
   void _popToRoot(int index) {
     final keys = [_homeKey, _friendsKey, _joinKey, _agendaKey];
     keys[index].currentState?.popUntil((r) => r.isFirst);
+  }
+
+  void _handlePendingNotifications() {
+    // Check if there's a pending game ID to navigate to
+    // This would be set by the notification tap handler
+    Future.delayed(const Duration(milliseconds: 100), () {
+      if (mounted) {
+        // Check for pending game ID from notification tap
+        // This is a simple approach - in production you'd use proper state management
+        debugPrint('Checking for pending notifications...');
+
+        // Check if there's a pending game ID to navigate to
+        // This would be set by the notification tap handler in main.dart
+        // For now, we'll implement a simple approach
+        // The actual navigation will be handled by the notification tap handler
+        // when the user is already authenticated and in the main app
+      }
+    });
   }
 
   @override

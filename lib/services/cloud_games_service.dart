@@ -7,6 +7,7 @@ import 'package:move_young/services/notification_service.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart' as path;
 import 'dart:convert';
+import 'package:intl/intl.dart';
 
 class CloudGamesService {
   static FirebaseDatabase get _database => FirebaseDatabase.instance;
@@ -682,6 +683,50 @@ class CloudGamesService {
       }
 
       await _gamesRef.child(gameId).update(updates);
+
+      // Notify all players who joined about the game edit
+      try {
+        print('🔔 [DEBUG] Starting game edit notification process');
+        final game = Game.fromJson(Map<String, dynamic>.from(data));
+        final List<String> players = game.players;
+        final String organizerName =
+            _auth.currentUser?.displayName ?? 'Organizer';
+
+        print('🔔 [DEBUG] Game players: $players, organizer: $organizerName');
+
+        // Build change description
+        List<String> changes = [];
+        if (dateTime != null && dateTime != game.dateTime) {
+          final formatter = DateFormat('MMM d, h:mm a');
+          changes.add('time to ${formatter.format(dateTime)}');
+        }
+        if (location != null && location != game.location) {
+          changes.add('location to $location');
+        }
+
+        final changeText = changes.join(' and ');
+        print('🔔 [DEBUG] Changes detected: $changeText');
+
+        for (final playerId in players) {
+          if (playerId == uid) continue; // don't notify organizer
+          print('🔔 [DEBUG] Sending notification to player: $playerId');
+          try {
+            await NotificationService.writeNotificationData(
+              recipientUid: playerId,
+              type: 'game_edited',
+              data: {
+                'fromUid': uid,
+                'fromName': organizerName,
+                'gameId': gameId,
+                'sport': game.sport,
+                'changes': changeText,
+                'location': location ?? game.location,
+                'dateTime': (dateTime ?? game.dateTime).toIso8601String(),
+              },
+            );
+          } catch (_) {}
+        }
+      } catch (_) {}
     } catch (e) {
       rethrow;
     }
@@ -731,6 +776,40 @@ class CloudGamesService {
         'canceledAt': DateTime.now().millisecondsSinceEpoch,
         if (_currentUserId != null) 'canceledBy': _currentUserId,
       });
+
+      // Notify all players about cancellation
+      try {
+        print('🔔 [DEBUG] Starting game cancel notification process');
+        if (snap.exists) {
+          final Map<dynamic, dynamic> data =
+              snap.value as Map<dynamic, dynamic>;
+          final game = Game.fromJson(Map<String, dynamic>.from(data));
+          final List<String> players = game.players;
+          final String organizerName =
+              _auth.currentUser?.displayName ?? 'Organizer';
+
+          print('🔔 [DEBUG] Game players: $players, organizer: $organizerName');
+
+          for (final playerId in players) {
+            if (playerId == _currentUserId) continue; // don't notify organizer
+            print(
+                '🔔 [DEBUG] Sending cancel notification to player: $playerId');
+            try {
+              await NotificationService.writeNotificationData(
+                recipientUid: playerId,
+                type: 'game_cancelled',
+                data: {
+                  'fromUid': _currentUserId ?? '',
+                  'fromName': organizerName,
+                  'gameId': gameId,
+                  'sport': game.sport,
+                  'location': game.location,
+                },
+              );
+            } catch (_) {}
+          }
+        }
+      } catch (_) {}
 
       // Release slot lock with comprehensive cleanup and verification
       bool slotReleased = false;

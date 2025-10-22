@@ -11,7 +11,7 @@ import 'package:move_young/theme/tokens.dart';
 import 'package:move_young/screens/main_scaffold.dart'; // MainScaffold & kTabAgenda
 import 'package:move_young/screens/settings/settings_screen.dart';
 import 'package:move_young/screens/help/help_screen.dart';
-import 'package:move_young/screens/profile/profile_screen.dart';
+import 'package:move_young/screens/maps/profile_screen.dart';
 import 'package:move_young/screens/friends/friends_screen.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:move_young/services/cloud_games_service.dart';
@@ -705,7 +705,7 @@ class _ActivitiesCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Ink.image(
-                image: const AssetImage('assets/images/general_public.jpg'),
+                image: const AssetImage('assets/images/running6.png'),
                 height: 100,
                 width: double.infinity,
                 fit: BoxFit.cover,

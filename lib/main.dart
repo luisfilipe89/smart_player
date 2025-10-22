@@ -11,8 +11,12 @@ import 'package:move_young/theme/_theme.dart';
 import 'package:move_young/services/notification_service.dart';
 import 'package:move_young/services/haptics_service.dart';
 import 'package:move_young/services/accessibility_service.dart';
+import 'package:move_young/screens/main_scaffold.dart';
 import 'firebase_options.dart';
 import 'package:move_young/utils/logger.dart';
+
+// Global navigator key for navigation from notifications
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -48,6 +52,7 @@ void main() async {
   try {
     await NotificationService.initialize(
       onNotificationTap: _handleNotificationTap,
+      onDeepLinkNavigation: _handleDeepLinkNavigation,
     );
   } catch (_) {}
 
@@ -126,6 +131,7 @@ class _MoveYoungAppState extends State<MoveYoungApp> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: navigatorKey,
       debugShowCheckedModeBanner: false,
       title: 'MoveYoung',
       theme: _highContrast
@@ -160,15 +166,65 @@ void _handleNotificationTap(String? payload) {
     final data = jsonDecode(payload) as Map<String, dynamic>;
     final type = data['type'] as String?;
     final route = data['route'] as String?;
+    final gameId = data['gameId'] as String?;
 
-    // Store the notification data for navigation when app is ready
-    // This will be handled by the main scaffold when it's available
-    debugPrint('Notification tapped: $type -> $route');
+    debugPrint('Notification tapped: $type -> $route, gameId: $gameId');
 
-    // For now, just log the notification data
-    // In a real implementation, you'd navigate to the appropriate screen
-    // based on the notification type and route
+    // Handle game invite notifications
+    if (type == 'game_invite' && gameId != null) {
+      _navigateToGame(gameId);
+    }
   } catch (e) {
     debugPrint('Error handling notification tap: $e');
   }
 }
+
+// Handle deep link navigation from notifications
+void _handleDeepLinkNavigation(Map<String, dynamic> data) {
+  debugPrint('Deep link navigation: $data');
+
+  final type = data['type'] as String?;
+  final gameId = data['gameId'] as String?;
+
+  if (type == 'game_invite' && gameId != null) {
+    // Navigate to games tab and highlight the specific game
+    _navigateToGame(gameId);
+  }
+}
+
+// Navigate to specific game
+void _navigateToGame(String gameId) {
+  debugPrint('Navigating to game: $gameId');
+
+  // Try to navigate immediately if the app is already running
+  _tryNavigateToGame(gameId);
+}
+
+// Try to navigate to game using the current scaffold controller
+void _tryNavigateToGame(String gameId) {
+  debugPrint('Attempting to navigate to game: $gameId');
+
+  // Get the current context from the global navigator
+  final context = navigatorKey.currentContext;
+  if (context == null) {
+    debugPrint('No context available for navigation');
+    return;
+  }
+
+  // Try to find the MainScaffoldController in the widget tree
+  final controller = MainScaffoldController.maybeOf(context);
+  if (controller != null) {
+    debugPrint('Found MainScaffoldController, navigating to game: $gameId');
+    controller.openMyGames(
+      initialTab: 0, // Joining tab
+      highlightGameId: gameId,
+      popToRoot: true,
+    );
+  } else {
+    debugPrint(
+        'MainScaffoldController not found, cannot navigate to game: $gameId');
+  }
+}
+
+// Global variables for pending navigation
+// String? _pendingGameId; // Removed unused variable
