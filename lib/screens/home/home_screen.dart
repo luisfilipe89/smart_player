@@ -705,7 +705,7 @@ class _ActivitiesCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Ink.image(
-                image: const AssetImage('assets/images/running6.png'),
+                image: const AssetImage('assets/images/fitness_circus_3.jpg'),
                 height: 100,
                 width: double.infinity,
                 fit: BoxFit.cover,
