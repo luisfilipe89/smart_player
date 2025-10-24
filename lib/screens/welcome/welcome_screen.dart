@@ -3,19 +3,20 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/foundation.dart'
     show defaultTargetPlatform, TargetPlatform, kIsWeb;
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:move_young/services/auth_service.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:move_young/providers/services/auth_provider.dart';
 import 'package:move_young/screens/auth/auth_screen.dart';
 import 'package:move_young/screens/main_scaffold.dart';
 import 'package:move_young/theme/tokens.dart';
 
-class WelcomeScreen extends StatefulWidget {
+class WelcomeScreen extends ConsumerStatefulWidget {
   const WelcomeScreen({super.key});
 
   @override
-  State<WelcomeScreen> createState() => _WelcomeScreenState();
+  ConsumerState<WelcomeScreen> createState() => _WelcomeScreenState();
 }
 
-class _WelcomeScreenState extends State<WelcomeScreen> {
+class _WelcomeScreenState extends ConsumerState<WelcomeScreen> {
   bool _loadingGoogle = false;
   bool _loadingAnon = false;
 
@@ -252,7 +253,8 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
     setState(() => _loadingAnon = true);
     bool navigated = false;
     try {
-      await AuthService.signInAnonymously();
+      final authActions = ref.read(authActionsProvider);
+      await authActions.signInAnonymously();
       if (context.mounted) {
         navigated = true;
         _navigateToMainApp(context);
@@ -275,7 +277,8 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
     setState(() => _loadingGoogle = true);
     bool navigated = false;
     try {
-      final credential = await AuthService.signInWithGoogle();
+      final authActions = ref.read(authActionsProvider);
+      final credential = await authActions.signInWithGoogle();
       if (credential != null && context.mounted) {
         navigated = true;
         _navigateToMainApp(context);

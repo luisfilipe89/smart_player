@@ -1,12 +1,16 @@
+// lib/services/sync_service_instance.dart
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-// import 'package:move_young/services/cloud_games_service.dart';
-// import 'package:move_young/services/friends_service.dart';
+import 'package:move_young/services/cloud_games_service_instance.dart';
+import 'package:move_young/services/friends_service_instance.dart';
 
-/// Service for handling background sync failures and retry queue
-class SyncService {
+/// Instance-based SyncService for use with Riverpod dependency injection
+class SyncServiceInstance {
+  final CloudGamesServiceInstance _cloudGamesService;
+  final FriendsServiceInstance _friendsService;
+
   static const String _syncQueueKey = 'sync_queue';
 
   // Sync status types
@@ -14,23 +18,28 @@ class SyncService {
   static const String _statusPending = 'pending';
   static const String _statusFailed = 'failed';
 
-  static final List<SyncOperation> _syncQueue = [];
-  static final StreamController<SyncStatus> _statusController =
+  final List<SyncOperation> _syncQueue = [];
+  final StreamController<SyncStatus> _statusController =
       StreamController<SyncStatus>.broadcast();
-  static Timer? _retryTimer;
+  Timer? _retryTimer;
+
+  SyncServiceInstance(
+    this._cloudGamesService,
+    this._friendsService,
+  );
 
   /// Stream of sync status changes
-  static Stream<SyncStatus> get statusStream => _statusController.stream;
+  Stream<SyncStatus> get statusStream => _statusController.stream;
 
   /// Current sync status
-  static SyncStatus get currentStatus => _syncQueue.isEmpty
+  SyncStatus get currentStatus => _syncQueue.isEmpty
       ? SyncStatus.synced
       : _syncQueue.any((op) => op.status == _statusFailed)
           ? SyncStatus.failed
           : SyncStatus.pending;
 
   /// Initialize sync service
-  static Future<void> initialize() async {
+  Future<void> initialize() async {
     try {
       await _loadSyncQueue();
       _startRetryTimer();
@@ -42,7 +51,7 @@ class SyncService {
   }
 
   /// Add operation to sync queue
-  static Future<void> addSyncOperation({
+  Future<void> addSyncOperation({
     required String type,
     required Map<String, dynamic> data,
     required Future<bool> Function() operation,
@@ -65,7 +74,7 @@ class SyncService {
   }
 
   /// Retry failed operations
-  static Future<void> retryFailedOperations() async {
+  Future<void> retryFailedOperations() async {
     final failedOps =
         _syncQueue.where((op) => op.status == _statusFailed).toList();
 
@@ -99,7 +108,7 @@ class SyncService {
   }
 
   /// Mark operation as synced
-  static Future<void> markAsSynced(String operationId) async {
+  Future<void> markAsSynced(String operationId) async {
     final op = _syncQueue.firstWhere(
       (op) => op.id == operationId,
       orElse: () => throw Exception('Operation not found'),
@@ -115,7 +124,7 @@ class SyncService {
   }
 
   /// Mark operation as failed
-  static Future<void> markAsFailed(String operationId) async {
+  Future<void> markAsFailed(String operationId) async {
     final op = _syncQueue.firstWhere(
       (op) => op.id == operationId,
       orElse: () => throw Exception('Operation not found'),
@@ -130,21 +139,27 @@ class SyncService {
   }
 
   /// Get sync queue
-  static List<SyncOperation> get syncQueue => List.unmodifiable(_syncQueue);
+  List<SyncOperation> get syncQueue => List.unmodifiable(_syncQueue);
 
   /// Get failed operations count
-  static int get failedOperationsCount =>
+  int get failedOperationsCount =>
       _syncQueue.where((op) => op.status == _statusFailed).length;
 
   /// Clear all operations
-  static Future<void> clearAll() async {
+  Future<void> clearAll() async {
     _syncQueue.clear();
     await _saveSyncQueue();
     _notifyStatusChange();
   }
 
+  /// Dispose resources
+  void dispose() {
+    _retryTimer?.cancel();
+    _statusController.close();
+  }
+
   /// Load sync queue from storage
-  static Future<void> _loadSyncQueue() async {
+  Future<void> _loadSyncQueue() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final queueJson = prefs.getString(_syncQueueKey);
@@ -165,7 +180,7 @@ class SyncService {
   }
 
   /// Save sync queue to storage
-  static Future<void> _saveSyncQueue() async {
+  Future<void> _saveSyncQueue() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final queueJson =
@@ -177,7 +192,7 @@ class SyncService {
   }
 
   /// Start retry timer
-  static void _startRetryTimer() {
+  void _startRetryTimer() {
     _retryTimer?.cancel(); // Cancel existing timer before creating new one
     _retryTimer = Timer.periodic(const Duration(minutes: 5), (timer) {
       if (_syncQueue.isNotEmpty) {
@@ -187,40 +202,34 @@ class SyncService {
   }
 
   /// Notify status change
-  static void _notifyStatusChange() {
+  void _notifyStatusChange() {
     _statusController.add(currentStatus);
   }
 
   /// Execute operation based on type and data
-  static Future<bool> _executeOperation(SyncOperation operation) async {
+  Future<bool> _executeOperation(SyncOperation operation) async {
     final type = operation.type;
+    final data = operation.data;
 
     try {
       switch (type) {
         case 'game_join':
-          // This method is deprecated - use SyncServiceInstance instead
-          // The new architecture uses dependency injection through Riverpod providers
-          debugPrint(
-              'Using deprecated sync service - migrate to SyncServiceInstance');
-          return false;
+          final gameId = data['gameId'] as String;
+          await _cloudGamesService.joinGame(gameId);
+          return true;
 
         case 'game_leave':
-          // This method is deprecated - use SyncServiceInstance instead
-          debugPrint(
-              'Using deprecated sync service - migrate to SyncServiceInstance');
-          return false;
+          final gameId = data['gameId'] as String;
+          await _cloudGamesService.leaveGame(gameId);
+          return true;
 
         case 'friend_request':
-          // This method is deprecated - use SyncServiceInstance instead
-          debugPrint(
-              'Using deprecated sync service - migrate to SyncServiceInstance');
-          return false;
+          final toUid = data['toUid'] as String;
+          return await _friendsService.sendFriendRequest(toUid);
 
         case 'friend_accept':
-          // This method is deprecated - use SyncServiceInstance instead
-          debugPrint(
-              'Using deprecated sync service - migrate to SyncServiceInstance');
-          return false;
+          final fromUid = data['fromUid'] as String;
+          return await _friendsService.acceptFriendRequest(fromUid);
 
         default:
           debugPrint('Unknown operation type: $type');
@@ -230,12 +239,6 @@ class SyncService {
       debugPrint('Error executing operation $type: $e');
       return false;
     }
-  }
-
-  /// Dispose resources
-  static void dispose() {
-    _retryTimer?.cancel();
-    _statusController.close();
   }
 }
 
@@ -258,39 +261,36 @@ class SyncOperation {
     required this.operation,
     required this.status,
     required this.timestamp,
-    this.retryCount = 0,
+    required this.retryCount,
     this.lastAttempt,
     this.itemId,
   });
 
-  Map<String, dynamic> toJson() {
-    return {
-      'id': id,
-      'type': type,
-      'data': data,
-      'status': status,
-      'timestamp': timestamp.millisecondsSinceEpoch,
-      'retryCount': retryCount,
-      'lastAttempt': lastAttempt?.millisecondsSinceEpoch,
-      'itemId': itemId,
-    };
-  }
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'type': type,
+        'data': data,
+        'status': status,
+        'timestamp': timestamp.toIso8601String(),
+        'retryCount': retryCount,
+        'lastAttempt': lastAttempt?.toIso8601String(),
+        'itemId': itemId,
+      };
 
-  factory SyncOperation.fromJson(Map<String, dynamic> json) {
-    return SyncOperation(
-      id: json['id'],
-      type: json['type'],
-      data: Map<String, dynamic>.from(json['data']),
-      operation: () async => false, // Placeholder, will be restored by caller
-      status: json['status'],
-      timestamp: DateTime.fromMillisecondsSinceEpoch(json['timestamp']),
-      retryCount: json['retryCount'] ?? 0,
-      lastAttempt: json['lastAttempt'] != null
-          ? DateTime.fromMillisecondsSinceEpoch(json['lastAttempt'])
-          : null,
-      itemId: json['itemId'],
-    );
-  }
+  factory SyncOperation.fromJson(Map<String, dynamic> json) => SyncOperation(
+        id: json['id'],
+        type: json['type'],
+        data: Map<String, dynamic>.from(json['data']),
+        operation: () async =>
+            false, // Placeholder since function can't be serialized
+        status: json['status'],
+        timestamp: DateTime.parse(json['timestamp']),
+        retryCount: json['retryCount'],
+        lastAttempt: json['lastAttempt'] != null
+            ? DateTime.parse(json['lastAttempt'])
+            : null,
+        itemId: json['itemId'],
+      );
 }
 
 /// Sync status enum

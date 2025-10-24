@@ -299,7 +299,7 @@ class _HomeFlow extends StatelessWidget {
             );
           case '/discover-games':
             return MaterialPageRoute(
-              builder: (_) => const GamesDiscoveryScreen(),
+              builder: (_) => const GamesJoinScreen(),
               settings: settings,
             );
 

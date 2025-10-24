@@ -5,8 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:firebase_database/firebase_database.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:move_young/services/auth_service.dart';
 import 'package:move_young/models/game.dart';
 import 'package:timezone/data/latest_all.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
@@ -143,7 +143,7 @@ class NotificationService {
     try {
       await _authStateSubscription?.cancel();
       _authStateSubscription =
-          AuthService.authStateChanges.listen((user) async {
+          FirebaseAuth.instance.authStateChanges().listen((user) async {
         if (user != null) {
           await _saveCurrentToken();
         }
@@ -220,7 +220,7 @@ class NotificationService {
   }
 
   static Future<void> _saveToken(String token) async {
-    final uid = AuthService.currentUserId;
+    final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
     await _db.ref('users/$uid/fcmTokens/$token').set(true);
   }
@@ -327,7 +327,7 @@ class NotificationService {
 
   // Notification preferences
   static Future<bool> isNotificationsEnabled() async {
-    final uid = AuthService.currentUserId;
+    final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return true; // Default to enabled for guests
 
     try {
@@ -340,13 +340,13 @@ class NotificationService {
   }
 
   static Future<void> setNotificationsEnabled(bool value) async {
-    final uid = AuthService.currentUserId;
+    final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
     await _db.ref('users/$uid/settings/notifications/enabled').set(value);
   }
 
   static Stream<bool> notificationsEnabledStream() {
-    final uid = AuthService.currentUserId;
+    final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return Stream.value(true);
 
     return _db
@@ -367,7 +367,7 @@ class NotificationService {
   }
 
   static Future<void> setPref(String key, bool value) async {
-    final uid = AuthService.currentUserId;
+    final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
     await _db.ref('users/$uid/settings/notifications/$key').set(value);
   }

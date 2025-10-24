@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:move_young/services/auth_service.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:move_young/providers/services/auth_provider.dart';
 import 'package:move_young/theme/tokens.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:move_young/theme/app_back_button.dart';
@@ -7,14 +8,14 @@ import 'package:move_young/services/haptics_service.dart';
 import 'package:move_young/services/profile_settings_service.dart';
 import 'package:move_young/screens/settings/notification_settings_screen.dart';
 
-class SettingsScreen extends StatefulWidget {
+class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
 
   @override
-  State<SettingsScreen> createState() => _SettingsScreenState();
+  ConsumerState<SettingsScreen> createState() => _SettingsScreenState();
 }
 
-class _SettingsScreenState extends State<SettingsScreen> {
+class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   bool _submitting = false;
   bool _haptics = true;
   String _visibility = 'public';
@@ -27,11 +28,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _deleteAccount() async {
     setState(() => _submitting = true);
     try {
-      final ok = await AuthService.deleteAccount();
+      final authActions = ref.read(authActionsProvider);
+      final ok = await authActions.deleteAccount();
       if (!mounted) return;
       final scaffoldMessenger = ScaffoldMessenger.of(context);
       final navigator = Navigator.of(context);
-      if (ok) {
+      if (ok == true) {
         scaffoldMessenger.showSnackBar(
           SnackBar(content: Text('settings_account_deleted'.tr())),
         );
@@ -85,8 +87,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     setState(() => _submitting = true);
     try {
       await HapticsService.setEnabled(_haptics);
-      final uid = AuthService.currentUserId;
-      if (uid != null) {
+      final uid = ref.read(currentUserIdProvider);
+      if (uid != null && uid.isNotEmpty) {
         await ProfileSettingsService.setVisibility(_visibility);
       }
       if (!mounted) return;
@@ -143,8 +145,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
             _buildSectionCard(
               title: 'settings_profile'.tr(),
               child: Builder(builder: (context) {
-                final uid = AuthService.currentUserId;
-                if (uid == null) {
+                final uid = ref.read(currentUserIdProvider);
+                if (uid == null || uid.isEmpty) {
                   return Text('guest_user'.tr(),
                       style: AppTextStyles.smallMuted);
                 }
@@ -201,8 +203,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         ),
                         const Divider(height: 1, color: AppColors.lightgrey),
                         Builder(builder: (context) {
-                          final uid = AuthService.currentUserId;
-                          if (uid == null) {
+                          final uid = ref.read(currentUserIdProvider);
+                          if (uid == null || uid.isEmpty) {
                             return const SizedBox.shrink();
                           }
                           return StreamBuilder<Map<String, dynamic>>(

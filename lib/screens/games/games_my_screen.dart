@@ -1,33 +1,31 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:move_young/models/game.dart';
-import 'package:move_young/services/auth_service.dart';
-import 'package:move_young/services/cloud_games_service.dart';
-import 'package:move_young/services/games_service.dart';
+import 'package:move_young/providers/services/auth_provider.dart';
+import 'package:move_young/providers/services/games_provider.dart';
+import 'package:move_young/providers/services/cloud_games_provider.dart'
+    as cloud;
 import 'package:move_young/theme/_theme.dart';
 import 'package:move_young/screens/games/games_join_screen.dart';
 import 'package:move_young/screens/games/game_organize_screen.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:move_young/services/friends_service.dart' as friends;
+import 'package:move_young/providers/services/friends_provider.dart';
 import 'package:move_young/services/weather_service.dart';
-import 'dart:async';
 
-class GamesMyScreen extends StatefulWidget {
+class GamesMyScreen extends ConsumerStatefulWidget {
   final String? highlightGameId;
   final int initialTab;
   const GamesMyScreen({super.key, this.highlightGameId, this.initialTab = 0});
 
   @override
-  State<GamesMyScreen> createState() => _GamesMyScreenState();
+  ConsumerState<GamesMyScreen> createState() => _GamesMyScreenState();
 }
 
-class _GamesMyScreenState extends State<GamesMyScreen>
+class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
     with SingleTickerProviderStateMixin {
-  bool _loading = true;
-  List<Game> _joined = [];
-  List<Game> _created = [];
   final Map<String, GlobalKey> _itemKeys = {};
   late final TabController _tab;
   final Set<String> _expanded = <String>{};
@@ -42,21 +40,21 @@ class _GamesMyScreenState extends State<GamesMyScreen>
     _tab =
         TabController(length: 2, vsync: this, initialIndex: widget.initialTab);
     _highlightId = widget.highlightGameId;
+
     // Auto-refresh when user switches to the Joining tab (index 0)
     _tab.addListener(() {
       if (!_tab.indexIsChanging && _tab.index == 0) {
-        _load();
+        _refreshData();
       }
     });
-    // Schedule load after first frame to ensure Navigator/Inheriteds are ready
-    WidgetsBinding.instance.addPostFrameCallback((_) => _load());
-    // Start realtime watch for Joining tab
-    WidgetsBinding.instance.addPostFrameCallback((_) => _startWatchingJoined());
+
+    // Schedule scroll to highlighted game after first frame
+    WidgetsBinding.instance
+        .addPostFrameCallback((_) => _scrollToHighlightedGame());
   }
 
   @override
   void dispose() {
-    _joinedSub?.cancel();
     _tab.dispose();
     super.dispose();
   }
@@ -84,16 +82,22 @@ class _GamesMyScreenState extends State<GamesMyScreen>
     }
   }
 
+  void _refreshData() {
+    // Refresh providers to get latest data
+    ref.invalidate(myGamesProvider);
+    ref.invalidate(cloud.cloudGamesServiceProvider);
+  }
+
   // ---- Helpers restored ----
   Widget _buildParticipantsStrip(Game game) {
-    final bool isOrganizer = AuthService.currentUserId == game.organizerId;
     final List<String> basePlayerUids = List<String>.from(game.players);
+
     return SizedBox(
       height: 44,
       child: FutureBuilder<Map<String, String>>(
-        future: isOrganizer
-            ? CloudGamesService.getInviteStatuses(game.id)
-            : Future.value(const <String, String>{}),
+        future: ref
+            .read(cloud.cloudGamesActionsProvider)
+            .getGameInviteStatuses(game.id),
         builder: (context, statusesSnap) {
           final Map<String, String> inviteStatuses =
               statusesSnap.data ?? const <String, String>{};
@@ -107,8 +111,11 @@ class _GamesMyScreenState extends State<GamesMyScreen>
           final List<String> limited = merged.take(12).toList();
           return FutureBuilder<List<Map<String, String?>>>(
             future: Future.wait(
-              limited.map(
-                  (uid) => friends.FriendsService.fetchMinimalProfile(uid)),
+              limited.map((uid) async {
+                final friendsActions = ref.read(friendsActionsProvider);
+                final profile = await friendsActions.fetchMinimalProfile(uid);
+                return profile;
+              }),
             ),
             builder: (context, snapshot) {
               final profiles = snapshot.data ?? const <Map<String, String?>>[];
@@ -343,74 +350,80 @@ class _GamesMyScreenState extends State<GamesMyScreen>
   }
 
   bool _isUserJoined(Game game) {
-    final uid = AuthService.currentUserId;
+    final uid = ref.watch(currentUserIdProvider);
     if (uid == null || uid.isEmpty) return false;
     return game.players.any((p) => p == uid);
   }
 
   Future<void> _leaveGame(Game game) async {
-    final uid = AuthService.currentUserId;
-    if (uid == null || uid.isEmpty) return;
-    final ok = await CloudGamesService.leaveGame(game.id, uid);
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(ok ? 'You left the game' : 'Failed to leave'),
-        backgroundColor: ok ? AppColors.grey : AppColors.red,
-      ),
-    );
-    if (ok) await _load();
+    try {
+      await ref.read(gamesActionsProvider).leaveGame(game.id);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('You left the game'),
+            backgroundColor: AppColors.grey,
+          ),
+        );
+        _refreshData();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to leave: $e'),
+            backgroundColor: AppColors.red,
+          ),
+        );
+      }
+    }
   }
 
   Future<void> _removeFromJoined(Game game) async {
     try {
-      if (AuthService.isSignedIn) {
-        await CloudGamesService.removeFromMyJoined(game.id);
+      await ref.read(gamesActionsProvider).deleteGame(game.id);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Removed from My Games'),
+            backgroundColor: AppColors.grey,
+          ),
+        );
+        _refreshData();
       }
-      await GamesService.removeLocalGame(game.id);
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Removed from My Games'),
-          backgroundColor: AppColors.grey,
-        ),
-      );
-      await _load();
-    } catch (_) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('action_failed'.tr()),
-          backgroundColor: AppColors.red,
-        ),
-      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('action_failed'.tr()),
+            backgroundColor: AppColors.red,
+          ),
+        );
+      }
     }
   }
 
   Future<void> _removeFromCreated(Game game) async {
     try {
-      if (AuthService.isSignedIn) {
-        await CloudGamesService.removeFromMyCreated(game.id);
-        // Organizer is auto-joined; also remove from my joined mapping
-        await CloudGamesService.removeFromMyJoined(game.id);
+      await ref.read(gamesActionsProvider).deleteGame(game.id);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Removed from My Games'),
+            backgroundColor: AppColors.grey,
+          ),
+        );
+        _refreshData();
       }
-      await GamesService.removeLocalGame(game.id);
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Removed from My Games'),
-          backgroundColor: AppColors.grey,
-        ),
-      );
-      await _load();
-    } catch (_) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('action_failed'.tr()),
-          backgroundColor: AppColors.red,
-        ),
-      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('action_failed'.tr()),
+            backgroundColor: AppColors.red,
+          ),
+        );
+      }
     }
   }
 
@@ -447,74 +460,6 @@ class _GamesMyScreenState extends State<GamesMyScreen>
     await Share.share(message, subject: 'Game invite');
   }
 
-  Future<void> _load() async {
-    setState(() => _loading = true);
-    try {
-      final uid = AuthService.currentUserId;
-      List<Game> joined = [];
-      List<Game> created = [];
-
-      // Fetch from cloud
-      if (uid != null && uid.isNotEmpty) {
-        joined = await CloudGamesService.getUserJoinedGames(uid);
-        created = await CloudGamesService.getUserGames();
-      }
-
-      // Also fetch from local database (in case of sync issues)
-      if (uid != null && uid.isNotEmpty) {
-        try {
-          final localCreated = await GamesService.getGamesByOrganizer(uid);
-          created = [...created, ...localCreated];
-        } catch (_) {}
-      }
-
-      // Merge and de-duplicate (keep earliest occurrence)
-      final Map<String, Game> byId = {
-        for (final g in [...joined, ...created]) g.id: g
-      };
-      final all = byId.values.where((g) => g.isUpcoming).toList()
-        ..sort((a, b) => a.dateTime.compareTo(b.dateTime));
-
-      setState(() {
-        _joined = all
-            .where((g) => !(AuthService.currentUserId == g.organizerId))
-            .toList();
-        _created = all
-            .where((g) => AuthService.currentUserId == g.organizerId)
-            .toList();
-        _loading = false;
-      });
-      if (_highlightId != null) {
-        _scrollToHighlightedGame();
-      }
-    } catch (_) {
-      setState(() => _loading = false);
-    }
-  }
-
-  // Realtime: watch current user's joined games to auto-refresh Joining tab
-  StreamSubscription<List<Game>>? _joinedSub;
-
-  void _startWatchingJoined() {
-    _joinedSub?.cancel();
-    final uid = AuthService.currentUserId;
-    if (uid == null || uid.isEmpty) return;
-    _joinedSub = CloudGamesService.watchUserJoinedGames(uid).listen((games) {
-      if (!mounted) return;
-      // Merge with created list and re-derive state similarly to _load
-      final Map<String, Game> byId = {
-        for (final g in [..._created, ...games]) g.id: g
-      };
-      final all = byId.values.where((g) => g.isUpcoming).toList()
-        ..sort((a, b) => a.dateTime.compareTo(b.dateTime));
-      setState(() {
-        _joined = all
-            .where((g) => !(AuthService.currentUserId == g.organizerId))
-            .toList();
-      });
-    });
-  }
-
   void _toggleExpanded(String gameId) {
     setState(() {
       if (_expanded.contains(gameId)) {
@@ -540,6 +485,25 @@ class _GamesMyScreenState extends State<GamesMyScreen>
 
   @override
   Widget build(BuildContext context) {
+    // Watch providers for reactive data
+    final myGamesAsync = ref.watch(myGamesProvider);
+    final currentUserId = ref.watch(currentUserIdProvider);
+
+    // Separate joined and created games
+    final joinedGames = myGamesAsync.when(
+      data: (games) =>
+          games.where((g) => currentUserId != g.organizerId).toList(),
+      loading: () => <Game>[],
+      error: (_, __) => <Game>[],
+    );
+
+    final createdGames = myGamesAsync.when(
+      data: (games) =>
+          games.where((g) => currentUserId == g.organizerId).toList(),
+      loading: () => <Game>[],
+      error: (_, __) => <Game>[],
+    );
+
     return Scaffold(
       appBar: AppBar(
         leading: const AppBackButton(goHome: true),
@@ -552,8 +516,8 @@ class _GamesMyScreenState extends State<GamesMyScreen>
           unselectedLabelColor: AppColors.grey,
           indicatorColor: AppColors.primary,
           tabs: [
-            Tab(text: '${'registered_games'.tr()} (${_joined.length})'),
-            Tab(text: '${'organized_games'.tr()} (${_created.length})'),
+            Tab(text: '${'registered_games'.tr()} (${joinedGames.length})'),
+            Tab(text: '${'organized_games'.tr()} (${createdGames.length})'),
           ],
         ),
       ),
@@ -561,92 +525,87 @@ class _GamesMyScreenState extends State<GamesMyScreen>
       body: SafeArea(
         child: Padding(
           padding: AppPaddings.symmHorizontalReg,
-          child: _loading
-              ? const Center(child: CircularProgressIndicator())
-              : Container(
-                  decoration: BoxDecoration(
-                    color: AppColors.white,
-                    borderRadius: BorderRadius.circular(AppRadius.container),
-                    boxShadow: AppShadows.md,
+          child: myGamesAsync.when(
+            loading: () => const Center(child: CircularProgressIndicator()),
+            error: (error, stack) => Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text('Error loading games: $error'),
+                  ElevatedButton(
+                    onPressed: _refreshData,
+                    child: Text('Retry'),
                   ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(AppRadius.container),
-                    child: TabBarView(
-                      controller: _tab,
-                      children: [
-                        // Registered Games (joined)
-                        RefreshIndicator(
-                          onRefresh: _load,
-                          child: (_joined.isEmpty)
-                              ? ListView(
-                                  physics:
-                                      const AlwaysScrollableScrollPhysics(),
-                                  padding: const EdgeInsets.only(
-                                      bottom: AppHeights.reg),
-                                  children: [
-                                    _emptyStateRegistered(context),
-                                  ],
-                                )
-                              : ListView.builder(
-                                  physics:
-                                      const AlwaysScrollableScrollPhysics(),
-                                  padding: AppPaddings.allMedium.add(
-                                    const EdgeInsets.only(
-                                        bottom: AppHeights.reg),
-                                  ),
-                                  itemCount: _joined.length,
-                                  itemBuilder: (_, i) =>
-                                      _buildGameTile(_joined[i]),
-                                ),
-                        ),
-                        // Organized Games (created)
-                        RefreshIndicator(
-                          onRefresh: _load,
-                          child: (_created.isEmpty)
-                              ? ListView(
-                                  physics:
-                                      const AlwaysScrollableScrollPhysics(),
-                                  padding: const EdgeInsets.only(
-                                      bottom: AppHeights.reg),
-                                  children: [
-                                    _emptyStateOrganized(context),
-                                  ],
-                                )
-                              : ListView.builder(
-                                  physics:
-                                      const AlwaysScrollableScrollPhysics(),
-                                  padding: AppPaddings.allMedium.add(
-                                    const EdgeInsets.only(
-                                        bottom: AppHeights.reg),
-                                  ),
-                                  itemCount: _created.length,
-                                  itemBuilder: (_, i) =>
-                                      _buildGameTile(_created[i]),
-                                ),
-                        ),
-                      ],
+                ],
+              ),
+            ),
+            data: (games) => Container(
+              decoration: BoxDecoration(
+                color: AppColors.white,
+                borderRadius: BorderRadius.circular(AppRadius.container),
+                boxShadow: AppShadows.md,
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(AppRadius.container),
+                child: TabBarView(
+                  controller: _tab,
+                  children: [
+                    // Registered Games (joined)
+                    RefreshIndicator(
+                      onRefresh: () async => _refreshData(),
+                      child: (joinedGames.isEmpty)
+                          ? ListView(
+                              physics: const AlwaysScrollableScrollPhysics(),
+                              padding:
+                                  const EdgeInsets.only(bottom: AppHeights.reg),
+                              children: [_emptyStateRegistered(context)],
+                            )
+                          : ListView.builder(
+                              physics: const AlwaysScrollableScrollPhysics(),
+                              padding: AppPaddings.allMedium.add(
+                                const EdgeInsets.only(bottom: AppHeights.reg),
+                              ),
+                              itemCount: joinedGames.length,
+                              itemBuilder: (_, i) =>
+                                  _buildGameTile(joinedGames[i]),
+                            ),
                     ),
-                  ),
+                    // Organized Games (created)
+                    RefreshIndicator(
+                      onRefresh: () async => _refreshData(),
+                      child: (createdGames.isEmpty)
+                          ? ListView(
+                              physics: const AlwaysScrollableScrollPhysics(),
+                              padding:
+                                  const EdgeInsets.only(bottom: AppHeights.reg),
+                              children: [_emptyStateOrganized(context)],
+                            )
+                          : ListView.builder(
+                              physics: const AlwaysScrollableScrollPhysics(),
+                              padding: AppPaddings.allMedium.add(
+                                const EdgeInsets.only(bottom: AppHeights.reg),
+                              ),
+                              itemCount: createdGames.length,
+                              itemBuilder: (_, i) =>
+                                  _buildGameTile(createdGames[i]),
+                            ),
+                    ),
+                  ],
                 ),
+              ),
+            ),
+          ),
         ),
       ),
     );
   }
 
   Widget _buildGameTile(Game game) {
-    return StreamBuilder<Game?>(
-      stream: CloudGamesService.watchGame(game.id),
-      builder: (context, snap) {
-        final Game effective = snap.data ?? game;
-        return _buildGameTileBody(effective);
-      },
-    );
-  }
-
-  Widget _buildGameTileBody(Game game) {
     final key = _itemKeys.putIfAbsent(game.id, () => GlobalKey());
-    final isMine = AuthService.currentUserId == game.organizerId;
+    final currentUserId = ref.watch(currentUserIdProvider);
+    final isMine = currentUserId == game.organizerId;
     final expanded = _expanded.contains(game.id);
+
     return KeyedSubtree(
       key: key,
       child: Card(
@@ -717,85 +676,6 @@ class _GamesMyScreenState extends State<GamesMyScreen>
                             ),
                           ),
                         ] else ...[
-                          if (!isMine)
-                            FutureBuilder<bool>(
-                              future: CloudGamesService
-                                  .isInviteModifiedForCurrentUser(game.id),
-                              builder: (context, snap) {
-                                final modified = snap.data == true;
-                                if (!modified) return const SizedBox.shrink();
-                                return Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 8, vertical: 4),
-                                  decoration: BoxDecoration(
-                                    color:
-                                        Colors.orange.withValues(alpha: 0.10),
-                                    border: const Border.fromBorderSide(
-                                        BorderSide(
-                                            color: AppColors.lightgrey,
-                                            width: 1)),
-                                    borderRadius: BorderRadius.circular(
-                                        AppRadius.smallCard),
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Container(
-                                          width: 6,
-                                          height: 6,
-                                          decoration: const BoxDecoration(
-                                              color: Colors.orange,
-                                              shape: BoxShape.circle)),
-                                      const SizedBox(width: 6),
-                                      Text('Modified',
-                                          style: AppTextStyles.small.copyWith(
-                                              color: Colors.orange,
-                                              fontWeight: FontWeight.bold)),
-                                    ],
-                                  ),
-                                );
-                              },
-                            ),
-                          if (isMine)
-                            FutureBuilder<bool>(
-                              future:
-                                  CloudGamesService.isGameModifiedByOrganizer(
-                                      game.id),
-                              builder: (context, snap) {
-                                final modified = snap.data == true;
-                                if (!modified) return const SizedBox.shrink();
-                                return Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 8, vertical: 4),
-                                  decoration: BoxDecoration(
-                                    color:
-                                        Colors.orange.withValues(alpha: 0.10),
-                                    border: const Border.fromBorderSide(
-                                        BorderSide(
-                                            color: AppColors.lightgrey,
-                                            width: 1)),
-                                    borderRadius: BorderRadius.circular(
-                                        AppRadius.smallCard),
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Container(
-                                          width: 6,
-                                          height: 6,
-                                          decoration: const BoxDecoration(
-                                              color: Colors.orange,
-                                              shape: BoxShape.circle)),
-                                      const SizedBox(width: 6),
-                                      Text('You Modified',
-                                          style: AppTextStyles.small.copyWith(
-                                              color: Colors.orange,
-                                              fontWeight: FontWeight.bold)),
-                                    ],
-                                  ),
-                                );
-                              },
-                            ),
                           if (game.isFull)
                             Container(
                               padding: const EdgeInsets.symmetric(
@@ -908,33 +788,18 @@ class _GamesMyScreenState extends State<GamesMyScreen>
                       ),
                     ),
                     const SizedBox(width: 6),
-                    if (isMine) ...[
-                      IconButton(
-                        padding: const EdgeInsets.all(4),
-                        constraints:
-                            const BoxConstraints(minWidth: 32, minHeight: 32),
-                        tooltip: expanded ? 'collapse' : 'expand',
-                        onPressed: () => _toggleExpanded(game.id),
-                        icon: AnimatedRotation(
-                          turns: expanded ? 0 : -0.25,
-                          duration: const Duration(milliseconds: 200),
-                          child: const Icon(Icons.expand_more),
-                        ),
+                    IconButton(
+                      padding: const EdgeInsets.all(4),
+                      constraints:
+                          const BoxConstraints(minWidth: 32, minHeight: 32),
+                      tooltip: expanded ? 'collapse' : 'expand',
+                      onPressed: () => _toggleExpanded(game.id),
+                      icon: AnimatedRotation(
+                        turns: expanded ? 0 : -0.25,
+                        duration: const Duration(milliseconds: 200),
+                        child: const Icon(Icons.expand_more),
                       ),
-                    ] else ...[
-                      IconButton(
-                        padding: const EdgeInsets.all(4),
-                        constraints:
-                            const BoxConstraints(minWidth: 32, minHeight: 32),
-                        tooltip: expanded ? 'collapse' : 'expand',
-                        onPressed: () => _toggleExpanded(game.id),
-                        icon: AnimatedRotation(
-                          turns: expanded ? 0 : -0.25,
-                          duration: const Duration(milliseconds: 200),
-                          child: const Icon(Icons.expand_more),
-                        ),
-                      ),
-                    ],
+                    ),
                   ],
                 ),
                 onTap: isMine ? null : () => _toggleExpanded(game.id),
@@ -1112,11 +977,9 @@ class _GamesMyScreenState extends State<GamesMyScreen>
                                 );
                                 if (confirmed == true) {
                                   try {
-                                    if (AuthService.isSignedIn) {
-                                      await CloudGamesService.cancelGame(
-                                          game.id);
-                                    }
-                                    await GamesService.cancelGame(game.id);
+                                    await ref
+                                        .read(gamesActionsProvider)
+                                        .deleteGame(game.id);
                                     if (mounted) {
                                       ScaffoldMessenger.of(context)
                                           .showSnackBar(
@@ -1128,8 +991,8 @@ class _GamesMyScreenState extends State<GamesMyScreen>
                                         ),
                                       );
                                     }
-                                    await _load();
-                                  } catch (_) {
+                                    _refreshData();
+                                  } catch (e) {
                                     if (mounted) {
                                       ScaffoldMessenger.of(context)
                                           .showSnackBar(
@@ -1244,7 +1107,7 @@ class _GamesMyScreenState extends State<GamesMyScreen>
             onPressed: () {
               Navigator.of(context).push(
                 MaterialPageRoute(
-                  builder: (_) => const GamesDiscoveryScreen(),
+                  builder: (_) => const GamesJoinScreen(),
                 ),
               );
             },

@@ -1,11 +1,12 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:easy_localization/easy_localization.dart';
-import '../services/friends_service.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../providers/services/friends_provider.dart';
 import '../theme/tokens.dart';
 
 /// Widget that shows rate limit feedback for friend requests
-class RateLimitFeedback extends StatefulWidget {
+class RateLimitFeedback extends ConsumerStatefulWidget {
   final String uid;
   final Widget child;
 
@@ -16,10 +17,10 @@ class RateLimitFeedback extends StatefulWidget {
   });
 
   @override
-  State<RateLimitFeedback> createState() => _RateLimitFeedbackState();
+  ConsumerState<RateLimitFeedback> createState() => _RateLimitFeedbackState();
 }
 
-class _RateLimitFeedbackState extends State<RateLimitFeedback> {
+class _RateLimitFeedbackState extends ConsumerState<RateLimitFeedback> {
   Timer? _timer;
   int _remainingRequests = 10;
   Duration _remainingCooldown = Duration.zero;
@@ -39,8 +40,9 @@ class _RateLimitFeedbackState extends State<RateLimitFeedback> {
   }
 
   void _loadRateLimitInfo() async {
-    final remaining = await FriendsService.getRemainingRequests(widget.uid);
-    final cooldown = await FriendsService.getRemainingCooldown(widget.uid);
+    final friendsActions = ref.read(friendsActionsProvider);
+    final remaining = await friendsActions.getRemainingRequests(widget.uid);
+    final cooldown = await friendsActions.getRemainingCooldown(widget.uid);
 
     if (mounted) {
       setState(() {
@@ -129,7 +131,7 @@ class _RateLimitFeedbackState extends State<RateLimitFeedback> {
 }
 
 /// Rate limit indicator for buttons
-class RateLimitButton extends StatelessWidget {
+class RateLimitButton extends ConsumerWidget {
   final String uid;
   final VoidCallback? onPressed;
   final Widget child;
@@ -144,19 +146,20 @@ class RateLimitButton extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return FutureBuilder<bool>(
-      future: FriendsService.canSendFriendRequest(uid),
+      future: ref.read(friendsActionsProvider).canSendFriendRequest(uid),
       builder: (context, snapshot) {
         final canSend = snapshot.data ?? true;
 
         return FutureBuilder<Duration>(
-          future: FriendsService.getRemainingCooldown(uid),
+          future: ref.read(friendsActionsProvider).getRemainingCooldown(uid),
           builder: (context, cooldownSnapshot) {
             final cooldown = cooldownSnapshot.data ?? Duration.zero;
 
             return FutureBuilder<int>(
-              future: FriendsService.getRemainingRequests(uid),
+              future:
+                  ref.read(friendsActionsProvider).getRemainingRequests(uid),
               builder: (context, remainingSnapshot) {
                 final remaining = remainingSnapshot.data ?? 10;
 

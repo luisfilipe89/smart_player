@@ -1,5 +1,5 @@
 import 'package:firebase_database/firebase_database.dart';
-import 'package:move_young/services/auth_service.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:move_young/db/db_paths.dart';
 
 class ProfileSettingsService {
@@ -31,10 +31,11 @@ class ProfileSettingsService {
     return (snap.value as String?) ?? 'public';
   }
 
-  static Future<void> setVisibility(String visibility) async {
-    final uid = AuthService.currentUserId;
-    if (uid == null) return;
+  static Future<bool> setVisibility(String visibility) async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return false;
     await _db.ref(DbPaths.userVisibility(uid)).set(visibility);
+    return true;
   }
 
   static Stream<bool> showOnlineStream(String uid) {
@@ -50,10 +51,11 @@ class ProfileSettingsService {
     return (snap.value as bool?) ?? true;
   }
 
-  static Future<void> setShowOnline(bool showOnline) async {
-    final uid = AuthService.currentUserId;
-    if (uid == null) return;
+  static Future<bool> setShowOnline(bool showOnline) async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return false;
     await _db.ref(DbPaths.userShowOnline(uid)).set(showOnline);
+    return true;
   }
 
   static Stream<bool> allowFriendRequestsStream(String uid) {
@@ -69,12 +71,13 @@ class ProfileSettingsService {
     return (snap.value as bool?) ?? true;
   }
 
-  static Future<void> setAllowFriendRequests(bool allowFriendRequests) async {
-    final uid = AuthService.currentUserId;
-    if (uid == null) return;
+  static Future<bool> setAllowFriendRequests(bool allowFriendRequests) async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return false;
     await _db
         .ref(DbPaths.userAllowFriendRequests(uid))
         .set(allowFriendRequests);
+    return true;
   }
 
   static Stream<bool> shareEmailStream(String uid) {
@@ -90,10 +93,11 @@ class ProfileSettingsService {
     return (snap.value as bool?) ?? true;
   }
 
-  static Future<void> setShareEmail(bool shareEmail) async {
-    final uid = AuthService.currentUserId;
-    if (uid == null) return;
+  static Future<bool> setShareEmail(bool shareEmail) async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return false;
     await _db.ref(DbPaths.userShareEmail(uid)).set(shareEmail);
+    return true;
   }
 
   static Stream<Map<String, dynamic>> settingsStream(String uid) {

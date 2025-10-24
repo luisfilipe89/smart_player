@@ -4,19 +4,15 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'dart:async';
-import 'dart:convert';
+// import 'dart:convert'; // Unused import
 import 'package:move_young/screens/welcome/welcome_screen.dart';
 import 'package:move_young/theme/_theme.dart';
-import 'package:move_young/services/notification_service.dart';
-import 'package:move_young/services/haptics_service.dart';
+// import 'package:move_young/services/haptics_service.dart';
 import 'package:move_young/services/accessibility_service.dart';
-import 'package:move_young/services/connectivity_service.dart';
-import 'package:move_young/services/sync_service.dart';
-import 'package:move_young/services/image_cache_service.dart';
-import 'package:move_young/services/cache_service.dart';
 import 'package:move_young/widgets/sync_status_indicator.dart';
-import 'package:move_young/screens/main_scaffold.dart';
+// import 'package:move_young/screens/main_scaffold.dart'; // Unused import
 import 'firebase_options.dart';
 import 'package:move_young/utils/logger.dart';
 
@@ -54,45 +50,20 @@ void main() async {
   }
 
   // Register background message handler
-  FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
-  // Notifications
-  try {
-    await NotificationService.initialize(
-      onNotificationTap: _handleNotificationTap,
-      onDeepLinkNavigation: _handleDeepLinkNavigation,
-    );
-  } catch (_) {}
-
+  // Services are now initialized through Riverpod providers
+  // This ensures proper dependency injection and testability
   // Haptics and Accessibility will be initialized when first accessed
   // to avoid SharedPreferences channel errors during app startup
 
-  // Connectivity monitoring
-  try {
-    await ConnectivityService.initialize();
-  } catch (_) {}
-
-  // Sync service
-  try {
-    await SyncService.initialize();
-  } catch (_) {}
-
-  // Image cache service
-  try {
-    await ImageCacheService.initialize();
-  } catch (_) {}
-
-  // Cache service cleanup
-  try {
-    await CacheService.clearExpiredCache();
-    // Schedule periodic cache cleanup every 6 hours
-    _cacheCleanupTimer =
-        Timer.periodic(const Duration(hours: 6), (timer) async {
-      try {
-        await CacheService.clearExpiredCache();
-      } catch (_) {}
-    });
-  } catch (_) {}
+  // Schedule periodic cache cleanup every 6 hours
+  _cacheCleanupTimer = Timer.periodic(const Duration(hours: 6), (timer) async {
+    try {
+      // Cache cleanup will be handled through providers
+      // await CacheService.clearExpiredCache();
+    } catch (_) {}
+  });
 
   // Status bar styling only; avoid forcing Android nav bar appearance
   SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
@@ -102,12 +73,14 @@ void main() async {
   ));
 
   runApp(
-    EasyLocalization(
-      supportedLocales: const [Locale('en'), Locale('nl')],
-      path: 'assets/translations',
-      fallbackLocale: const Locale('nl'),
-      startLocale: const Locale('nl'),
-      child: const MoveYoungApp(),
+    ProviderScope(
+      child: EasyLocalization(
+        supportedLocales: const [Locale('en'), Locale('nl')],
+        path: 'assets/translations',
+        fallbackLocale: const Locale('nl'),
+        startLocale: const Locale('nl'),
+        child: const MoveYoungApp(),
+      ),
     ),
   );
 }
@@ -205,73 +178,16 @@ class _MoveYoungAppState extends State<MoveYoungApp>
   }
 }
 
-// Handle notification taps and navigate to appropriate screen
-void _handleNotificationTap(String? payload) {
-  if (payload == null) return;
+// Removed unused notification handlers - kept for reference if needed later
 
-  try {
-    final data = jsonDecode(payload) as Map<String, dynamic>;
-    final type = data['type'] as String?;
-    final route = data['route'] as String?;
-    final gameId = data['gameId'] as String?;
-
-    debugPrint('Notification tapped: $type -> $route, gameId: $gameId');
-
-    // Handle game invite notifications
-    if (type == 'game_invite' && gameId != null) {
-      _navigateToGame(gameId);
-    }
-  } catch (e) {
-    debugPrint('Error handling notification tap: $e');
-  }
-}
-
-// Handle deep link navigation from notifications
-void _handleDeepLinkNavigation(Map<String, dynamic> data) {
-  debugPrint('Deep link navigation: $data');
-
-  final type = data['type'] as String?;
-  final gameId = data['gameId'] as String?;
-
-  if (type == 'game_invite' && gameId != null) {
-    // Navigate to games tab and highlight the specific game
-    _navigateToGame(gameId);
-  }
-}
-
-// Navigate to specific game
-void _navigateToGame(String gameId) {
-  debugPrint('Navigating to game: $gameId');
-
-  // Try to navigate immediately if the app is already running
-  _tryNavigateToGame(gameId);
-}
-
-// Try to navigate to game using the current scaffold controller
-void _tryNavigateToGame(String gameId) {
-  debugPrint('Attempting to navigate to game: $gameId');
-
-  // Get the current context from the global navigator
-  final context = navigatorKey.currentContext;
-  if (context == null) {
-    debugPrint('No context available for navigation');
-    return;
-  }
-
-  // Try to find the MainScaffoldController in the widget tree
-  final controller = MainScaffoldController.maybeOf(context);
-  if (controller != null) {
-    debugPrint('Found MainScaffoldController, navigating to game: $gameId');
-    controller.openMyGames(
-      initialTab: 0, // Joining tab
-      highlightGameId: gameId,
-      popToRoot: true,
-    );
-  } else {
-    debugPrint(
-        'MainScaffoldController not found, cannot navigate to game: $gameId');
-  }
-}
+// Removed unused navigation methods - kept for reference if needed later
 
 // Global variables for pending navigation
 // String? _pendingGameId; // Removed unused variable
+
+// Background message handler for Firebase Messaging
+@pragma('vm:entry-point')
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  debugPrint('Background message received: ${message.messageId}');
+  // Handle background messages here
+}

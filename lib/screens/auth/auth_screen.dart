@@ -1,28 +1,28 @@
+// lib/screens/auth/auth_screen_migrated.dart
 import 'package:flutter/material.dart';
 import 'package:easy_localization/easy_localization.dart';
-import 'package:move_young/services/auth_service.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:move_young/providers/services/auth_provider.dart';
+import 'package:move_young/providers/services/connectivity_provider.dart';
 import 'package:move_young/services/error_handler_service.dart';
-import 'package:move_young/services/connectivity_service.dart';
-import 'package:move_young/utils/timeout_helpers.dart';
 import 'package:move_young/theme/tokens.dart';
 
-class AuthScreen extends StatefulWidget {
+class AuthScreen extends ConsumerStatefulWidget {
   final bool startWithRegistration;
 
   const AuthScreen({super.key, this.startWithRegistration = false});
 
   @override
-  State<AuthScreen> createState() => _AuthScreenState();
+  ConsumerState<AuthScreen> createState() => _AuthScreenState();
 }
 
-class _AuthScreenState extends State<AuthScreen> {
+class _AuthScreenState extends ConsumerState<AuthScreen> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _nameController = TextEditingController();
 
   late bool _isLogin;
-  bool _isLoading = false;
   bool _obscurePassword = true;
 
   @override
@@ -80,350 +80,336 @@ class _AuthScreenState extends State<AuthScreen> {
     if (!_formKey.currentState!.validate()) return;
 
     // Check connectivity before attempting auth
-    if (!ConnectivityService.hasConnection) {
+    final hasConnection = ref.read(hasConnectionProvider);
+    if (!hasConnection) {
       ErrorHandlerService.showError(context, 'error_network');
       return;
     }
 
-    setState(() => _isLoading = true);
-
     try {
       // Ensure no existing session (including anonymous) masks a failed login
-      if (_isLogin && AuthService.isSignedIn) {
-        await AuthService.signOut();
+      if (_isLogin && ref.read(isSignedInProvider)) {
+        await ref.read(authActionsProvider).signOut();
       }
+
       if (_isLogin) {
-        await TimeoutHelpers.withTimeout(
-          AuthService.signInWithEmail(
-            _emailController.text.trim(),
-            _passwordController.text,
-          ),
-          timeout: const Duration(seconds: 30),
-          timeoutMessage: 'auth_signin_timeout',
-        );
-        // If user has no nickname yet, prompt for nickname once
-        final user = AuthService.currentUser;
-        final hasName = (user?.displayName?.trim().isNotEmpty ?? false);
-        if (!hasName && mounted) {
-          final suggested = _emailController.text.trim().split('@').first;
-          final controller = TextEditingController(text: suggested);
-          final entered = await showDialog<String>(
-            context: context,
-            barrierDismissible: false,
-            builder: (ctx) => AlertDialog(
-              title: Text('auth_first_name'.tr()),
-              content: TextField(
-                controller: controller,
-                decoration: InputDecoration(
-                  hintText: 'auth_first_name'.tr(),
-                ),
-                textInputAction: TextInputAction.done,
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(ctx).pop(null),
-                  child: Text('cancel'.tr(), overflow: TextOverflow.ellipsis),
-                ),
-                TextButton(
-                  onPressed: () {
-                    final v = controller.text.trim();
-                    Navigator.of(ctx)
-                        .pop(v.isEmpty ? null : v.split(RegExp(r"\\s+")).first);
-                  },
-                  child: Text('ok'.tr(), overflow: TextOverflow.ellipsis),
-                ),
-              ],
-            ),
-          );
-          if (entered != null && entered.length >= 2 && mounted) {
-            await AuthService.updateDisplayName(entered);
-          }
-        }
+        await ref.read(authActionsProvider).signInWithEmailAndPassword(
+              _emailController.text.trim(),
+              _passwordController.text,
+            );
       } else {
-        // Create account and set nickname in one step
-        await TimeoutHelpers.withTimeout(
-          AuthService.createUserWithEmailAndPassword(
-            _emailController.text.trim(),
-            _passwordController.text,
-            _nameController.text.trim(),
-          ),
-          timeout: const Duration(seconds: 30),
-          timeoutMessage: 'auth_signup_timeout',
-        );
-        // Ensure latest profile is loaded
-        await Future.delayed(const Duration(milliseconds: 200));
+        await ref.read(authActionsProvider).createUserWithEmailAndPassword(
+              _emailController.text.trim(),
+              _passwordController.text,
+              _nameController.text.trim(),
+            );
       }
 
+      // Success - navigation will be handled by the auth state listener
       if (mounted) {
-        ErrorHandlerService.showSuccess(context, 'already_signed_in');
-        // Use a timer instead of await to avoid context usage across async gaps
-        Future.delayed(const Duration(milliseconds: 500), () {
-          if (mounted) Navigator.of(context).pop(true);
-        });
+        Navigator.of(context).pushReplacementNamed('/home');
       }
-    } catch (e) {
+    } catch (e, stack) {
+      ErrorHandlerService.logError(e, stack);
       if (mounted) {
-        // If trying to sign up but email is already in use, switch to Sign In view
-        if (!_isLogin && e.toString().contains('error_email_in_use')) {
-          setState(() {
-            _isLogin = true;
-          });
-        }
-
         ErrorHandlerService.showError(context, e);
       }
-    } finally {
+    }
+  }
+
+  Future<void> _handleGoogleSignIn() async {
+    // Check connectivity before attempting auth
+    final hasConnection = ref.read(hasConnectionProvider);
+    if (!hasConnection) {
+      ErrorHandlerService.showError(context, 'error_network');
+      return;
+    }
+
+    try {
+      await ref.read(authActionsProvider).signInWithGoogle();
+      // Success - navigation will be handled by the auth state listener
       if (mounted) {
-        setState(() => _isLoading = false);
+        Navigator.of(context).pushReplacementNamed('/home');
+      }
+    } catch (e, stack) {
+      ErrorHandlerService.logError(e, stack);
+      if (mounted) {
+        ErrorHandlerService.showError(context, e);
+      }
+    }
+  }
+
+  Future<void> _handleAnonymousSignIn() async {
+    // Check connectivity before attempting auth
+    final hasConnection = ref.read(hasConnectionProvider);
+    if (!hasConnection) {
+      ErrorHandlerService.showError(context, 'error_network');
+      return;
+    }
+
+    try {
+      await ref.read(authActionsProvider).signInAnonymously();
+      // Success - navigation will be handled by the auth state listener
+      if (mounted) {
+        Navigator.of(context).pushReplacementNamed('/home');
+      }
+    } catch (e, stack) {
+      ErrorHandlerService.logError(e, stack);
+      if (mounted) {
+        ErrorHandlerService.showError(context, e);
       }
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    // Watch auth state to show loading indicator
+    final authAsync = ref.watch(currentUserProvider);
+
     return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(
-        backgroundColor: AppColors.background,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.close, color: AppColors.text),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
-      ),
+      backgroundColor: AppColors.primary,
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: EdgeInsets.only(
-            left: AppSpacing.lg,
-            right: AppSpacing.lg,
-            top: AppSpacing.lg,
-            bottom: AppSpacing.lg + MediaQuery.of(context).viewInsets.bottom,
-          ),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // Title
-                Text(
-                  _isLogin
-                      ? 'auth_signin_title'.tr()
-                      : 'auth_signup_title'.tr(),
-                  style: AppTextStyles.h2.copyWith(
-                    color: AppColors.text,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: AppSpacing.sm),
-                Text(
-                  _isLogin ? 'auth_signin_sub'.tr() : 'auth_signup_sub'.tr(),
-                  style: AppTextStyles.body.copyWith(
-                    color: AppColors.grey,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: AppSpacing.xl),
-
-                // Name field (only for signup)
-                if (!_isLogin) ...[
-                  TextFormField(
-                    controller: _nameController,
-                    decoration: InputDecoration(
-                      labelText: 'auth_first_name'.tr(),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(AppRadius.card),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            children: [
+              Expanded(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    // Logo or app name
+                    Text(
+                      'app_name'.tr(),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 32,
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
-                    validator: (value) {
-                      if (value == null || value.trim().isEmpty) {
-                        return 'auth_name_required'.tr();
-                      }
-
-                      final name = value.trim();
-
-                      // length limits
-                      if (name.length < 2) {
-                        return 'auth_name_too_short'.tr();
-                      }
-                      if (name.length > 20) {
-                        return 'auth_name_too_long'.tr();
-                      }
-
-                      // allow common letters incl. basic latin accents, spaces, apostrophes and hyphens
-                      final validChars = RegExp(r"^[A-Za-zÀ-ÿ' -]+");
-                      if (!validChars.hasMatch(name)) {
-                        return 'auth_name_invalid'.tr();
-                      }
-
-                      if (_containsInappropriateContent(name)) {
-                        return 'auth_name_inappropriate'.tr();
-                      }
-
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: AppSpacing.md),
-                ],
-
-                // Email field
-                TextFormField(
-                  controller: _emailController,
-                  keyboardType: TextInputType.emailAddress,
-                  decoration: InputDecoration(
-                    labelText: 'auth_email'.tr(),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(AppRadius.card),
-                    ),
-                  ),
-                  validator: (value) {
-                    if (value == null || value.trim().isEmpty) {
-                      return 'auth_email_required'.tr();
-                    }
-                    if (!value.contains('@')) {
-                      return 'auth_email_invalid'.tr();
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: AppSpacing.md),
-
-                // Password field
-                TextFormField(
-                  controller: _passwordController,
-                  obscureText: _obscurePassword,
-                  decoration: InputDecoration(
-                    labelText: 'auth_password'.tr(),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(AppRadius.card),
-                    ),
-                    suffixIcon: IconButton(
-                      onPressed: () {
-                        setState(() {
-                          _obscurePassword = !_obscurePassword;
-                        });
-                      },
-                      icon: Icon(
-                        _obscurePassword
-                            ? Icons.visibility_off
-                            : Icons.visibility,
-                        color: AppColors.grey,
+                    const SizedBox(height: 8),
+                    Text(
+                      'app_tagline'.tr(),
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 16,
                       ),
-                      tooltip:
-                          _obscurePassword ? 'Show password' : 'Hide password',
                     ),
-                  ),
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'auth_password_required'.tr();
-                    }
-                    if (value.length < 6) {
-                      return 'auth_password_too_short'.tr();
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: AppSpacing.lg),
+                    const SizedBox(height: 48),
 
-                // Forgot password (only for login)
-                if (_isLogin) ...[
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: TextButton(
-                      onPressed: _isLoading
-                          ? null
-                          : () async {
-                              final email = _emailController.text.trim();
-                              if (email.isEmpty || !email.contains('@')) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text('auth_email_invalid'.tr()),
-                                  ),
-                                );
-                                return;
-                              }
-                              final scaffoldMessenger =
-                                  ScaffoldMessenger.of(context);
-                              try {
-                                await AuthService.sendPasswordResetEmail(email);
-                                if (!mounted) return;
-                                scaffoldMessenger.showSnackBar(
-                                  SnackBar(
-                                    content: Text(
-                                      tr('settings_reset_email_sent',
-                                          args: [email]),
+                    // Auth form
+                    Container(
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.1),
+                            blurRadius: 20,
+                            offset: const Offset(0, 10),
+                          ),
+                        ],
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Form(
+                          key: _formKey,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              // Title
+                              Text(
+                                _isLogin ? 'sign_in'.tr() : 'sign_up'.tr(),
+                                style: const TextStyle(
+                                  fontSize: 24,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                              const SizedBox(height: 24),
+
+                              // Name field (only for registration)
+                              if (!_isLogin) ...[
+                                TextFormField(
+                                  controller: _nameController,
+                                  decoration: InputDecoration(
+                                    labelText: 'name'.tr(),
+                                    prefixIcon: const Icon(Icons.person),
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12),
                                     ),
                                   ),
-                                );
-                              } catch (e) {
-                                if (!mounted) return;
-                                String errorMessage = e.toString().replaceFirst(
-                                    RegExp(r'^Exception:\s*'), '');
-                                String localizedError = tr(errorMessage);
-                                if (localizedError == errorMessage) {
-                                  localizedError = tr('error_generic_reset');
-                                }
-                                scaffoldMessenger.showSnackBar(
-                                  SnackBar(
-                                    content: Text(localizedError),
-                                    backgroundColor: Colors.red,
+                                  validator: (value) {
+                                    if (value == null || value.trim().isEmpty) {
+                                      return 'name_required'.tr();
+                                    }
+                                    if (value.trim().length < 2) {
+                                      return 'name_too_short'.tr();
+                                    }
+                                    if (_containsInappropriateContent(
+                                        value.trim())) {
+                                      return 'name_inappropriate'.tr();
+                                    }
+                                    return null;
+                                  },
+                                ),
+                                const SizedBox(height: 16),
+                              ],
+
+                              // Email field
+                              TextFormField(
+                                controller: _emailController,
+                                keyboardType: TextInputType.emailAddress,
+                                decoration: InputDecoration(
+                                  labelText: 'email'.tr(),
+                                  prefixIcon: const Icon(Icons.email),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12),
                                   ),
-                                );
-                              }
-                            },
-                      child: Text('auth_forgot_password'.tr()),
+                                ),
+                                validator: (value) {
+                                  if (value == null || value.trim().isEmpty) {
+                                    return 'email_required'.tr();
+                                  }
+                                  if (!RegExp(
+                                          r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$')
+                                      .hasMatch(value.trim())) {
+                                    return 'email_invalid'.tr();
+                                  }
+                                  return null;
+                                },
+                              ),
+                              const SizedBox(height: 16),
+
+                              // Password field
+                              TextFormField(
+                                controller: _passwordController,
+                                obscureText: _obscurePassword,
+                                decoration: InputDecoration(
+                                  labelText: 'password'.tr(),
+                                  prefixIcon: const Icon(Icons.lock),
+                                  suffixIcon: IconButton(
+                                    icon: Icon(
+                                      _obscurePassword
+                                          ? Icons.visibility
+                                          : Icons.visibility_off,
+                                    ),
+                                    onPressed: () {
+                                      setState(() {
+                                        _obscurePassword = !_obscurePassword;
+                                      });
+                                    },
+                                  ),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                ),
+                                validator: (value) {
+                                  if (value == null || value.isEmpty) {
+                                    return 'password_required'.tr();
+                                  }
+                                  if (value.length < 6) {
+                                    return 'password_too_short'.tr();
+                                  }
+                                  return null;
+                                },
+                              ),
+                              const SizedBox(height: 24),
+
+                              // Auth button
+                              ElevatedButton(
+                                onPressed:
+                                    authAsync.isLoading ? null : _handleAuth,
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppColors.primary,
+                                  foregroundColor: Colors.white,
+                                  padding:
+                                      const EdgeInsets.symmetric(vertical: 16),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                ),
+                                child: authAsync.isLoading
+                                    ? const SizedBox(
+                                        height: 20,
+                                        width: 20,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          valueColor:
+                                              AlwaysStoppedAnimation<Color>(
+                                                  Colors.white),
+                                        ),
+                                      )
+                                    : Text(
+                                        _isLogin
+                                            ? 'sign_in'.tr()
+                                            : 'sign_up'.tr(),
+                                        style: const TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                              ),
+                              const SizedBox(height: 16),
+
+                              // Google sign in button
+                              OutlinedButton.icon(
+                                onPressed: authAsync.isLoading
+                                    ? null
+                                    : _handleGoogleSignIn,
+                                icon:
+                                    const Icon(Icons.login, color: Colors.red),
+                                label: Text('sign_in_with_google'.tr()),
+                                style: OutlinedButton.styleFrom(
+                                  padding:
+                                      const EdgeInsets.symmetric(vertical: 16),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+
+                              // Anonymous sign in button
+                              TextButton(
+                                onPressed: authAsync.isLoading
+                                    ? null
+                                    : _handleAnonymousSignIn,
+                                child: Text('continue_anonymously'.tr()),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              // Toggle between login and registration
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    _isLogin ? 'no_account'.tr() : 'have_account'.tr(),
+                    style: const TextStyle(color: Colors.white70),
+                  ),
+                  TextButton(
+                    onPressed: () {
+                      setState(() {
+                        _isLogin = !_isLogin;
+                      });
+                    },
+                    child: Text(
+                      _isLogin ? 'sign_up'.tr() : 'sign_in'.tr(),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ),
                 ],
-
-                // Auth button
-                ElevatedButton(
-                  onPressed: _isLoading ? null : _handleAuth,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(
-                      vertical: AppSpacing.md,
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(AppRadius.card),
-                    ),
-                  ),
-                  child: _isLoading
-                      ? const SizedBox(
-                          height: 20,
-                          width: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            valueColor:
-                                AlwaysStoppedAnimation<Color>(Colors.white),
-                          ),
-                        )
-                      : Text(
-                          _isLogin ? 'auth_signin'.tr() : 'auth_signup'.tr(),
-                          style: AppTextStyles.button,
-                        ),
-                ),
-                const SizedBox(height: AppSpacing.md),
-
-                // Toggle between login/signup
-                TextButton(
-                  onPressed: _isLoading
-                      ? null
-                      : () {
-                          setState(() => _isLogin = !_isLogin);
-                        },
-                  child: Text(
-                    _isLogin
-                        ? 'auth_toggle_to_signup'.tr()
-                        : 'auth_toggle_to_signin'.tr(),
-                    style: AppTextStyles.body.copyWith(
-                      color: AppColors.primary,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: AppSpacing.xl), // Extra space at bottom
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
