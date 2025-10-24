@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:move_young/providers/services/friends_provider.dart';
+import 'package:move_young/services/friends/friends_provider.dart';
 
 void main() {
   group('Friends Provider Tests', () {

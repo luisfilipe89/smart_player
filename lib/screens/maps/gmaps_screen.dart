@@ -5,7 +5,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:move_young/theme/tokens.dart';
-import 'package:move_young/services/location_service.dart';
+import 'package:move_young/services/system/location_service.dart';
 
 class GenericMapScreen extends StatefulWidget {
   final String title;

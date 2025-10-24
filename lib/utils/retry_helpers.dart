@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math';
-import '../services/connectivity_service.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../services/connectivity/connectivity_provider.dart';
 
 /// Helper utilities for implementing retry mechanisms with exponential backoff
 class RetryHelpers {
@@ -87,6 +88,7 @@ class RetryHelpers {
 
   /// Executes a function with retry logic and connectivity awareness
   static Future<T> retryWithConnectivity<T>(
+    ProviderContainer container,
     Future<T> Function() operation, {
     int maxRetries = 3,
     Duration initialDelay = const Duration(seconds: 1),
@@ -101,9 +103,11 @@ class RetryHelpers {
     while (attempt <= maxRetries) {
       try {
         // Check connectivity before attempting operation
-        if (!ConnectivityService.hasConnection) {
+        if (!container.read(hasConnectionProvider)) {
           // Wait for connection to return
-          await ConnectivityService.isConnected
+          final connectivityService =
+              container.read(connectivityServiceProvider);
+          await connectivityService.isConnected
               .firstWhere((connected) => connected);
         }
 
@@ -122,9 +126,11 @@ class RetryHelpers {
         }
 
         // If offline, wait for connection before retrying
-        if (!ConnectivityService.hasConnection) {
+        if (!container.read(hasConnectionProvider)) {
           // Wait for connection to return
-          await ConnectivityService.isConnected
+          final connectivityService =
+              container.read(connectivityServiceProvider);
+          await connectivityService.isConnected
               .firstWhere((connected) => connected);
         }
 

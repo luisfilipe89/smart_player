@@ -2,8 +2,8 @@
 import 'package:flutter/material.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:move_young/providers/services/auth_provider.dart';
-import 'package:move_young/providers/services/connectivity_provider.dart';
+import 'package:move_young/services/auth/auth_provider.dart';
+import 'package:move_young/services/system/connectivity_provider.dart';
 import 'package:move_young/services/error_handler_service.dart';
 import 'package:move_young/theme/tokens.dart';
 

@@ -10,13 +10,17 @@ import 'dart:async';
 import 'package:move_young/screens/welcome/welcome_screen.dart';
 import 'package:move_young/theme/_theme.dart';
 // import 'package:move_young/services/haptics_service.dart';
-import 'package:move_young/services/accessibility_service.dart';
-import 'package:move_young/widgets/sync_status_indicator.dart';
+import 'package:move_young/services/system/accessibility_provider.dart';
+import 'package:move_young/providers/infrastructure/shared_preferences_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:move_young/widgets/common/sync_status_indicator.dart';
 // import 'package:move_young/screens/main_scaffold.dart'; // Unused import
 import 'firebase_options.dart';
 import 'package:move_young/utils/logger.dart';
 
 // Global navigator key for navigation from notifications
+// Note: This is still needed for Firebase notification callbacks in background
+// as they don't have access to the provider context
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 // Global timer reference for cache cleanup to prevent memory leaks
@@ -74,6 +78,11 @@ void main() async {
 
   runApp(
     ProviderScope(
+      overrides: [
+        sharedPreferencesProvider.overrideWithValue(
+          await SharedPreferences.getInstance(),
+        ),
+      ],
       child: EasyLocalization(
         supportedLocales: const [Locale('en'), Locale('nl')],
         path: 'assets/translations',
@@ -94,24 +103,15 @@ class MoveYoungApp extends StatefulWidget {
 
 class _MoveYoungAppState extends State<MoveYoungApp>
     with WidgetsBindingObserver {
-  bool _highContrast = false;
-  StreamSubscription<bool>? _highContrastSubscription;
-
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    // Defer SharedPreferences access until after the first frame
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _loadHighContrastSetting();
-      _listenToHighContrastChanges();
-    });
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _highContrastSubscription?.cancel();
     // Cancel the global cache cleanup timer to prevent memory leaks
     _cacheCleanupTimer?.cancel();
     super.dispose();
@@ -126,54 +126,41 @@ class _MoveYoungAppState extends State<MoveYoungApp>
     }
   }
 
-  Future<void> _loadHighContrastSetting() async {
-    final isHighContrast = await AccessibilityService.isHighContrastEnabled();
-    if (mounted) {
-      setState(() {
-        _highContrast = isHighContrast;
-      });
-    }
-  }
-
-  void _listenToHighContrastChanges() {
-    _highContrastSubscription =
-        AccessibilityService.highContrastStream().listen((isHighContrast) {
-      if (mounted) {
-        setState(() {
-          _highContrast = isHighContrast;
-        });
-      }
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      navigatorKey: navigatorKey,
-      debugShowCheckedModeBanner: false,
-      title: 'MoveYoung',
-      theme: _highContrast
-          ? AppTheme.highContrast()
-          : AppTheme.minimal().copyWith(
-              // Ensure nav bar never gets tinted pink
-              bottomNavigationBarTheme: const BottomNavigationBarThemeData(
-                backgroundColor: AppColors.white,
-                elevation: 8,
-                selectedItemColor: Color(0xFF0077B6),
-                unselectedItemColor: Color(0xFF5C677D),
-              ),
-              navigationBarTheme: const NavigationBarThemeData(
-                backgroundColor: Colors.white,
-                surfaceTintColor: Colors.transparent, // <- kill Material3 tint
-              ),
-            ),
-      localizationsDelegates: context.localizationDelegates,
-      supportedLocales: context.supportedLocales,
-      locale: context.locale,
-      scrollBehavior: AppScrollBehavior(),
-      home: GlobalSyncStatusBanner(
-        child: const WelcomeScreen(),
-      ),
+    return Consumer(
+      builder: (context, ref, child) {
+        final isHighContrast = ref.watch(isHighContrastEnabledProvider);
+
+        return MaterialApp(
+          navigatorKey: navigatorKey,
+          debugShowCheckedModeBanner: false,
+          title: 'MoveYoung',
+          theme: isHighContrast
+              ? AppTheme.highContrast()
+              : AppTheme.minimal().copyWith(
+                  // Ensure nav bar never gets tinted pink
+                  bottomNavigationBarTheme: const BottomNavigationBarThemeData(
+                    backgroundColor: AppColors.white,
+                    elevation: 8,
+                    selectedItemColor: Color(0xFF0077B6),
+                    unselectedItemColor: Color(0xFF5C677D),
+                  ),
+                  navigationBarTheme: const NavigationBarThemeData(
+                    backgroundColor: Colors.white,
+                    surfaceTintColor:
+                        Colors.transparent, // <- kill Material3 tint
+                  ),
+                ),
+          localizationsDelegates: context.localizationDelegates,
+          supportedLocales: context.supportedLocales,
+          locale: context.locale,
+          scrollBehavior: AppScrollBehavior(),
+          home: GlobalSyncStatusBanner(
+            child: const WelcomeScreen(),
+          ),
+        );
+      },
     );
   }
 }

@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:move_young/providers/services/games_provider.dart';
-import 'package:move_young/providers/services/auth_provider.dart';
+import 'package:move_young/services/games/games_provider.dart';
+import 'package:move_young/services/auth/auth_provider.dart';
 
 void main() {
   group('Game Flow Integration Tests', () {

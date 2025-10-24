@@ -4,8 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 
-import 'package:move_young/providers/services/auth_provider.dart';
-import 'package:move_young/providers/services/friends_provider.dart';
+import 'package:move_young/services/auth/auth_provider.dart';
+import 'package:move_young/services/friends/friends_provider.dart';
 import 'package:move_young/theme/tokens.dart';
 import 'package:move_young/theme/app_back_button.dart';
 import 'package:shimmer/shimmer.dart';

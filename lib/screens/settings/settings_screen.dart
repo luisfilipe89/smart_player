@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:move_young/providers/services/auth_provider.dart';
+import 'package:move_young/services/auth/auth_provider.dart';
 import 'package:move_young/theme/tokens.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:move_young/theme/app_back_button.dart';
-import 'package:move_young/services/haptics_service.dart';
-import 'package:move_young/services/profile_settings_service.dart';
+import 'package:move_young/services/system/haptics_provider.dart';
+import 'package:move_young/services/system/profile_settings_provider.dart';
 import 'package:move_young/screens/settings/notification_settings_screen.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
@@ -86,10 +86,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   Future<void> _saveSettings() async {
     setState(() => _submitting = true);
     try {
-      await HapticsService.setEnabled(_haptics);
+      final hapticsActions = ref.read(hapticsActionsProvider);
+      await hapticsActions.setEnabled(_haptics);
       final uid = ref.read(currentUserIdProvider);
       if (uid != null && uid.isNotEmpty) {
-        await ProfileSettingsService.setVisibility(_visibility);
+        final profileSettingsActions = ref.read(profileSettingsActionsProvider);
+        await profileSettingsActions.setVisibility(_visibility);
       }
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -108,9 +110,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // ensure we reflect persisted state once available
-    HapticsService.isEnabled().then((v) {
-      if (mounted && v != _haptics) setState(() => _haptics = v);
+    // Watch haptics enabled state reactively
+    ref.listen(hapticsEnabledProvider, (previous, next) {
+      next.whenData((isEnabled) {
+        if (mounted && isEnabled != _haptics) {
+          setState(() => _haptics = isEnabled);
+        }
+      });
     });
     return Scaffold(
       appBar: AppBar(
@@ -151,7 +157,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       style: AppTextStyles.smallMuted);
                 }
                 return StreamBuilder<String>(
-                  stream: ProfileSettingsService.visibilityStream(uid),
+                  stream: ref
+                      .read(profileSettingsActionsProvider)
+                      .visibilityStream(uid),
                   builder: (context, snapshot) {
                     final value = snapshot.data ?? _visibility;
                     _visibility = value;
@@ -174,8 +182,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                           // ignore: deprecated_member_use
                           groupValue: value,
                           // ignore: deprecated_member_use
-                          onChanged: (v) =>
-                              ProfileSettingsService.setVisibility('public'),
+                          onChanged: (v) => ref
+                              .read(profileSettingsActionsProvider)
+                              .setVisibility('public'),
                           title: Text('settings_profile_public'.tr()),
                           contentPadding: EdgeInsets.zero,
                         ),
@@ -185,8 +194,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                           // ignore: deprecated_member_use
                           groupValue: value,
                           // ignore: deprecated_member_use
-                          onChanged: (v) =>
-                              ProfileSettingsService.setVisibility('friends'),
+                          onChanged: (v) => ref
+                              .read(profileSettingsActionsProvider)
+                              .setVisibility('friends'),
                           title: Text('settings_profile_friends'.tr()),
                           contentPadding: EdgeInsets.zero,
                         ),
@@ -196,8 +206,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                           // ignore: deprecated_member_use
                           groupValue: value,
                           // ignore: deprecated_member_use
-                          onChanged: (v) =>
-                              ProfileSettingsService.setVisibility('private'),
+                          onChanged: (v) => ref
+                              .read(profileSettingsActionsProvider)
+                              .setVisibility('private'),
                           title: Text('settings_profile_private'.tr()),
                           contentPadding: EdgeInsets.zero,
                         ),
@@ -208,7 +219,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                             return const SizedBox.shrink();
                           }
                           return StreamBuilder<Map<String, dynamic>>(
-                            stream: ProfileSettingsService.settingsStream(uid),
+                            stream: ref
+                                .read(profileSettingsActionsProvider)
+                                .settingsStream(uid),
                             builder: (context, snapshot) {
                               final settings = snapshot.data ?? {};
                               final showOnline = settings['showOnline'] ?? true;
@@ -225,7 +238,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                                     onChanged: visibility == 'private'
                                         ? null
                                         : (value) async {
-                                            await ProfileSettingsService
+                                            await ref
+                                                .read(
+                                                    profileSettingsActionsProvider)
                                                 .setShowOnline(value);
                                           },
                                     title: Text('settings_show_online'.tr()),
@@ -245,7 +260,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                                     onChanged: visibility == 'private'
                                         ? null
                                         : (value) async {
-                                            await ProfileSettingsService
+                                            await ref
+                                                .read(
+                                                    profileSettingsActionsProvider)
                                                 .setShareEmail(value);
                                           },
                                     title: Text('settings_share_email'.tr()),
@@ -296,7 +313,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     value: _haptics,
                     onChanged: (v) async {
                       setState(() => _haptics = v);
-                      await HapticsService.setEnabled(v);
+                      final hapticsActions = ref.read(hapticsActionsProvider);
+                      await hapticsActions.setEnabled(v);
                     },
                     title: Text('settings_haptics'.tr()),
                     contentPadding: EdgeInsets.zero,

@@ -3,8 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:easy_localization/easy_localization.dart';
 
-import 'package:move_young/services/qr_service.dart';
-import 'package:move_young/providers/services/auth_provider.dart';
+import 'package:move_young/services/qr/qr_provider.dart';
+import 'package:move_young/services/auth/auth_provider.dart';
 import 'package:move_young/theme/tokens.dart';
 import 'package:move_young/theme/app_back_button.dart';
 
@@ -42,7 +42,7 @@ class QRSharingScreen extends ConsumerWidget {
         actions: [
           IconButton(
             icon: const Icon(Icons.share),
-            onPressed: () => _shareQRCode(context, currentUserId),
+            onPressed: () => _shareQRCode(context, ref, currentUserId),
             tooltip: 'share_qr'.tr(),
           ),
         ],
@@ -76,7 +76,9 @@ class QRSharingScreen extends ConsumerWidget {
                   ),
                 ],
               ),
-              child: QRService.generateQRWidget(currentUserId, size: 250),
+              child: ref
+                  .read(qrActionsProvider)
+                  .generateQRWidget(currentUserId, size: 250),
             ),
 
             const SizedBox(height: AppHeights.superHuge),
@@ -86,7 +88,7 @@ class QRSharingScreen extends ConsumerWidget {
               children: [
                 Expanded(
                   child: ElevatedButton.icon(
-                    onPressed: () => _shareQRCode(context, currentUserId),
+                    onPressed: () => _shareQRCode(context, ref, currentUserId),
                     icon: const Icon(Icons.share),
                     label: Text('share_qr'.tr()),
                     style: ElevatedButton.styleFrom(
@@ -102,7 +104,8 @@ class QRSharingScreen extends ConsumerWidget {
                 const SizedBox(width: AppWidths.big),
                 Expanded(
                   child: OutlinedButton.icon(
-                    onPressed: () => _shareQRCodeAsText(context, currentUserId),
+                    onPressed: () =>
+                        _shareQRCodeAsText(context, ref, currentUserId),
                     icon: const Icon(Icons.text_fields),
                     label: Text('share_text'.tr()),
                     style: OutlinedButton.styleFrom(
@@ -153,9 +156,10 @@ class QRSharingScreen extends ConsumerWidget {
     );
   }
 
-  Future<void> _shareQRCode(BuildContext context, String userId) async {
+  Future<void> _shareQRCode(
+      BuildContext context, WidgetRef ref, String userId) async {
     try {
-      await QRService.shareQRCode(userId);
+      await ref.read(qrActionsProvider).shareQRCode(userId);
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -168,9 +172,10 @@ class QRSharingScreen extends ConsumerWidget {
     }
   }
 
-  Future<void> _shareQRCodeAsText(BuildContext context, String userId) async {
+  Future<void> _shareQRCodeAsText(
+      BuildContext context, WidgetRef ref, String userId) async {
     try {
-      await QRService.shareQRCodeAsText(userId);
+      await ref.read(qrActionsProvider).shareQRCode(userId);
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

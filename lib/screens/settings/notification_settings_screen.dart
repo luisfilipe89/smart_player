@@ -1,18 +1,19 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:move_young/theme/_theme.dart';
-import 'package:move_young/services/notification_service.dart';
+import 'package:move_young/services/notifications/notification_provider.dart';
 
-class NotificationSettingsScreen extends StatefulWidget {
+class NotificationSettingsScreen extends ConsumerStatefulWidget {
   const NotificationSettingsScreen({super.key});
 
   @override
-  State<NotificationSettingsScreen> createState() =>
+  ConsumerState<NotificationSettingsScreen> createState() =>
       _NotificationSettingsScreenState();
 }
 
 class _NotificationSettingsScreenState
-    extends State<NotificationSettingsScreen> {
+    extends ConsumerState<NotificationSettingsScreen> {
   bool _notificationsEnabled = true;
   bool _gameReminders = true;
   bool _friendRequests = true;
@@ -28,15 +29,16 @@ class _NotificationSettingsScreenState
 
   Future<void> _loadSettings() async {
     try {
-      final enabled = await NotificationService.isNotificationsEnabled();
+      final notificationService = ref.read(notificationServiceProvider);
+      final enabled = await notificationService.isNotificationsEnabled();
       final gameReminders =
-          await NotificationService.isCategoryEnabled('game_reminders');
+          await notificationService.isCategoryEnabled('game_reminders');
       final friendRequests =
-          await NotificationService.isCategoryEnabled('friend_requests');
+          await notificationService.isCategoryEnabled('friend_requests');
       final gameInvites =
-          await NotificationService.isCategoryEnabled('game_invites');
+          await notificationService.isCategoryEnabled('game_invites');
       final gameUpdates =
-          await NotificationService.isCategoryEnabled('game_updates');
+          await notificationService.isCategoryEnabled('game_updates');
 
       if (mounted) {
         setState(() {
@@ -69,7 +71,9 @@ class _NotificationSettingsScreenState
     });
 
     try {
-      await NotificationService.setNotificationsEnabled(value);
+      await ref
+          .read(notificationServiceProvider)
+          .setNotificationsEnabled(value);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -97,7 +101,9 @@ class _NotificationSettingsScreenState
 
   Future<void> _toggleCategory(String category, bool value) async {
     try {
-      await NotificationService.setCategoryEnabled(category, value);
+      await ref
+          .read(notificationServiceProvider)
+          .setCategoryEnabled(category, value);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(

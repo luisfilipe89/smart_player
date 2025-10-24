@@ -1,14 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:move_young/screens/home/home_screen.dart';
 import 'package:move_young/screens/activities/activities_screen.dart';
 import 'package:move_young/screens/agenda/agenda_screen.dart';
 import 'package:move_young/screens/games/game_organize_screen.dart';
-import 'package:move_young/models/game.dart';
+import 'package:move_young/models/core/game.dart';
 import 'package:move_young/screens/games/games_join_screen.dart';
 import 'package:move_young/screens/games/games_my_screen.dart';
 import 'package:move_young/screens/friends/friends_screen.dart';
-import 'package:move_young/widgets/offline_banner.dart';
-import 'package:move_young/widgets/sync_status_indicator.dart';
+import 'package:move_young/widgets/common/offline_banner.dart';
+import 'package:move_young/widgets/common/sync_status_indicator.dart';
 import 'package:easy_localization/easy_localization.dart';
 
 // ---------------------------- Navigation Controller Scope ----------------------------
@@ -48,6 +49,10 @@ class MainScaffoldController {
   }
 }
 
+// MainScaffoldController provider
+final mainScaffoldControllerProvider =
+    StateProvider<MainScaffoldController?>((ref) => null);
+
 class MainScaffoldScope extends InheritedWidget {
   const MainScaffoldScope(
       {super.key, required this.controller, required super.child});
@@ -84,7 +89,7 @@ const int kTabFriends = 1;
 const int kTabJoin = 2;
 const int kTabAgenda = 3;
 
-class MainScaffold extends StatefulWidget {
+class MainScaffold extends ConsumerStatefulWidget {
   const MainScaffold({super.key});
 
   // Handy way to reach the state from any descendant
@@ -92,10 +97,10 @@ class MainScaffold extends StatefulWidget {
       context.findAncestorStateOfType<MainScaffoldState>();
 
   @override
-  State<MainScaffold> createState() => MainScaffoldState();
+  ConsumerState<MainScaffold> createState() => MainScaffoldState();
 }
 
-class MainScaffoldState extends State<MainScaffold> {
+class MainScaffoldState extends ConsumerState<MainScaffold> {
   late final ValueNotifier<int> _currentIndexNotifier;
   int _currentIndex = 0;
 
@@ -145,6 +150,11 @@ class MainScaffoldState extends State<MainScaffold> {
         });
       },
     );
+
+    // Set the controller in the provider
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(mainScaffoldControllerProvider.notifier).state = _controller;
+    });
 
     // Handle pending notifications after the scaffold is ready
     WidgetsBinding.instance.addPostFrameCallback((_) {

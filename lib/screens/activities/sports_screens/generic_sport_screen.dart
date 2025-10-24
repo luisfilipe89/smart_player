@@ -1,20 +1,21 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:move_young/services/haptics_service.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:move_young/services/system/haptics_provider.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:move_young/services/overpass_service.dart';
+import 'package:move_young/services/external/overpass_provider.dart';
 import 'package:move_young/screens/maps/gmaps_screen.dart';
-import 'package:move_young/widgets_navigation/reverse_geocoding.dart';
-import 'package:move_young/widgets_sports/sport_field_card.dart';
+import 'package:move_young/widgets/navigation/reverse_geocoding.dart';
+import 'package:move_young/widgets/sports/sport_field_card.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:move_young/config/_config.dart';
 import 'package:move_young/theme/_theme.dart';
-import 'package:move_young/services/location_service.dart';
+import 'package:move_young/services/system/location_service.dart';
 
-class GenericSportScreen extends StatefulWidget {
+class GenericSportScreen extends ConsumerStatefulWidget {
   final String title;
   final String sportType;
 
@@ -25,10 +26,10 @@ class GenericSportScreen extends StatefulWidget {
   });
 
   @override
-  State<GenericSportScreen> createState() => _GenericSportScreenState();
+  ConsumerState<GenericSportScreen> createState() => _GenericSportScreenState();
 }
 
-class _GenericSportScreenState extends State<GenericSportScreen>
+class _GenericSportScreenState extends ConsumerState<GenericSportScreen>
     with AutomaticKeepAliveClientMixin {
   Set<String> _favoriteIds = {}; // ✅ Favorite locations
   List<Map<String, dynamic>> _allLocations = [];
@@ -91,7 +92,8 @@ class _GenericSportScreenState extends State<GenericSportScreen>
           .getCurrentPosition(accuracy: LocationAccuracy.best);
       _userPosition = pos;
 
-      final locations = await OverpassService.fetchFields(
+      final overpassActions = ref.read(overpassActionsProvider);
+      final locations = await overpassActions.fetchFields(
         areaName: "'s-Hertogenbosch",
         sportType: widget.sportType,
         bypassCache: bypassCache,
@@ -547,6 +549,8 @@ class _GenericSportScreenState extends State<GenericSportScreen>
                                         onToggleFavorite: _toggleFavorite,
                                         onDirections: _openDirections,
                                         onShare: _shareLocation,
+                                        hapticsActions:
+                                            ref.read(hapticsActionsProvider),
                                       ),
                                     ),
                                     const SliverToBoxAdapter(
@@ -667,6 +671,7 @@ class _FieldsSliverList extends StatelessWidget {
   final Future<void> Function(String id) onToggleFavorite;
   final void Function(String lat, String lon) onDirections;
   final Future<void> Function(String name, String lat, String lon) onShare;
+  final HapticsActions hapticsActions;
 
   const _FieldsSliverList({
     required this.filteredLocations,
@@ -677,6 +682,7 @@ class _FieldsSliverList extends StatelessWidget {
     required this.onToggleFavorite,
     required this.onDirections,
     required this.onShare,
+    required this.hapticsActions,
   });
 
   @override
@@ -714,7 +720,7 @@ class _FieldsSliverList extends StatelessWidget {
             onToggleFavorite: () async {
               final id = '$lat,$lon';
               await onToggleFavorite(id);
-              HapticsService.selectionClick();
+              await hapticsActions.selectionClick();
             },
             onShare: () async {
               final name = await getDisplayName(field);

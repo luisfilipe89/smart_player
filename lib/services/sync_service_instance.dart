@@ -10,6 +10,7 @@ import 'package:move_young/services/friends_service_instance.dart';
 class SyncServiceInstance {
   final CloudGamesServiceInstance _cloudGamesService;
   final FriendsServiceInstance _friendsService;
+  final SharedPreferences _prefs;
 
   static const String _syncQueueKey = 'sync_queue';
 
@@ -26,6 +27,7 @@ class SyncServiceInstance {
   SyncServiceInstance(
     this._cloudGamesService,
     this._friendsService,
+    this._prefs,
   );
 
   /// Stream of sync status changes
@@ -161,8 +163,7 @@ class SyncServiceInstance {
   /// Load sync queue from storage
   Future<void> _loadSyncQueue() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final queueJson = prefs.getString(_syncQueueKey);
+      final queueJson = _prefs.getString(_syncQueueKey);
 
       if (queueJson != null) {
         final List<dynamic> queueList = jsonDecode(queueJson);
@@ -182,10 +183,9 @@ class SyncServiceInstance {
   /// Save sync queue to storage
   Future<void> _saveSyncQueue() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
       final queueJson =
           jsonEncode(_syncQueue.map((op) => op.toJson()).toList());
-      await prefs.setString(_syncQueueKey, queueJson);
+      await _prefs.setString(_syncQueueKey, queueJson);
     } catch (e) {
       debugPrint('Failed to save sync queue: $e');
     }

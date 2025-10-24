@@ -1,21 +1,22 @@
 import 'package:flutter/material.dart';
-import 'package:move_young/services/haptics_service.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:move_young/services/system/haptics_provider.dart';
 import 'package:easy_localization/easy_localization.dart';
-import 'package:move_young/models/activity.dart';
-import 'package:move_young/widgets_sports/activity_category.dart';
+import 'package:move_young/models/core/activity.dart';
+import 'package:move_young/widgets/sports/activity_category.dart';
 import 'package:move_young/theme/_theme.dart';
 import 'package:move_young/screens/activities/sports_screens/_sport_screens.dart';
 
 typedef ScreenBuilder = Widget Function();
 
-class ActivitiesScreen extends StatefulWidget {
+class ActivitiesScreen extends ConsumerStatefulWidget {
   const ActivitiesScreen({super.key});
 
   @override
-  State<ActivitiesScreen> createState() => _ActivitiesScreenState();
+  ConsumerState<ActivitiesScreen> createState() => _ActivitiesScreenState();
 }
 
-class _ActivitiesScreenState extends State<ActivitiesScreen> {
+class _ActivitiesScreenState extends ConsumerState<ActivitiesScreen> {
   int selectedCategoryIndex = 0;
   late final PageController _pageController;
 
@@ -153,7 +154,8 @@ class _ActivitiesScreenState extends State<ActivitiesScreen> {
   }
 
   void navigateToMenu(String key) {
-    HapticsService.lightImpact();
+    final hapticsActions = ref.read(hapticsActionsProvider);
+    hapticsActions.lightImpact();
 
     final builder = _activityRoutes[key];
     assert(() {

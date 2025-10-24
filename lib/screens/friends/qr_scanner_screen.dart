@@ -4,9 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:easy_localization/easy_localization.dart';
 
-import 'package:move_young/services/qr_service.dart';
-import 'package:move_young/providers/services/friends_provider.dart';
-import 'package:move_young/providers/services/auth_provider.dart';
+import 'package:move_young/services/qr/qr_provider.dart';
+import 'package:move_young/services/friends/friends_provider.dart';
+import 'package:move_young/services/auth/auth_provider.dart';
 import 'package:move_young/theme/tokens.dart';
 import 'package:move_young/theme/app_back_button.dart';
 
@@ -55,7 +55,7 @@ class _QRScannerScreenState extends ConsumerState<QRScannerScreen> {
     });
 
     // Parse the QR code
-    final userId = QRService.parseUserQRData(code);
+    final userId = ref.read(qrActionsProvider).parseUserQRData(code);
     if (userId == null) {
       _showErrorDialog('qr_invalid_code'.tr());
       return;

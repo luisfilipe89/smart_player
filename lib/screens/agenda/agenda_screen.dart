@@ -1,24 +1,25 @@
 import 'dart:async';
 import 'package:shimmer/shimmer.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:move_young/services/image_cache_service.dart';
+import 'package:move_young/services/cache/image_cache_provider.dart';
+import 'package:move_young/services/cache/favorites_provider.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
-import 'package:move_young/models/event_model.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:move_young/models/external/event_model.dart';
 import 'package:move_young/services/load_events_from_json.dart';
 import 'package:move_young/theme/_theme.dart';
 
-class AgendaScreen extends StatefulWidget {
+class AgendaScreen extends ConsumerStatefulWidget {
   const AgendaScreen({super.key});
 
   @override
-  State<AgendaScreen> createState() => _AgendaScreenState();
+  ConsumerState<AgendaScreen> createState() => _AgendaScreenState();
 }
 
-class _AgendaScreenState extends State<AgendaScreen> {
+class _AgendaScreenState extends ConsumerState<AgendaScreen> {
   Set<String> _favoriteTitles = {};
   final TextEditingController _searchController = TextEditingController();
 
@@ -62,25 +63,26 @@ class _AgendaScreenState extends State<AgendaScreen> {
         .where((event) => event.imageUrl?.isNotEmpty ?? false)
         .map((event) => event.imageUrl!)
         .toList();
-    await ImageCacheService.preloadImages(context, imageUrls);
+    await ref.read(imageCacheServiceProvider).preloadImages(context, imageUrls);
   }
 
   Future<void> _loadFavorites() async {
-    final prefs = await SharedPreferences.getInstance();
+    final favoritesService = ref.read(favoritesServiceProvider);
+    final favorites = await favoritesService.getFavorites();
     setState(() {
-      _favoriteTitles = prefs.getStringList('favoriteEvents')?.toSet() ?? {};
+      _favoriteTitles = favorites;
     });
   }
 
   Future<void> _toggleFavorite(String title) async {
-    final prefs = await SharedPreferences.getInstance();
+    final favoritesService = ref.read(favoritesServiceProvider);
+    await favoritesService.toggleFavorite(title);
     setState(() {
       if (_favoriteTitles.contains(title)) {
         _favoriteTitles.remove(title);
       } else {
         _favoriteTitles.add(title);
       }
-      prefs.setStringList('favoriteEvents', _favoriteTitles.toList());
     });
   }
 
@@ -307,23 +309,23 @@ class _AgendaScreenState extends State<AgendaScreen> {
           ),
         );
       } else {
-        // It's a network URL, use ImageCacheService
-        return ImageCacheService.getOptimizedImage(
-          imageUrl: url,
-          width: double.infinity,
-          height: AppHeights.image,
-          fit: BoxFit.cover,
-          fadeInDuration: const Duration(milliseconds: 300),
-          fadeInCurve: Curves.easeInOut,
-          placeholder: (BuildContext context, String url) =>
-              _buildShimmerPlaceholder(),
-          errorWidget: (BuildContext context, String url, dynamic error) =>
-              Container(
-            height: AppHeights.image,
-            color: AppColors.lightgrey,
-            child: const Icon(Icons.broken_image),
-          ),
-        );
+        // It's a network URL, use ImageCacheServiceInstance
+        return ref.read(imageCacheServiceProvider).getOptimizedImage(
+              imageUrl: url,
+              width: double.infinity,
+              height: AppHeights.image,
+              fit: BoxFit.cover,
+              fadeInDuration: const Duration(milliseconds: 300),
+              fadeInCurve: Curves.easeInOut,
+              placeholder: (BuildContext context, String url) =>
+                  _buildShimmerPlaceholder(),
+              errorWidget: (BuildContext context, String url, dynamic error) =>
+                  Container(
+                height: AppHeights.image,
+                color: AppColors.lightgrey,
+                child: const Icon(Icons.broken_image),
+              ),
+            );
       }
     }
     return Container(

@@ -4,7 +4,7 @@ import 'package:flutter/foundation.dart'
     show defaultTargetPlatform, TargetPlatform, kIsWeb;
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:move_young/providers/services/auth_provider.dart';
+import 'package:move_young/services/auth/auth_provider.dart';
 import 'package:move_young/screens/auth/auth_screen.dart';
 import 'package:move_young/screens/main_scaffold.dart';
 import 'package:move_young/theme/tokens.dart';

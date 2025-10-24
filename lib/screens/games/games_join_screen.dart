@@ -2,12 +2,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:easy_localization/easy_localization.dart';
-import 'package:move_young/models/game.dart';
+import 'package:move_young/models/core/game.dart';
 import 'package:move_young/theme/_theme.dart';
-import 'package:move_young/providers/services/auth_provider.dart';
-import 'package:move_young/providers/services/games_provider.dart';
-import 'package:move_young/providers/services/cloud_games_provider.dart'
-    as cloud;
+import 'package:move_young/services/auth/auth_provider.dart';
+import 'package:move_young/services/games/games_provider.dart';
+import 'package:move_young/services/games/cloud_games_provider.dart' as cloud;
 
 class GamesJoinScreen extends ConsumerStatefulWidget {
   final String? highlightGameId;

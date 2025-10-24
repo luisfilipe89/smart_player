@@ -1,11 +1,11 @@
 // lib/services/cloud_games_service_instance.dart
 import 'package:firebase_database/firebase_database.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:move_young/models/game.dart';
 import 'package:move_young/db/db_paths.dart';
 import 'package:flutter/foundation.dart' show debugPrint;
-import 'package:move_young/models/cached_data.dart';
-import 'package:move_young/services/notification_service_instance.dart';
+import 'notifications/notification_service_instance.dart';
+import '../models/infrastructure/cached_data.dart';
+import '../models/core/game.dart';
 
 // Background processing will be added when needed
 

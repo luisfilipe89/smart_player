@@ -6,9 +6,9 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:move_young/db/db_paths.dart';
-import 'package:move_young/models/cached_data.dart';
 import 'package:move_young/services/firebase_error_handler.dart';
-import 'package:move_young/services/notification_service_instance.dart';
+import 'notifications/notification_service_instance.dart';
+import '../models/infrastructure/cached_data.dart';
 
 /// Instance-based FriendsService for use with Riverpod dependency injection
 class FriendsServiceInstance {

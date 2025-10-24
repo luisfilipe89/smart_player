@@ -1,6 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/services.dart';
-import 'package:move_young/models/event_model.dart';
+import 'package:move_young/models/external/event_model.dart';
 
 Future<List<Event>> loadEventsFromJson() async {
   final String response =

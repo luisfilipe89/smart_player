@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:easy_localization/easy_localization.dart';
-import 'package:move_young/models/game.dart';
+import 'package:move_young/models/core/game.dart';
 import 'package:move_young/theme/_theme.dart';
-import 'package:move_young/providers/services/auth_provider.dart';
-import 'package:move_young/providers/services/games_provider.dart';
-import 'package:move_young/providers/services/friends_provider.dart';
+import 'package:move_young/services/auth/auth_provider.dart';
+import 'package:move_young/services/games/games_provider.dart';
+import 'package:move_young/services/friends/friends_provider.dart';
+import 'package:move_young/services/external/weather_provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:move_young/services/weather_service.dart';
 
 class GameOrganizeScreen extends ConsumerStatefulWidget {
   final Game? initialGame;
@@ -591,7 +591,8 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
       final latitude = _selectedField?['lat']?.toDouble() ?? 52.3676;
       final longitude = _selectedField?['lon']?.toDouble() ?? 4.9041;
 
-      await WeatherService.fetchWeatherForDate(
+      final weatherActions = ref.read(weatherActionsProvider);
+      await weatherActions.fetchWeatherForDate(
         date: date,
         latitude: latitude,
         longitude: longitude,

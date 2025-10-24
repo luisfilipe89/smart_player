@@ -1,19 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:easy_localization/easy_localization.dart';
-import 'package:move_young/models/game.dart';
-import 'package:move_young/providers/services/auth_provider.dart';
-import 'package:move_young/providers/services/games_provider.dart';
-import 'package:move_young/providers/services/cloud_games_provider.dart'
-    as cloud;
+import 'package:move_young/models/core/game.dart';
+import 'package:move_young/services/auth/auth_provider.dart';
+import 'package:move_young/services/games/games_provider.dart';
+import 'package:move_young/services/games/cloud_games_provider.dart' as cloud;
 import 'package:move_young/theme/_theme.dart';
 import 'package:move_young/screens/games/games_join_screen.dart';
 import 'package:move_young/screens/games/game_organize_screen.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:move_young/providers/services/friends_provider.dart';
-import 'package:move_young/services/weather_service.dart';
+import 'package:move_young/services/friends/friends_provider.dart';
+import 'package:move_young/services/external/weather_provider.dart';
 
 class GamesMyScreen extends ConsumerStatefulWidget {
   final String? highlightGameId;
@@ -294,7 +293,8 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
     if (_weatherLoading.contains(key)) return null;
     _weatherLoading.add(key);
     try {
-      final map = await WeatherService.fetchWeatherForDate(
+      final weatherActions = ref.read(weatherActionsProvider);
+      final map = await weatherActions.fetchWeatherForDate(
         date: game.dateTime,
         latitude: game.latitude!,
         longitude: game.longitude!,
@@ -863,14 +863,15 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
                                       time = '${time.substring(0, 2)}:00';
                                     }
                                     final forecasts = _weatherByGameId[game.id];
+                                    final weatherActions =
+                                        ref.read(weatherActionsProvider);
                                     final String cond = forecasts?[time] ??
-                                        WeatherService.getWeatherCondition(
-                                            time);
-                                    final IconData icon =
-                                        WeatherService.getWeatherIcon(
-                                            time, cond);
+                                        weatherActions
+                                            .getWeatherCondition(time);
+                                    final IconData icon = weatherActions
+                                        .getWeatherIcon(time, cond);
                                     final Color color =
-                                        WeatherService.getWeatherColor(cond);
+                                        weatherActions.getWeatherColor(cond);
                                     return Row(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [

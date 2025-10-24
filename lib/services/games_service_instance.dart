@@ -2,7 +2,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
-import 'package:move_young/models/game.dart';
+import 'package:move_young/models/core/game.dart';
 import 'package:move_young/services/auth_service_instance.dart';
 import 'package:move_young/services/cloud_games_service_instance.dart';
 

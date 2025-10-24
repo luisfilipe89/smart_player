@@ -46,3 +46,10 @@ app.*.map.json
 
 # Ignore versioned event files but keep the static one
 assets/events/up_events_*.json
+
+# Debug and temporary files
+debug_*.png
+flutter_*.log
+flutter_*.png
+*_output*.txt
+analyzer_*.txt

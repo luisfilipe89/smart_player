@@ -2,7 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../providers/services/friends_provider.dart';
+import '../../services/friends/friends_provider.dart';
 import '../theme/tokens.dart';
 
 /// Widget that shows rate limit feedback for friend requests

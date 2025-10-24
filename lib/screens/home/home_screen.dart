@@ -3,19 +3,18 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:move_young/models/event_model.dart';
+import 'package:move_young/models/external/event_model.dart';
 import 'package:move_young/services/load_events_from_json.dart';
-import 'package:move_young/providers/services/auth_provider.dart';
-import 'package:move_young/providers/services/cloud_games_provider.dart'
-    as cloud;
+import 'package:move_young/services/auth/auth_provider.dart';
+import 'package:move_young/services/games/cloud_games_provider.dart' as cloud;
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:move_young/screens/welcome/welcome_screen.dart';
 import 'package:move_young/theme/tokens.dart';
-import 'package:move_young/screens/maps/profile_screen.dart';
+import 'package:move_young/screens/profile/profile_screen.dart';
 import 'package:move_young/screens/friends/friends_screen.dart';
 import 'package:move_young/services/error_handler_service.dart';
-import 'package:move_young/services/image_cache_service.dart';
-import 'package:move_young/widgets/retry_error_view.dart';
+import 'package:move_young/services/cache/image_cache_provider.dart';
+import 'package:move_young/widgets/common/retry_error_view.dart';
 import 'package:move_young/screens/main_scaffold.dart';
 
 // Loading state for events
@@ -38,8 +37,9 @@ class _HomeScreenNewState extends ConsumerState<HomeScreenNew> {
     _fetch();
     // Preload images
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      ImageCacheService.preloadImages(
-          context, ['assets/images/general_public.jpg']);
+      ref
+          .read(imageCacheServiceProvider)
+          .preloadImages(context, ['assets/images/general_public.jpg']);
     });
   }
 
