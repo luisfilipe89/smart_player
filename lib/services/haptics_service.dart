@@ -8,9 +8,15 @@ class HapticsService {
   static bool _loaded = false;
 
   static Future<void> initialize() async {
-    final prefs = await SharedPreferences.getInstance();
-    _enabledCache = prefs.getBool(_prefsKey) ?? true;
-    _loaded = true;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      _enabledCache = prefs.getBool(_prefsKey) ?? true;
+      _loaded = true;
+    } catch (e) {
+      // If SharedPreferences fails to initialize, use default value
+      _enabledCache = true;
+      _loaded = true;
+    }
   }
 
   static bool get enabled => _enabledCache;
@@ -23,8 +29,12 @@ class HapticsService {
 
   static Future<void> setEnabled(bool value) async {
     _enabledCache = value;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_prefsKey, value);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_prefsKey, value);
+    } catch (e) {
+      // If SharedPreferences fails, just update the cache
+    }
   }
 
   static Future<void> lightImpact() async {

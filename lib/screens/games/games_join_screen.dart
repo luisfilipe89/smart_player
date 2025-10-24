@@ -720,6 +720,7 @@ class _GamesDiscoveryScreenState extends State<GamesDiscoveryScreen> {
                             Expanded(
                               child: ElevatedButton(
                                 onPressed: () async {
+                                  final currentContext = context;
                                   final result =
                                       await CloudGamesService.acceptInvite(
                                           game.id);
@@ -728,7 +729,7 @@ class _GamesDiscoveryScreenState extends State<GamesDiscoveryScreen> {
                                     final status = result['status'];
                                     final position = result['position'];
 
-                                    if (context.mounted) {
+                                    if (currentContext.mounted) {
                                       String message;
                                       Color bgColor;
                                       if (status == 'active') {
@@ -742,7 +743,7 @@ class _GamesDiscoveryScreenState extends State<GamesDiscoveryScreen> {
                                         bgColor = AppColors.blue;
                                       }
 
-                                      ScaffoldMessenger.of(context)
+                                      ScaffoldMessenger.of(currentContext)
                                           .showSnackBar(
                                         SnackBar(
                                           content: Text(message),
@@ -752,14 +753,17 @@ class _GamesDiscoveryScreenState extends State<GamesDiscoveryScreen> {
                                       );
                                     }
 
-                                    MainScaffoldScope.maybeOf(context)
-                                        ?.openMyGames(
-                                      initialTab: 0,
-                                      highlightGameId: game.id,
-                                      popToRoot: true,
-                                    );
-                                  } else if (context.mounted) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
+                                    if (currentContext.mounted) {
+                                      MainScaffoldScope.maybeOf(currentContext)
+                                          ?.openMyGames(
+                                        initialTab: 0,
+                                        highlightGameId: game.id,
+                                        popToRoot: true,
+                                      );
+                                    }
+                                  } else if (currentContext.mounted) {
+                                    ScaffoldMessenger.of(currentContext)
+                                        .showSnackBar(
                                       SnackBar(
                                         content: Text('loading_error'.tr()),
                                         backgroundColor: AppColors.red,
@@ -825,7 +829,7 @@ class _GamesDiscoveryScreenState extends State<GamesDiscoveryScreen> {
                                   borderRadius: BorderRadius.circular(
                                       AppRadius.smallCard),
                                 ),
-                                child: Text(
+                                child: const Text(
                                   'You left this invited game',
                                   style: AppTextStyles.small,
                                   textAlign: TextAlign.center,
@@ -1074,7 +1078,7 @@ class _GamesDiscoveryScreenState extends State<GamesDiscoveryScreen> {
                                   child: Column(
                                     mainAxisAlignment: MainAxisAlignment.center,
                                     children: [
-                                      Icon(
+                                      const Icon(
                                         Icons.sports_soccer,
                                         size: 64,
                                         color: AppColors.grey,

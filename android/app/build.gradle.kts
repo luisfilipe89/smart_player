@@ -8,6 +8,7 @@ plugins {
 
 android {
     namespace = "com.example.sportappdenbosch"
+    // Use compileSdk 36 as required by plugins (plugins require SDK 36)
     compileSdk = 36
 
     compileOptions {
@@ -27,6 +28,7 @@ android {
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
+        // Use Flutter-managed targetSdk for consistency with Flutter tooling
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName

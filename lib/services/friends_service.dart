@@ -15,6 +15,8 @@ import 'package:move_young/services/connectivity_service.dart';
 import 'package:move_young/services/cache_service.dart';
 import 'package:move_young/utils/timeout_helpers.dart';
 import 'package:move_young/models/cached_data.dart';
+import 'package:move_young/utils/batch_helpers.dart';
+import 'package:move_young/services/firebase_error_handler.dart';
 
 class FriendsService {
   static FirebaseAuth get _auth => FirebaseAuth.instance;
@@ -34,6 +36,10 @@ class FriendsService {
       return snap;
     } catch (e) {
       debugPrint('🔍 READ FAIL: $path -> $e');
+      if (FirebaseErrorHandler.requiresAuthRefresh(e)) {
+        debugPrint('🔍 Auth refresh required for: $path');
+        // Could trigger auth refresh here if needed
+      }
       rethrow;
     }
   }
@@ -74,7 +80,12 @@ class FriendsService {
     if (updates.isEmpty) return;
     try {
       await _db.ref().update(updates);
-    } catch (_) {
+    } catch (e) {
+      debugPrint('🔍 Index update failed: $e');
+      if (FirebaseErrorHandler.isPermissionDenied(e)) {
+        debugPrint(
+            '🔍 Permission denied for user indexing - this is expected for some users');
+      }
       // Swallow permission errors so UI doesn't break on best-effort indexing
     }
   }
@@ -96,6 +107,39 @@ class FriendsService {
       }
       return <String>[];
     });
+  }
+
+  // Paginated friends stream
+  static Stream<List<String>> friendsPaginatedStream(
+      String uid, int page, int pageSize) {
+    return _userRef(uid).child('friends').onValue.map((event) {
+      final data = event.snapshot.value;
+      if (data is Map) {
+        final allFriends = data.keys.cast<String>().toList()..sort();
+        final startIndex = page * pageSize;
+        final endIndex = (startIndex + pageSize).clamp(0, allFriends.length);
+
+        if (startIndex >= allFriends.length) {
+          return <String>[];
+        }
+
+        return allFriends.sublist(startIndex, endIndex);
+      }
+      return <String>[];
+    });
+  }
+
+  // Get total friends count
+  static Future<int> getFriendsCount(String uid) async {
+    try {
+      final snap = await _userRef(uid).child('friends').get();
+      if (snap.exists && snap.value is Map) {
+        return (snap.value as Map).length;
+      }
+      return 0;
+    } catch (e) {
+      return 0;
+    }
   }
 
   static Stream<List<String>> receivedRequestsStream(String uid) {
@@ -215,9 +259,14 @@ class FriendsService {
       return true;
     } catch (e) {
       debugPrint('🔍 Error creating friend request: $e');
-      // Provide more specific error feedback
-      if (e.toString().contains('permission-denied')) {
-        debugPrint('🔍 Permission denied - database rules may need updating');
+      // Provide more specific error feedback using FirebaseErrorHandler
+      if (FirebaseErrorHandler.isPermissionDenied(e)) {
+        debugPrint(
+            '🔍 Permission denied - user may have blocked friend requests');
+      } else if (FirebaseErrorHandler.isNetworkError(e)) {
+        debugPrint('🔍 Network error sending friend request');
+      } else if (FirebaseErrorHandler.isUnavailableError(e)) {
+        debugPrint('🔍 Firebase service unavailable');
       }
       return false;
     }
@@ -1027,31 +1076,37 @@ class FriendsService {
     return profile;
   }
 
-  // Batch fetch minimal profiles for a list of uids
+  // Batch fetch minimal profiles for a list of uids with single-pass optimization
   static Future<Map<String, Map<String, String?>>> fetchMinimalProfiles(
       List<String> uids) async {
     final Map<String, Map<String, String?>> result = {};
     if (uids.isEmpty) return result;
 
-    // Get cached profiles first
+    // Get cached profiles in single pass
     final cachedProfiles = await CacheService.getCachedUserProfiles(uids);
-    for (final entry in cachedProfiles.entries) {
-      result[entry.key] = entry.value.cast<String, String?>();
+    final uncachedUids = <String>[];
+
+    // Single iteration to separate cached vs uncached
+    for (final uid in uids) {
+      if (cachedProfiles.containsKey(uid)) {
+        result[uid] = cachedProfiles[uid]!.cast<String, String?>();
+      } else {
+        uncachedUids.add(uid);
+      }
     }
 
-    // Find uids that weren't in cache
-    final uncachedUids = uids.where((uid) => !result.containsKey(uid)).toList();
+    // Batch fetch uncached with early exit
+    if (uncachedUids.isEmpty) return result;
 
-    if (uncachedUids.isNotEmpty) {
-      // Fetch uncached profiles concurrently
-      final List<Future<void>> tasks = [];
-      for (final uid in uncachedUids) {
-        tasks.add(() async {
-          final Map<String, String?> data = await fetchMinimalProfile(uid);
-          result[uid] = data;
-        }());
+    // Use Future.wait with limit to prevent overwhelming Firebase
+    final batches = BatchHelpers.batchList(uncachedUids, 10);
+    for (final batch in batches) {
+      final profiles = await Future.wait(
+        batch.map((uid) => fetchMinimalProfile(uid)),
+      );
+      for (var i = 0; i < batch.length; i++) {
+        result[batch[i]] = profiles[i];
       }
-      await Future.wait(tasks);
     }
 
     return result;

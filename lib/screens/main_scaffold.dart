@@ -96,6 +96,7 @@ class MainScaffold extends StatefulWidget {
 }
 
 class MainScaffoldState extends State<MainScaffold> {
+  late final ValueNotifier<int> _currentIndexNotifier;
   int _currentIndex = 0;
 
   final _homeKey = GlobalKey<NavigatorState>();
@@ -109,10 +110,14 @@ class MainScaffoldState extends State<MainScaffold> {
   @override
   void initState() {
     super.initState();
+    _currentIndexNotifier = ValueNotifier<int>(0);
     _controller = MainScaffoldController(
       (int index, {bool popToRoot = false}) {
         if (popToRoot) _popToRoot(index);
-        if (mounted) setState(() => _currentIndex = index);
+        if (mounted) {
+          _currentIndex = index;
+          _currentIndexNotifier.value = index;
+        }
       },
       ({int initialTab = 0, String? highlightGameId, bool popToRoot = true}) {
         if (popToRoot) {
@@ -120,11 +125,10 @@ class MainScaffoldState extends State<MainScaffold> {
           // Also clear Home flow so returning Home shows the root Home screen
           _homeKey.currentState?.popUntil((r) => r.isFirst);
         }
-        setState(() {
-          _myGamesArgs = MyGamesArgs(
-              initialTab: initialTab, highlightGameId: highlightGameId);
-          _currentIndex = kTabJoin;
-        });
+        _myGamesArgs = MyGamesArgs(
+            initialTab: initialTab, highlightGameId: highlightGameId);
+        _currentIndex = kTabJoin;
+        _currentIndexNotifier.value = kTabJoin;
         // Nudge the nested My Games navigator to rebuild and show latest
         WidgetsBinding.instance.addPostFrameCallback((_) {
           final nav = _joinKey.currentState;
@@ -148,9 +152,16 @@ class MainScaffoldState extends State<MainScaffold> {
     });
   }
 
+  @override
+  void dispose() {
+    _currentIndexNotifier.dispose();
+    super.dispose();
+  }
+
   void switchToTab(int index, {bool popToRoot = false}) {
     if (popToRoot) _popToRoot(index);
-    setState(() => _currentIndex = index);
+    _currentIndex = index;
+    _currentIndexNotifier.value = index;
   }
 
   NavigatorState? get _maybeCurrentNavigator {
@@ -204,43 +215,50 @@ class MainScaffoldState extends State<MainScaffold> {
           if (popped) return;
 
           if (_currentIndex != 0) {
-            setState(() => _currentIndex = 0);
+            _currentIndex = 0;
+            _currentIndexNotifier.value = 0;
             return;
           }
         },
         child: OfflineBanner(
           child: GlobalSyncStatusBanner(
-            child: Scaffold(
-              body: IndexedStack(
-                index: _currentIndex,
-                children: <Widget>[
-                  HeroMode(
-                      enabled: _currentIndex == kTabHome,
-                      child: _HomeFlow(navigatorKey: _homeKey)),
-                  HeroMode(
-                      enabled: _currentIndex == kTabFriends,
-                      child: _FriendsFlow(navigatorKey: _friendsKey)),
-                  HeroMode(
-                      enabled: _currentIndex == kTabJoin,
-                      child: _MyGamesFlow(
-                          navigatorKey: _joinKey, args: _myGamesArgs)),
-                  HeroMode(
-                      enabled: _currentIndex == kTabAgenda,
-                      child: _AgendaFlow(navigatorKey: _agendaKey)),
-                ],
-              ),
-              bottomNavigationBar: SafeArea(
-                child: _BottomBar(
-                  currentIndex: _currentIndex,
-                  onTap: (index) {
-                    if (index == _currentIndex) {
-                      _popToRoot(index);
-                    } else {
-                      setState(() => _currentIndex = index);
-                    }
-                  },
-                ),
-              ),
+            child: ValueListenableBuilder<int>(
+              valueListenable: _currentIndexNotifier,
+              builder: (context, currentIndex, child) {
+                return Scaffold(
+                  body: IndexedStack(
+                    index: currentIndex,
+                    children: <Widget>[
+                      HeroMode(
+                          enabled: currentIndex == kTabHome,
+                          child: _HomeFlow(navigatorKey: _homeKey)),
+                      HeroMode(
+                          enabled: currentIndex == kTabFriends,
+                          child: _FriendsFlow(navigatorKey: _friendsKey)),
+                      HeroMode(
+                          enabled: currentIndex == kTabJoin,
+                          child: _MyGamesFlow(
+                              navigatorKey: _joinKey, args: _myGamesArgs)),
+                      HeroMode(
+                          enabled: currentIndex == kTabAgenda,
+                          child: _AgendaFlow(navigatorKey: _agendaKey)),
+                    ],
+                  ),
+                  bottomNavigationBar: SafeArea(
+                    child: _BottomBar(
+                      currentIndex: currentIndex,
+                      onTap: (index) {
+                        if (index == currentIndex) {
+                          _popToRoot(index);
+                        } else {
+                          _currentIndex = index;
+                          _currentIndexNotifier.value = index;
+                        }
+                      },
+                    ),
+                  ),
+                );
+              },
             ),
           ),
         ),

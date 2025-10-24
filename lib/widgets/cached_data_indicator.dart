@@ -93,7 +93,7 @@ class _CachedDataIndicatorState extends State<CachedDataIndicator>
               padding: AppPaddings.allSmall,
               margin: AppPaddings.bottomSmall,
               decoration: BoxDecoration(
-                color: AppColors.orange.withOpacity(0.1),
+                color: AppColors.orange.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(AppRadius.card),
                 border: Border.all(
                   color: AppColors.orange,

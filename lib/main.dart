@@ -23,6 +23,9 @@ import 'package:move_young/utils/logger.dart';
 // Global navigator key for navigation from notifications
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
+// Global timer reference for cache cleanup to prevent memory leaks
+Timer? _cacheCleanupTimer;
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   NumberedLogger.install();
@@ -61,15 +64,8 @@ void main() async {
     );
   } catch (_) {}
 
-  // Haptics (load persisted preference)
-  try {
-    await HapticsService.initialize();
-  } catch (_) {}
-
-  // Accessibility (load persisted preference)
-  try {
-    await AccessibilityService.initialize();
-  } catch (_) {}
+  // Haptics and Accessibility will be initialized when first accessed
+  // to avoid SharedPreferences channel errors during app startup
 
   // Connectivity monitoring
   try {
@@ -90,7 +86,8 @@ void main() async {
   try {
     await CacheService.clearExpiredCache();
     // Schedule periodic cache cleanup every 6 hours
-    Timer.periodic(const Duration(hours: 6), (timer) async {
+    _cacheCleanupTimer =
+        Timer.periodic(const Duration(hours: 6), (timer) async {
       try {
         await CacheService.clearExpiredCache();
       } catch (_) {}
@@ -122,21 +119,38 @@ class MoveYoungApp extends StatefulWidget {
   State<MoveYoungApp> createState() => _MoveYoungAppState();
 }
 
-class _MoveYoungAppState extends State<MoveYoungApp> {
+class _MoveYoungAppState extends State<MoveYoungApp>
+    with WidgetsBindingObserver {
   bool _highContrast = false;
   StreamSubscription<bool>? _highContrastSubscription;
 
   @override
   void initState() {
     super.initState();
-    _loadHighContrastSetting();
-    _listenToHighContrastChanges();
+    WidgetsBinding.instance.addObserver(this);
+    // Defer SharedPreferences access until after the first frame
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadHighContrastSetting();
+      _listenToHighContrastChanges();
+    });
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _highContrastSubscription?.cancel();
+    // Cancel the global cache cleanup timer to prevent memory leaks
+    _cacheCleanupTimer?.cancel();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    if (state == AppLifecycleState.detached) {
+      // Cancel timer when app is being closed
+      _cacheCleanupTimer?.cancel();
+    }
   }
 
   Future<void> _loadHighContrastSetting() async {

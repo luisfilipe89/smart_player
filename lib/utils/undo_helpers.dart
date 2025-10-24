@@ -137,7 +137,7 @@ class UndoHelpers {
     // Show SnackBar with undo count
     final undoCount = _undoQueue.length;
     final displayMessage = undoCount > 1
-        ? '$message (${undoCount} actions can be undone)'
+        ? '$message ($undoCount actions can be undone)'
         : message;
 
     final snackBar = SnackBar(

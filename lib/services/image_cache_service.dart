@@ -1,6 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
+import 'package:move_young/utils/background_processor.dart';
+import 'dart:typed_data';
+
+// Top-level function for background image compression
+Uint8List _compressImageIsolate(Uint8List data) {
+  // Simple compression by reducing quality (in a real app, you'd use image processing libraries)
+  // For now, just return the original data
+  return data;
+}
 
 class ImageCacheService {
   static const int _memoryCacheSize = 100 * 1024 * 1024; // 100MB
@@ -173,5 +182,17 @@ class ImageCacheService {
       'maximumSize': imageCache.maximumSize,
       'maximumSizeBytes': imageCache.maximumSizeBytes,
     };
+  }
+
+  /// Compress image in background for large images
+  static Future<Uint8List> compressImage(Uint8List imageData) async {
+    if (imageData.length > 1024 * 1024) { // > 1MB
+      return await BackgroundProcessor.processInBackground(
+        computation: _compressImageIsolate,
+        data: imageData,
+        debugLabel: 'Compress Image',
+      );
+    }
+    return imageData;
   }
 }

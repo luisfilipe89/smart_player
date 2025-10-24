@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
 
 /// Generic pagination helper for managing paginated data loading
 class PaginationHelper<T> {

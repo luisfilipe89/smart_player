@@ -12,6 +12,16 @@ import 'package:move_young/services/connectivity_service.dart';
 import 'package:move_young/services/cache_service.dart';
 import 'package:move_young/utils/timeout_helpers.dart';
 import 'package:move_young/models/cached_data.dart';
+import 'package:move_young/utils/background_processor.dart';
+import 'package:flutter/foundation.dart' show debugPrint;
+import 'package:move_young/services/firebase_error_handler.dart';
+
+// Top-level function for background processing
+List<Game> _parseGamesIsolate(List<dynamic> gamesData) {
+  return gamesData
+      .map((data) => Game.fromJson(Map<String, dynamic>.from(data)))
+      .toList();
+}
 
 class CloudGamesService {
   static FirebaseDatabase get _database => FirebaseDatabase.instance;
@@ -248,7 +258,12 @@ class CloudGamesService {
               .child('createdGames')
               .child(gameId)
               .set(true);
-        } catch (_) {}
+        } catch (e) {
+          debugPrint('🔍 Error indexing created game: $e');
+          if (FirebaseErrorHandler.isPermissionDenied(e)) {
+            debugPrint('🔍 Permission denied for game indexing');
+          }
+        }
       }
 
       // Add game to user's created games
@@ -701,13 +716,14 @@ class CloudGamesService {
 
       // Notify all players who joined about the game edit
       try {
-        print('🔔 [DEBUG] Starting game edit notification process');
+        debugPrint('🔔 [DEBUG] Starting game edit notification process');
         final game = Game.fromJson(Map<String, dynamic>.from(data));
         final List<String> players = game.players;
         final String organizerName =
             _auth.currentUser?.displayName ?? 'Organizer';
 
-        print('🔔 [DEBUG] Game players: $players, organizer: $organizerName');
+        debugPrint(
+            '🔔 [DEBUG] Game players: $players, organizer: $organizerName');
 
         // Build change description
         List<String> changes = [];
@@ -720,11 +736,11 @@ class CloudGamesService {
         }
 
         final changeText = changes.join(' and ');
-        print('🔔 [DEBUG] Changes detected: $changeText');
+        debugPrint('🔔 [DEBUG] Changes detected: $changeText');
 
         for (final playerId in players) {
           if (playerId == uid) continue; // don't notify organizer
-          print('🔔 [DEBUG] Sending notification to player: $playerId');
+          debugPrint('🔔 [DEBUG] Sending notification to player: $playerId');
           try {
             await NotificationService.writeNotificationData(
               recipientUid: playerId,
@@ -794,7 +810,7 @@ class CloudGamesService {
 
       // Notify all players about cancellation
       try {
-        print('🔔 [DEBUG] Starting game cancel notification process');
+        debugPrint('🔔 [DEBUG] Starting game cancel notification process');
         if (snap.exists) {
           final Map<dynamic, dynamic> data =
               snap.value as Map<dynamic, dynamic>;
@@ -803,11 +819,12 @@ class CloudGamesService {
           final String organizerName =
               _auth.currentUser?.displayName ?? 'Organizer';
 
-          print('🔔 [DEBUG] Game players: $players, organizer: $organizerName');
+          debugPrint(
+              '🔔 [DEBUG] Game players: $players, organizer: $organizerName');
 
           for (final playerId in players) {
             if (playerId == _currentUserId) continue; // don't notify organizer
-            print(
+            debugPrint(
                 '🔔 [DEBUG] Sending cancel notification to player: $playerId');
             try {
               await NotificationService.writeNotificationData(
@@ -919,7 +936,7 @@ class CloudGamesService {
     await _usersRef.child(uid).child('createdGames').child(gameId).remove();
   }
 
-  // Get all public games
+  // Get all public games with single-pass optimization
   static Future<List<Game>> getPublicGames({
     String? sport,
     String? searchQuery,
@@ -945,37 +962,76 @@ class CloudGamesService {
         return [];
       }
 
-      final List<Game> games = [];
+      // Pre-compute filter values
+      final sportLower = sport?.toLowerCase();
+      final searchLower = searchQuery?.toLowerCase();
+      final hasSearch = searchLower != null && searchLower.isNotEmpty;
+      final now = DateTime.now();
+      final currentUserId = _auth.currentUser?.uid;
 
+      // Collect raw data first
+      final rawGamesData = <Map<String, dynamic>>[];
       for (final child in snapshot.children) {
         try {
           final gameData = child.value as Map<dynamic, dynamic>;
-          final game = Game.fromJson(Map<String, dynamic>.from(gameData));
-
-          // Only public, active, upcoming games are discoverable
-          if (!game.isPublic || !game.isActive || !game.isUpcoming) continue;
-          // Apply filters
-          if (sport != null && game.sport != sport) continue;
-          if (searchQuery != null &&
-              !game.location
-                  .toLowerCase()
-                  .contains(searchQuery.toLowerCase()) &&
-              !game.description
-                  .toLowerCase()
-                  .contains(searchQuery.toLowerCase())) {
-            continue;
-          }
-
-          games.add(game);
+          rawGamesData.add(Map<String, dynamic>.from(gameData));
         } catch (e) {
-          // Error parsing game
+          // Skip invalid game data
           continue;
         }
       }
 
-      // Sort by date/time ascending
-      games.sort((a, b) => a.dateTime.compareTo(b.dateTime));
-      final result = games.take(limit).toList();
+      // Parse games in background if list is large
+      List<Game> games;
+      if (rawGamesData.length > 50) {
+        games = await BackgroundProcessor.processInBackground(
+          computation: _parseGamesIsolate,
+          data: rawGamesData,
+          debugLabel: 'Parse Games',
+        );
+      } else {
+        // Parse directly for small lists
+        games = rawGamesData.map((data) => Game.fromJson(data)).toList();
+      }
+
+      // Single-pass filtering with early exits
+      final filteredGames = <Game>[];
+      for (final game in games) {
+        // Early exit conditions (most selective first)
+        if (!game.isPublic) continue;
+        if (!game.isActive) continue;
+        if (!game.isUpcoming) continue;
+        if (game.dateTime.isBefore(now)) continue;
+
+        // Player check with Set for O(1) lookup
+        if (currentUserId != null && game.players.contains(currentUserId)) {
+          continue;
+        }
+
+        // Sport filter
+        if (sportLower != null && game.sport.toLowerCase() != sportLower) {
+          continue;
+        }
+
+        // Search filter with pre-computed lowercase
+        if (hasSearch) {
+          final gameLocation = game.location.toLowerCase();
+          final gameDescription = game.description.toLowerCase();
+          if (!gameLocation.contains(searchLower) &&
+              !gameDescription.contains(searchLower)) {
+            continue;
+          }
+        }
+
+        filteredGames.add(game);
+
+        // Early exit if limit reached
+        if (filteredGames.length >= limit * 2) break; // Get extra for sorting
+      }
+
+      // Sort once with pre-computed keys
+      filteredGames.sort((a, b) => a.dateTime.compareTo(b.dateTime));
+      final result = filteredGames.take(limit).toList();
 
       // Cache the result if it's a basic query
       if (sport == null && searchQuery == null) {
@@ -983,7 +1039,6 @@ class CloudGamesService {
         await CacheService.cachePublicGames(gamesJson);
       }
 
-      // Retrieved games from cloud successfully
       return result;
     } catch (e) {
       // Error getting public games

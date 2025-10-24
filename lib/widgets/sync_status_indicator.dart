@@ -229,7 +229,7 @@ class SyncStatusChip extends StatelessWidget {
         return Container(
           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
           decoration: BoxDecoration(
-            color: AppColors.orange.withOpacity(0.2),
+            color: AppColors.orange.withValues(alpha: 0.2),
             borderRadius: BorderRadius.circular(12),
             border: Border.all(color: AppColors.orange, width: 1),
           ),
@@ -258,7 +258,7 @@ class SyncStatusChip extends StatelessWidget {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
             decoration: BoxDecoration(
-              color: AppColors.red.withOpacity(0.2),
+              color: AppColors.red.withValues(alpha: 0.2),
               borderRadius: BorderRadius.circular(12),
               border: Border.all(color: AppColors.red, width: 1),
             ),

@@ -995,7 +995,7 @@ class _GamesMyScreenState extends State<GamesMyScreen>
                                     String time =
                                         game.formattedTime.padLeft(5, '0');
                                     if (!time.endsWith(':00')) {
-                                      time = time.substring(0, 2) + ':00';
+                                      time = '${time.substring(0, 2)}:00';
                                     }
                                     final forecasts = _weatherByGameId[game.id];
                                     final String cond = forecasts?[time] ??
@@ -1117,7 +1117,7 @@ class _GamesMyScreenState extends State<GamesMyScreen>
                                           game.id);
                                     }
                                     await GamesService.cancelGame(game.id);
-                                    if (context.mounted) {
+                                    if (mounted) {
                                       ScaffoldMessenger.of(context)
                                           .showSnackBar(
                                         SnackBar(
@@ -1130,7 +1130,7 @@ class _GamesMyScreenState extends State<GamesMyScreen>
                                     }
                                     await _load();
                                   } catch (_) {
-                                    if (context.mounted) {
+                                    if (mounted) {
                                       ScaffoldMessenger.of(context)
                                           .showSnackBar(
                                         SnackBar(

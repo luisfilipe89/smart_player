@@ -17,6 +17,7 @@ class SyncService {
   static final List<SyncOperation> _syncQueue = [];
   static final StreamController<SyncStatus> _statusController =
       StreamController<SyncStatus>.broadcast();
+  static Timer? _retryTimer;
 
   /// Stream of sync status changes
   static Stream<SyncStatus> get statusStream => _statusController.stream;
@@ -30,8 +31,14 @@ class SyncService {
 
   /// Initialize sync service
   static Future<void> initialize() async {
-    await _loadSyncQueue();
-    _startRetryTimer();
+    try {
+      await _loadSyncQueue();
+      _startRetryTimer();
+    } catch (e) {
+      // If SharedPreferences fails during initialization, start with empty queue
+      _syncQueue.clear();
+      _startRetryTimer();
+    }
   }
 
   /// Add operation to sync queue
@@ -171,7 +178,8 @@ class SyncService {
 
   /// Start retry timer
   static void _startRetryTimer() {
-    Timer.periodic(const Duration(minutes: 5), (timer) {
+    _retryTimer?.cancel(); // Cancel existing timer before creating new one
+    _retryTimer = Timer.periodic(const Duration(minutes: 5), (timer) {
       if (_syncQueue.isNotEmpty) {
         retryFailedOperations();
       }
@@ -221,6 +229,7 @@ class SyncService {
 
   /// Dispose resources
   static void dispose() {
+    _retryTimer?.cancel();
     _statusController.close();
   }
 }

@@ -379,7 +379,7 @@ class NotificationService {
     required Map<String, dynamic> data,
   }) async {
     try {
-      print(
+      debugPrint(
           '🔔 [DEBUG] writeNotificationData called - recipient: $recipientUid, type: $type, data: $data');
       final notificationId = DateTime.now().millisecondsSinceEpoch.toString();
 
@@ -393,9 +393,10 @@ class NotificationService {
         'timestamp': ServerValue.timestamp,
         'read': false,
       });
-      print('🔔 [DEBUG] Notification request written successfully to RTDB');
+      debugPrint(
+          '🔔 [DEBUG] Notification request written successfully to RTDB');
     } catch (e) {
-      print('🔔 [DEBUG] Error writing notification request: $e');
+      debugPrint('🔔 [DEBUG] Error writing notification request: $e');
       debugPrint('Error writing notification request: $e');
     }
   }
@@ -409,5 +410,11 @@ class NotificationService {
   static Future<void> setCategoryEnabled(String category, bool enabled) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('notifications_$category', enabled);
+  }
+
+  /// Dispose resources and cleanup subscriptions
+  static Future<void> dispose() async {
+    await _authStateSubscription?.cancel();
+    _authStateSubscription = null;
   }
 }

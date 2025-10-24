@@ -85,8 +85,8 @@ class _RateLimitFeedbackState extends State<RateLimitFeedback> {
             margin: AppPaddings.bottomSmall,
             decoration: BoxDecoration(
               color: _remainingRequests <= 0
-                  ? AppColors.red.withOpacity(0.1)
-                  : AppColors.orange.withOpacity(0.1),
+                  ? AppColors.red.withValues(alpha: 0.1)
+                  : AppColors.orange.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(AppRadius.card),
               border: Border.all(
                 color:

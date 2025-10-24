@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
+import 'package:flutter/foundation.dart' show debugPrint;
 
 class CacheService {
   static Database? _database;
@@ -73,7 +74,7 @@ class CacheService {
       );
     } catch (e) {
       // Cache failures should not break the app
-      print('Failed to cache user profile: $e');
+      debugPrint('Failed to cache user profile: $e');
     }
   }
 
@@ -111,7 +112,7 @@ class CacheService {
         'email': profile['email'],
       };
     } catch (e) {
-      print('Failed to get cached user profile: $e');
+      debugPrint('Failed to get cached user profile: $e');
       return null;
     }
   }
@@ -143,7 +144,7 @@ class CacheService {
 
       await batch.commit();
     } catch (e) {
-      print('Failed to cache user profiles: $e');
+      debugPrint('Failed to cache user profiles: $e');
     }
   }
 
@@ -191,7 +192,7 @@ class CacheService {
 
       return profiles;
     } catch (e) {
-      print('Failed to get cached user profiles: $e');
+      debugPrint('Failed to get cached user profiles: $e');
       return {};
     }
   }
@@ -211,7 +212,7 @@ class CacheService {
         conflictAlgorithm: ConflictAlgorithm.replace,
       );
     } catch (e) {
-      print('Failed to cache game details: $e');
+      debugPrint('Failed to cache game details: $e');
     }
   }
 
@@ -246,7 +247,7 @@ class CacheService {
 
       return jsonDecode(row['details'] as String) as Map<String, dynamic>;
     } catch (e) {
-      print('Failed to get cached game details: $e');
+      debugPrint('Failed to get cached game details: $e');
       return null;
     }
   }
@@ -265,7 +266,7 @@ class CacheService {
         conflictAlgorithm: ConflictAlgorithm.replace,
       );
     } catch (e) {
-      print('Failed to cache public games: $e');
+      debugPrint('Failed to cache public games: $e');
     }
   }
 
@@ -300,7 +301,7 @@ class CacheService {
       final gamesJson = jsonDecode(row['details'] as String) as List;
       return gamesJson.cast<Map<String, dynamic>>();
     } catch (e) {
-      print('Failed to get cached public games: $e');
+      debugPrint('Failed to get cached public games: $e');
       return null;
     }
   }
@@ -335,7 +336,7 @@ class CacheService {
         whereArgs: [publicGamesExpiry, 'public_games_list'],
       );
     } catch (e) {
-      print('Failed to clear expired cache: $e');
+      debugPrint('Failed to clear expired cache: $e');
     }
   }
 
@@ -346,7 +347,7 @@ class CacheService {
       await db.delete(_userProfilesTable);
       await db.delete(_gameDetailsTable);
     } catch (e) {
-      print('Failed to clear all cache: $e');
+      debugPrint('Failed to clear all cache: $e');
     }
   }
 
@@ -369,7 +370,7 @@ class CacheService {
         'totalCacheEntries': userProfilesCount + gameDetailsCount,
       };
     } catch (e) {
-      print('Failed to get cache stats: $e');
+      debugPrint('Failed to get cache stats: $e');
       return {
         'userProfilesCount': 0,
         'gameDetailsCount': 0,
