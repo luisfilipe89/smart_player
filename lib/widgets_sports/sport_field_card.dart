@@ -1,6 +1,6 @@
 // lib/widgets/sport_field_card.dart
 import 'package:flutter/material.dart';
-import 'package:cached_network_image/cached_network_image.dart';
+import 'package:move_young/services/image_cache_service.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:move_young/theme/tokens.dart';
@@ -153,7 +153,6 @@ class _ImageWithShimmer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-
     if (imageUrl == null || imageUrl!.trim().isEmpty) {
       return SizedBox(
         height: height,
@@ -165,18 +164,17 @@ class _ImageWithShimmer extends StatelessWidget {
       );
     }
 
-    return SizedBox(
-      height: height,
+    return ImageCacheService.getOptimizedImage(
+      imageUrl: imageUrl!,
       width: double.infinity,
-      child: CachedNetworkImage(
-        imageUrl: imageUrl!,
-        fit: BoxFit.cover,
-        fadeInDuration: const Duration(milliseconds: 250),
-        placeholder: (context, url) => _shimmerBox(),
-        errorWidget: (context, url, error) => Container(
-          color: AppColors.lightgrey,
-          child: const Center(child: Icon(Icons.broken_image)),
-        ),
+      height: height,
+      fit: BoxFit.cover,
+      fadeInDuration: const Duration(milliseconds: 250),
+      placeholder: (BuildContext context, String url) => _shimmerBox(),
+      errorWidget: (BuildContext context, String url, dynamic error) =>
+          Container(
+        color: AppColors.lightgrey,
+        child: const Center(child: Icon(Icons.broken_image)),
       ),
     );
   }

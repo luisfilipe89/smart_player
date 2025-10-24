@@ -8,7 +8,11 @@ import 'package:move_young/services/games_service.dart';
 import 'package:move_young/services/cloud_games_service.dart';
 import 'package:move_young/services/friends_service.dart' as friends;
 import 'package:move_young/services/auth_service.dart';
+import 'package:move_young/services/error_handler_service.dart';
+import 'package:move_young/utils/undo_helpers.dart';
 import 'package:move_young/services/haptics_service.dart';
+import 'package:move_young/widgets/cached_data_indicator.dart';
+import 'package:move_young/utils/pagination_helper.dart';
 import 'dart:async';
 import 'package:move_young/screens/main_scaffold.dart';
 
@@ -35,6 +39,10 @@ class _GamesDiscoveryScreenState extends State<GamesDiscoveryScreen> {
   String? _highlightId;
   StreamSubscription<List<Game>>? _publicGamesSub;
 
+  // Pagination
+  late PaginationHelper<Game> _paginationHelper;
+  late PaginationScrollController _paginationScrollController;
+
   final List<String> _sports = [
     'all',
     'soccer',
@@ -50,6 +58,16 @@ class _GamesDiscoveryScreenState extends State<GamesDiscoveryScreen> {
     super.initState();
     _searchController = TextEditingController(text: _searchQuery);
     _highlightId = widget.highlightGameId;
+
+    // Initialize pagination
+    _paginationHelper = PaginationHelper<Game>(
+      pageSize: 30,
+      loadData: _loadGamesPage,
+    );
+    _paginationScrollController = PaginationScrollController(
+      paginationHelper: _paginationHelper,
+    );
+
     _loadGames();
     _loadInvitedGames();
     _watchPublicGames();
@@ -83,8 +101,35 @@ class _GamesDiscoveryScreenState extends State<GamesDiscoveryScreen> {
   void dispose() {
     _searchController.dispose();
     _listController.dispose();
+    _paginationScrollController.dispose();
     _publicGamesSub?.cancel();
     super.dispose();
+  }
+
+  Future<List<Game>> _loadGamesPage(int page, int pageSize) async {
+    try {
+      List<Game> games = await CloudGamesService.getPublicGames(
+        sport: _selectedSport == 'all' ? null : _selectedSport,
+        searchQuery: _searchQuery.isEmpty ? null : _searchQuery,
+        limit: pageSize,
+      );
+      final now = DateTime.now();
+      games =
+          games.where((g) => g.dateTime.isAfter(now) && g.isActive).toList();
+
+      // Exclude games already joined by current user
+      final String myUid = AuthService.currentUserId ?? '';
+      if (myUid.isNotEmpty) {
+        games = games.where((g) => !g.players.contains(myUid)).toList();
+      }
+
+      return games;
+    } catch (e) {
+      if (mounted) {
+        ErrorHandlerService.showError(context, e);
+      }
+      return [];
+    }
   }
 
   Future<void> _loadGames() async {
@@ -93,31 +138,8 @@ class _GamesDiscoveryScreenState extends State<GamesDiscoveryScreen> {
     });
 
     try {
-      List<Game> games = await GamesService.getAllGames();
-      final now = DateTime.now();
-      games =
-          games.where((g) => g.dateTime.isAfter(now) && g.isActive).toList();
-      if (_selectedSport != 'all') {
-        games = games.where((g) => g.sport == _selectedSport).toList();
-      }
-
-      // Filter by search query if provided (location and organizer only)
-      if (_searchQuery.isNotEmpty) {
-        games = games.where((game) {
-          final q = _searchQuery.toLowerCase();
-          return game.location.toLowerCase().contains(q) ||
-              game.organizerName.toLowerCase().contains(q);
-        }).toList();
-      }
-
-      // Exclude games already joined by current user
-      final String myUid = AuthService.currentUserId ?? '';
-      if (myUid.isNotEmpty) {
-        games = games.where((g) => !g.players.contains(myUid)).toList();
-      }
-
+      await _paginationHelper.initialize();
       setState(() {
-        _games = games;
         _isLoading = false;
       });
 
@@ -879,15 +901,24 @@ class _GamesDiscoveryScreenState extends State<GamesDiscoveryScreen> {
                             final ok = await CloudGamesService.leaveGame(
                                 game.id, myUid);
                             if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text(ok
-                                      ? 'You left the game'
-                                      : 'Failed to leave'),
-                                  backgroundColor:
-                                      ok ? AppColors.grey : AppColors.red,
-                                ),
-                              );
+                              if (ok) {
+                                UndoHelpers.showSuccessWithUndo(
+                                  context,
+                                  'left_game',
+                                  onUndo: () async {
+                                    final displayName =
+                                        AuthService.currentUser?.displayName ??
+                                            'Player';
+                                    await CloudGamesService.joinGame(
+                                        game.id, myUid, displayName);
+                                    await _loadGames();
+                                    await _loadInvitedGames();
+                                  },
+                                );
+                              } else {
+                                ErrorHandlerService.showError(
+                                    context, 'Failed to leave');
+                              }
                             }
                             await _loadGames();
                             await _loadInvitedGames();
@@ -991,7 +1022,7 @@ class _GamesDiscoveryScreenState extends State<GamesDiscoveryScreen> {
                                 ),
                                 onChanged: (value) {
                                   setState(() => _searchQuery = value);
-                                  _loadGames();
+                                  _paginationHelper.refresh();
                                 },
                               ),
                             ),
@@ -1019,7 +1050,7 @@ class _GamesDiscoveryScreenState extends State<GamesDiscoveryScreen> {
                                   selected: isSelected,
                                   onSelected: (selected) {
                                     setState(() => _selectedSport = sport);
-                                    _loadGames();
+                                    _paginationHelper.refresh();
                                   },
                                   selectedColor:
                                       AppColors.blue.withValues(alpha: 0.2),
@@ -1071,28 +1102,71 @@ class _GamesDiscoveryScreenState extends State<GamesDiscoveryScreen> {
                                     await _loadGames();
                                     await _loadInvitedGames();
                                   },
-                                  child: Builder(builder: (context) {
-                                    // Merge lists with invited first
-                                    final List<Game> merged = [
-                                      ..._invitedGames,
-                                      ..._games.where((g) => !_invitedGames
-                                          .any((i) => i.id == g.id)),
-                                    ];
-                                    return ListView.builder(
-                                      controller: _listController,
-                                      padding: EdgeInsets.zero,
-                                      itemCount: merged.length,
-                                      itemBuilder: (context, index) {
-                                        final game = merged[index];
-                                        final key = _itemKeys.putIfAbsent(
-                                            game.id, () => GlobalKey());
-                                        return KeyedSubtree(
-                                          key: key,
-                                          child: _buildGameCard(game),
+                                  child: Stack(
+                                    children: [
+                                      Builder(builder: (context) {
+                                        // Merge lists with invited first (removed unused variable)
+
+                                        return ValueListenableBuilder<
+                                            PaginationState<Game>>(
+                                          valueListenable:
+                                              _paginationHelper.state,
+                                          builder: (context, state, child) {
+                                            final paginatedGames = state.items;
+
+                                            // Merge with invited games
+                                            final allGames = [
+                                              ..._invitedGames,
+                                              ...paginatedGames.where((g) =>
+                                                  !_invitedGames.any(
+                                                      (i) => i.id == g.id)),
+                                            ];
+
+                                            return PaginationLoadingWidget(
+                                              state: PaginationState(
+                                                items: allGames,
+                                                isLoading: state.isLoading,
+                                                hasMoreData: state.hasMoreData,
+                                                error: state.error,
+                                                currentPage: state.currentPage,
+                                                totalItems: allGames.length,
+                                              ),
+                                              itemBuilder: (games) =>
+                                                  ListView.builder(
+                                                controller:
+                                                    _paginationScrollController,
+                                                padding: EdgeInsets.zero,
+                                                itemCount: games.length,
+                                                itemBuilder: (context, index) {
+                                                  final game = games[index];
+                                                  final key =
+                                                      _itemKeys.putIfAbsent(
+                                                          game.id,
+                                                          () => GlobalKey());
+                                                  return KeyedSubtree(
+                                                    key: key,
+                                                    child: _buildGameCard(game),
+                                                  );
+                                                },
+                                              ),
+                                            );
+                                          },
                                         );
-                                      },
-                                    );
-                                  }),
+                                      }),
+                                      Positioned(
+                                        top: 0,
+                                        left: 0,
+                                        right: 0,
+                                        child: ConnectivityAwareCachedIndicator(
+                                          onRefresh: () {
+                                            _loadGames();
+                                            _loadInvitedGames();
+                                          },
+                                          child: const SizedBox.shrink(),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
                     ),
                   ),

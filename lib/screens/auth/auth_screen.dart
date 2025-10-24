@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:move_young/services/auth_service.dart';
+import 'package:move_young/services/error_handler_service.dart';
+import 'package:move_young/services/connectivity_service.dart';
+import 'package:move_young/utils/timeout_helpers.dart';
 import 'package:move_young/theme/tokens.dart';
 
 class AuthScreen extends StatefulWidget {
@@ -76,6 +79,12 @@ class _AuthScreenState extends State<AuthScreen> {
   Future<void> _handleAuth() async {
     if (!_formKey.currentState!.validate()) return;
 
+    // Check connectivity before attempting auth
+    if (!ConnectivityService.hasConnection) {
+      ErrorHandlerService.showError(context, 'error_network');
+      return;
+    }
+
     setState(() => _isLoading = true);
 
     try {
@@ -84,9 +93,13 @@ class _AuthScreenState extends State<AuthScreen> {
         await AuthService.signOut();
       }
       if (_isLogin) {
-        await AuthService.signInWithEmail(
-          _emailController.text.trim(),
-          _passwordController.text,
+        await TimeoutHelpers.withTimeout(
+          AuthService.signInWithEmail(
+            _emailController.text.trim(),
+            _passwordController.text,
+          ),
+          timeout: const Duration(seconds: 30),
+          timeoutMessage: 'auth_signin_timeout',
         );
         // If user has no nickname yet, prompt for nickname once
         final user = AuthService.currentUser;
@@ -128,22 +141,21 @@ class _AuthScreenState extends State<AuthScreen> {
         }
       } else {
         // Create account and set nickname in one step
-        await AuthService.createUserWithEmailAndPassword(
-          _emailController.text.trim(),
-          _passwordController.text,
-          _nameController.text.trim(),
+        await TimeoutHelpers.withTimeout(
+          AuthService.createUserWithEmailAndPassword(
+            _emailController.text.trim(),
+            _passwordController.text,
+            _nameController.text.trim(),
+          ),
+          timeout: const Duration(seconds: 30),
+          timeoutMessage: 'auth_signup_timeout',
         );
         // Ensure latest profile is loaded
         await Future.delayed(const Duration(milliseconds: 200));
       }
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('already_signed_in'.tr()),
-            backgroundColor: AppColors.primary,
-          ),
-        );
+        ErrorHandlerService.showSuccess(context, 'already_signed_in');
         // Use a timer instead of await to avoid context usage across async gaps
         Future.delayed(const Duration(milliseconds: 500), () {
           if (mounted) Navigator.of(context).pop(true);
@@ -151,28 +163,14 @@ class _AuthScreenState extends State<AuthScreen> {
       }
     } catch (e) {
       if (mounted) {
-        String raw = e.toString();
-        raw = raw.replaceFirst(RegExp(r'^Exception:\s*'), '');
-        final localized = tr(raw);
-        final message = localized == raw
-            ? (_isLogin
-                ? tr('error_generic_signin')
-                : tr('error_generic_signup'))
-            : localized;
-
         // If trying to sign up but email is already in use, switch to Sign In view
-        if (!_isLogin && raw == 'error_email_in_use') {
+        if (!_isLogin && e.toString().contains('error_email_in_use')) {
           setState(() {
             _isLogin = true;
           });
         }
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(message),
-            backgroundColor: Colors.red,
-          ),
-        );
+        ErrorHandlerService.showError(context, e);
       }
     } finally {
       if (mounted) {

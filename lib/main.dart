@@ -11,6 +11,11 @@ import 'package:move_young/theme/_theme.dart';
 import 'package:move_young/services/notification_service.dart';
 import 'package:move_young/services/haptics_service.dart';
 import 'package:move_young/services/accessibility_service.dart';
+import 'package:move_young/services/connectivity_service.dart';
+import 'package:move_young/services/sync_service.dart';
+import 'package:move_young/services/image_cache_service.dart';
+import 'package:move_young/services/cache_service.dart';
+import 'package:move_young/widgets/sync_status_indicator.dart';
 import 'package:move_young/screens/main_scaffold.dart';
 import 'firebase_options.dart';
 import 'package:move_young/utils/logger.dart';
@@ -64,6 +69,32 @@ void main() async {
   // Accessibility (load persisted preference)
   try {
     await AccessibilityService.initialize();
+  } catch (_) {}
+
+  // Connectivity monitoring
+  try {
+    await ConnectivityService.initialize();
+  } catch (_) {}
+
+  // Sync service
+  try {
+    await SyncService.initialize();
+  } catch (_) {}
+
+  // Image cache service
+  try {
+    await ImageCacheService.initialize();
+  } catch (_) {}
+
+  // Cache service cleanup
+  try {
+    await CacheService.clearExpiredCache();
+    // Schedule periodic cache cleanup every 6 hours
+    Timer.periodic(const Duration(hours: 6), (timer) async {
+      try {
+        await CacheService.clearExpiredCache();
+      } catch (_) {}
+    });
   } catch (_) {}
 
   // Status bar styling only; avoid forcing Android nav bar appearance
@@ -153,7 +184,9 @@ class _MoveYoungAppState extends State<MoveYoungApp> {
       supportedLocales: context.supportedLocales,
       locale: context.locale,
       scrollBehavior: AppScrollBehavior(),
-      home: const WelcomeScreen(),
+      home: GlobalSyncStatusBanner(
+        child: const WelcomeScreen(),
+      ),
     );
   }
 }

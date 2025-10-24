@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:move_young/services/image_cache_service.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:move_young/models/event_model.dart';
@@ -56,11 +57,12 @@ class _AgendaScreenState extends State<AgendaScreen> {
     });
 
     // Preload a few images for smoother first paint
-    for (var event in allEvents.take(5)) {
-      if (event.imageUrl?.isNotEmpty ?? false) {
-        precacheImage(CachedNetworkImageProvider(event.imageUrl!), context);
-      }
-    }
+    final imageUrls = allEvents
+        .take(5)
+        .where((event) => event.imageUrl?.isNotEmpty ?? false)
+        .map((event) => event.imageUrl!)
+        .toList();
+    await ImageCacheService.preloadImages(context, imageUrls);
   }
 
   Future<void> _loadFavorites() async {
@@ -281,20 +283,48 @@ class _AgendaScreenState extends State<AgendaScreen> {
 
   Widget _buildImageOrPlaceholder(String? url) {
     if (url?.isNotEmpty ?? false) {
-      return CachedNetworkImage(
-        imageUrl: url!,
-        height: AppHeights.image,
-        width: double.infinity,
-        fit: BoxFit.cover,
-        fadeInDuration: const Duration(milliseconds: 300),
-        fadeInCurve: Curves.easeInOut,
-        placeholder: (_, __) => _buildShimmerPlaceholder(),
-        errorWidget: (_, __, ___) => Container(
+      // Check if it's a local asset path
+      if (url!.startsWith('assets/')) {
+        return Container(
+          width: double.infinity,
           height: AppHeights.image,
-          color: AppColors.lightgrey,
-          child: const Icon(Icons.broken_image),
-        ),
-      );
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(AppRadius.image),
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(AppRadius.image),
+            child: Image.asset(
+              url,
+              width: double.infinity,
+              height: AppHeights.image,
+              fit: BoxFit.cover,
+              errorBuilder: (context, error, stackTrace) => Container(
+                height: AppHeights.image,
+                color: AppColors.lightgrey,
+                child: const Icon(Icons.broken_image),
+              ),
+            ),
+          ),
+        );
+      } else {
+        // It's a network URL, use ImageCacheService
+        return ImageCacheService.getOptimizedImage(
+          imageUrl: url,
+          width: double.infinity,
+          height: AppHeights.image,
+          fit: BoxFit.cover,
+          fadeInDuration: const Duration(milliseconds: 300),
+          fadeInCurve: Curves.easeInOut,
+          placeholder: (BuildContext context, String url) =>
+              _buildShimmerPlaceholder(),
+          errorWidget: (BuildContext context, String url, dynamic error) =>
+              Container(
+            height: AppHeights.image,
+            color: AppColors.lightgrey,
+            child: const Icon(Icons.broken_image),
+          ),
+        );
+      }
     }
     return Container(
       height: AppHeights.image,

@@ -11,10 +11,18 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:move_young/services/notification_service.dart';
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:move_young/db/db_paths.dart';
+import 'package:move_young/services/connectivity_service.dart';
+import 'package:move_young/services/cache_service.dart';
+import 'package:move_young/utils/timeout_helpers.dart';
+import 'package:move_young/models/cached_data.dart';
 
 class FriendsService {
   static FirebaseAuth get _auth => FirebaseAuth.instance;
   static FirebaseDatabase get _db => FirebaseDatabase.instance;
+
+  // Cache for friends data
+  static final Map<String, CachedData<List<String>>> _friendsCache = {};
+  static const Duration _cacheExpiry = Duration(minutes: 5);
 
   static DatabaseReference _userRef(String uid) => _db.ref(DbPaths.user(uid));
 
@@ -112,6 +120,14 @@ class FriendsService {
 
   // Actions
   static Future<bool> sendFriendRequestToUid(String toUid) async {
+    return await TimeoutHelpers.withTimeout(
+      _sendFriendRequestToUidInternal(toUid),
+      timeout: const Duration(seconds: 30),
+      timeoutMessage: 'send_friend_request_timeout',
+    );
+  }
+
+  static Future<bool> _sendFriendRequestToUidInternal(String toUid) async {
     final user = _auth.currentUser;
     if (user == null) return false;
     final String fromUid = user.uid;
@@ -254,7 +270,68 @@ class FriendsService {
     }
   }
 
+  /// Gets the remaining cooldown time for friend requests
+  static Future<Duration> getRemainingCooldown(String uid) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final key = 'friends_req_times_$uid';
+      final now = DateTime.now().millisecondsSinceEpoch;
+      final List<String> raw = prefs.getStringList(key) ?? <String>[];
+      final List<int> times =
+          raw.map((e) => int.tryParse(e) ?? 0).where((t) => t > 0).toList();
+
+      // purge old
+      final cutoff = now - _rateLimitWindowMs;
+      final recent = times.where((t) => t >= cutoff).toList();
+
+      if (recent.isEmpty) return Duration.zero;
+
+      // Find the oldest request in the current window
+      final oldestRequest = recent.reduce((a, b) => a < b ? a : b);
+      final resetTime = oldestRequest + _rateLimitWindowMs;
+      final remainingMs = resetTime - now;
+
+      return Duration(milliseconds: remainingMs > 0 ? remainingMs : 0);
+    } catch (_) {
+      return Duration.zero;
+    }
+  }
+
+  /// Gets the remaining number of friend requests that can be sent
+  static Future<int> getRemainingRequests(String uid) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final key = 'friends_req_times_$uid';
+      final now = DateTime.now().millisecondsSinceEpoch;
+      final List<String> raw = prefs.getStringList(key) ?? <String>[];
+      final List<int> times =
+          raw.map((e) => int.tryParse(e) ?? 0).where((t) => t > 0).toList();
+
+      // purge old
+      final cutoff = now - _rateLimitWindowMs;
+      final recent = times.where((t) => t >= cutoff).toList();
+
+      return _rateLimitMaxRequests - recent.length;
+    } catch (_) {
+      return _rateLimitMaxRequests;
+    }
+  }
+
+  /// Checks if the user can send friend requests right now
+  static Future<bool> canSendFriendRequest(String uid) async {
+    final remaining = await getRemainingRequests(uid);
+    return remaining > 0;
+  }
+
   static Future<bool> acceptFriendRequest(String fromUid) async {
+    return await TimeoutHelpers.withTimeout(
+      _acceptFriendRequestInternal(fromUid),
+      timeout: const Duration(seconds: 30),
+      timeoutMessage: 'accept_friend_request_timeout',
+    );
+  }
+
+  static Future<bool> _acceptFriendRequestInternal(String fromUid) async {
     final user = _auth.currentUser;
     if (user == null) return false;
     final String myUid = user.uid;
@@ -693,10 +770,43 @@ class FriendsService {
 
       final Map<dynamic, dynamic> friends =
           friendsSnapshot.value as Map<dynamic, dynamic>;
-      return friends.keys.cast<String>().toList();
+      final friendsList = friends.keys.cast<String>().toList();
+
+      // Cache the results
+      _friendsCache[uid] = CachedData(
+        friendsList,
+        DateTime.now(),
+        expiry: _cacheExpiry,
+      );
+
+      return friendsList;
     } catch (e) {
-      return [];
+      // Return cached data if available
+      return _getCachedFriends(uid);
     }
+  }
+
+  /// Get user's friends with cache-first strategy
+  static Future<List<String>> getUserFriends(String uid) async {
+    // Return cache if offline
+    if (!ConnectivityService.hasConnection) {
+      return _getCachedFriends(uid);
+    }
+
+    return await TimeoutHelpers.withTimeout(
+      _getUserFriends(uid),
+      timeout: const Duration(seconds: 30),
+      timeoutMessage: 'load_friends_timeout',
+    );
+  }
+
+  /// Get cached friends for a user
+  static List<String> _getCachedFriends(String uid) {
+    final cached = _friendsCache[uid];
+    if (cached != null && cached.isFresh) {
+      return cached.data;
+    }
+    return [];
   }
 
   // Helper method to get user's games
@@ -883,6 +993,12 @@ class FriendsService {
   }
 
   static Future<Map<String, String?>> fetchMinimalProfile(String uid) async {
+    // Check cache first
+    final cachedProfile = await CacheService.getCachedUserProfile(uid);
+    if (cachedProfile != null) {
+      return cachedProfile.cast<String, String?>();
+    }
+
     // Enforce profile visibility
     final String viewer = _auth.currentUser?.uid ?? '';
     final String visibility = await _getVisibility(uid);
@@ -900,10 +1016,15 @@ class FriendsService {
     final Map data = snap.value as Map;
     final String name = (data['displayName']?.toString() ?? '').trim();
     final String url = (data['photoURL']?.toString() ?? '').trim();
-    return {
+    final profile = {
       'displayName': name.isEmpty ? 'User' : name,
       'photoURL': url.isEmpty ? null : url,
     };
+
+    // Cache the profile
+    await CacheService.cacheUserProfile(uid, profile);
+
+    return profile;
   }
 
   // Batch fetch minimal profiles for a list of uids
@@ -912,15 +1033,27 @@ class FriendsService {
     final Map<String, Map<String, String?>> result = {};
     if (uids.isEmpty) return result;
 
-    // Fetch all profiles concurrently
-    final List<Future<void>> tasks = [];
-    for (final uid in uids.toSet()) {
-      tasks.add(() async {
-        final Map<String, String?> data = await fetchMinimalProfile(uid);
-        result[uid] = data;
-      }());
+    // Get cached profiles first
+    final cachedProfiles = await CacheService.getCachedUserProfiles(uids);
+    for (final entry in cachedProfiles.entries) {
+      result[entry.key] = entry.value.cast<String, String?>();
     }
-    await Future.wait(tasks);
+
+    // Find uids that weren't in cache
+    final uncachedUids = uids.where((uid) => !result.containsKey(uid)).toList();
+
+    if (uncachedUids.isNotEmpty) {
+      // Fetch uncached profiles concurrently
+      final List<Future<void>> tasks = [];
+      for (final uid in uncachedUids) {
+        tasks.add(() async {
+          final Map<String, String?> data = await fetchMinimalProfile(uid);
+          result[uid] = data;
+        }());
+      }
+      await Future.wait(tasks);
+    }
+
     return result;
   }
 

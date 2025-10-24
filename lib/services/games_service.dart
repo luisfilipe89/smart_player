@@ -31,7 +31,7 @@ class GamesService {
       // Try to create the database
       final db = await openDatabase(
         path,
-        version: 4,
+        version: 5,
         onCreate: _onCreate,
         onUpgrade: _onUpgrade,
       );
@@ -47,7 +47,7 @@ class GamesService {
         final altPath = 'games.db';
         final altDb = await openDatabase(
           altPath,
-          version: 4,
+          version: 5,
           onCreate: _onCreate,
           onUpgrade: _onUpgrade,
         );
@@ -109,6 +109,25 @@ class GamesService {
     if (oldVersion < 4) {
       // Add fieldId column for canonical field matching
       await db.execute('ALTER TABLE $_tableName ADD COLUMN fieldId TEXT');
+    }
+    if (oldVersion < 5) {
+      // Add cache tables for performance optimization
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS cached_user_profiles(
+          uid TEXT PRIMARY KEY,
+          displayName TEXT,
+          photoURL TEXT,
+          email TEXT,
+          lastUpdated INTEGER NOT NULL
+        )
+      ''');
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS cached_game_details(
+          gameId TEXT PRIMARY KEY,
+          details TEXT NOT NULL,
+          lastUpdated INTEGER NOT NULL
+        )
+      ''');
     }
   }
 

@@ -56,6 +56,12 @@
                         ".write": "auth != null && (auth.uid == $uid || auth.uid == $friendUid)"
                     }
                 },
+                "gameInvites": {
+                    "$gameId": {
+                        ".read": "auth != null && (auth.uid == $uid || data.child('organizerId').val() == auth.uid)",
+                        ".write": "auth != null && (auth.uid == $uid || data.child('organizerId').val() == auth.uid)"
+                    }
+                },
                 "settings": {
                     "profile": {
                         ".read": "auth != null"

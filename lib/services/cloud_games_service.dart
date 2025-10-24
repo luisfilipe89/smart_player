@@ -8,10 +8,18 @@ import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart' as path;
 import 'dart:convert';
 import 'package:intl/intl.dart';
+import 'package:move_young/services/connectivity_service.dart';
+import 'package:move_young/services/cache_service.dart';
+import 'package:move_young/utils/timeout_helpers.dart';
+import 'package:move_young/models/cached_data.dart';
 
 class CloudGamesService {
   static FirebaseDatabase get _database => FirebaseDatabase.instance;
   static FirebaseAuth get _auth => FirebaseAuth.instance;
+
+  // Cache for games data
+  static final Map<String, CachedData<List<Game>>> _gameCache = {};
+  static const Duration _cacheExpiry = Duration(minutes: 5);
 
   // Database references
   static DatabaseReference get _gamesRef => _database.ref(DbPaths.games);
@@ -151,6 +159,13 @@ class CloudGamesService {
 
   // Create a new game in the cloud
   static Future<String> createGame(Game game) async {
+    return await TimeoutHelpers.withLongTimeout(
+      _createGameInternal(game),
+      timeoutMessage: 'create_game_timeout',
+    );
+  }
+
+  static Future<String> _createGameInternal(Game game) async {
     try {
       // Enforce at most 5 active upcoming organized games per user in cloud
       final organizerUid = _currentUserId ?? game.organizerId;
@@ -911,6 +926,14 @@ class CloudGamesService {
     int limit = 50,
   }) async {
     try {
+      // Check cache first (only for basic queries without filters)
+      if (sport == null && searchQuery == null) {
+        final cachedGames = await CacheService.getCachedPublicGames();
+        if (cachedGames != null) {
+          return cachedGames.map((data) => Game.fromJson(data)).toList();
+        }
+      }
+
       // Fetch the most recently created games to ensure new ones appear,
       // then filter client-side by upcoming/public/active
       final int fetch = (limit * 4).clamp(50, 400);
@@ -952,8 +975,16 @@ class CloudGamesService {
 
       // Sort by date/time ascending
       games.sort((a, b) => a.dateTime.compareTo(b.dateTime));
+      final result = games.take(limit).toList();
+
+      // Cache the result if it's a basic query
+      if (sport == null && searchQuery == null) {
+        final gamesJson = result.map((game) => game.toCloudJson()).toList();
+        await CacheService.cachePublicGames(gamesJson);
+      }
+
       // Retrieved games from cloud successfully
-      return games.take(limit).toList();
+      return result;
     } catch (e) {
       // Error getting public games
       return [];
@@ -964,6 +995,19 @@ class CloudGamesService {
   static Future<List<Game>> getUserGames() async {
     if (_currentUserId == null) return [];
 
+    // Return cache if offline
+    if (!ConnectivityService.hasConnection) {
+      return _getCachedGames(_currentUserId!);
+    }
+
+    return await TimeoutHelpers.withTimeout(
+      _getUserGamesInternal(),
+      timeout: const Duration(seconds: 30),
+      timeoutMessage: 'load_games_timeout',
+    );
+  }
+
+  static Future<List<Game>> _getUserGamesInternal() async {
     try {
       final snapshot =
           await _usersRef.child(_currentUserId!).child('createdGames').get();
@@ -988,16 +1032,51 @@ class CloudGamesService {
         }
       }
 
+      // Cache the results
+      _gameCache[_currentUserId!] = CachedData(
+        games,
+        DateTime.now(),
+        expiry: _cacheExpiry,
+      );
+
       // Retrieved user games from cloud successfully
       return games;
     } catch (e) {
-      // Error getting user games
-      return [];
+      // Error getting user games - return cached data if available
+      return _getCachedGames(_currentUserId!);
     }
+  }
+
+  /// Get cached games for a user
+  static List<Game> _getCachedGames(String userId) {
+    final cached = _gameCache[userId];
+    if (cached != null && cached.isFresh) {
+      return cached.data;
+    }
+    return [];
+  }
+
+  /// Clear cache for a specific user
+  static void clearUserCache(String userId) {
+    _gameCache.remove(userId);
+  }
+
+  /// Clear all cache
+  static void clearAllCache() {
+    _gameCache.clear();
   }
 
   // Join a game
   static Future<bool> joinGame(
+      String gameId, String playerId, String playerName) async {
+    return await TimeoutHelpers.withTimeout(
+      _joinGameInternal(gameId, playerId, playerName),
+      timeout: const Duration(seconds: 30),
+      timeoutMessage: 'join_game_timeout',
+    );
+  }
+
+  static Future<bool> _joinGameInternal(
       String gameId, String playerId, String playerName) async {
     try {
       final gameRef = _gamesRef.child(gameId);
@@ -1070,6 +1149,14 @@ class CloudGamesService {
 
   // Leave a game
   static Future<bool> leaveGame(String gameId, String playerId) async {
+    return await TimeoutHelpers.withTimeout(
+      _leaveGameInternal(gameId, playerId),
+      timeout: const Duration(seconds: 30),
+      timeoutMessage: 'leave_game_timeout',
+    );
+  }
+
+  static Future<bool> _leaveGameInternal(String gameId, String playerId) async {
     try {
       final gameRef = _gamesRef.child(gameId);
       final gameSnapshot = await gameRef.get();

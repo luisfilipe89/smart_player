@@ -15,6 +15,8 @@ import 'package:move_young/utils/country_data.dart';
 import 'package:move_young/theme/app_back_button.dart';
 import 'package:move_young/theme/tokens.dart';
 import 'package:move_young/db/db_paths.dart';
+import 'package:move_young/widgets/upload_progress_indicator.dart';
+import 'package:move_young/utils/retry_helpers.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -29,6 +31,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
   DateTime? _dateOfBirth;
   bool _saving = false;
   bool _uploading = false;
+  double _uploadProgress = 0.0;
+  bool _uploadError = false;
+  bool _uploadSuccess = false;
+  File? _pendingUploadFile;
   File? _localImage;
   bool _loadingDetails = true;
   bool _changingEmail = false;
@@ -223,43 +229,90 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
       if (cropped == null) return;
 
+      final file = File(cropped.path);
       setState(() {
-        _localImage = File(cropped.path);
+        _localImage = file;
+        _pendingUploadFile = file;
         _uploading = true;
+        _uploadProgress = 0.0;
+        _uploadError = false;
+        _uploadSuccess = false;
       });
 
+      await _performUpload();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _uploading = false;
+        _uploadError = true;
+      });
+    }
+  }
+
+  Future<void> _performUpload() async {
+    if (_pendingUploadFile == null) return;
+
+    try {
       final uid = AuthService.currentUserId;
       if (uid == null) throw Exception('Not signed in');
 
-      final storageRef =
-          FirebaseStorage.instance.ref().child('users/$uid/profile.jpg');
-      final file = File(cropped.path);
-      final task = await storageRef.putFile(
-          file, SettableMetadata(contentType: 'image/jpeg'));
-      String downloadUrl;
-      try {
-        downloadUrl = await task.ref.getDownloadURL();
-      } catch (_) {
-        await Future.delayed(const Duration(milliseconds: 300));
-        downloadUrl = await task.ref.getDownloadURL();
-      }
+      await RetryHelpers.retryWithConnectivity(
+        () async {
+          final storageRef =
+              FirebaseStorage.instance.ref().child('users/$uid/profile.jpg');
 
-      await AuthService.updateProfile(photoURL: downloadUrl);
+          final uploadTask = storageRef.putFile(
+            _pendingUploadFile!,
+            SettableMetadata(contentType: 'image/jpeg'),
+          );
 
-      if (!mounted) return;
-      setState(() => _uploading = false);
-      messenger.showSnackBar(
-        const SnackBar(content: Text('Photo updated')),
+          // Listen to upload progress
+          uploadTask.snapshotEvents.listen((TaskSnapshot snapshot) {
+            if (mounted) {
+              setState(() {
+                _uploadProgress =
+                    snapshot.bytesTransferred / snapshot.totalBytes;
+              });
+            }
+          });
+
+          final TaskSnapshot completedTask = await uploadTask;
+
+          // Get download URL
+          String downloadUrl;
+          try {
+            downloadUrl = await completedTask.ref.getDownloadURL();
+          } catch (_) {
+            await Future.delayed(const Duration(milliseconds: 300));
+            downloadUrl = await completedTask.ref.getDownloadURL();
+          }
+
+          // Update profile
+          await AuthService.updateProfile(photoURL: downloadUrl);
+
+          if (!mounted) return;
+          setState(() {
+            _uploading = false;
+            _uploadSuccess = true;
+            _uploadError = false;
+            _pendingUploadFile = null;
+          });
+
+          // Auto-dismiss success after 2 seconds
+          Future.delayed(const Duration(seconds: 2), () {
+            if (mounted) {
+              setState(() => _uploadSuccess = false);
+            }
+          });
+        },
+        maxRetries: 3,
       );
     } catch (e) {
       if (!mounted) return;
-      setState(() => _uploading = false);
-      final messenger = ScaffoldMessenger.of(context);
-      messenger.showSnackBar(
-        SnackBar(
-            content: Text('Error: ${e.toString()}'),
-            backgroundColor: Colors.red),
-      );
+      setState(() {
+        _uploading = false;
+        _uploadError = true;
+      });
     }
   }
 
@@ -269,251 +322,291 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final photoUrl = user?.photoURL;
     final email = user?.email ?? '';
 
-    return Scaffold(
-      appBar: AppBar(
-        leadingWidth: 48,
-        leading: const AppBackButton(),
-        title: Text('profile'.tr()),
-        backgroundColor: AppColors.white,
-        elevation: 0,
-        actions: [
-          TextButton(
-            onPressed: _saving ? null : _saveProfile,
-            style: TextButton.styleFrom(
-              foregroundColor: AppColors.primary,
-              disabledForegroundColor: AppColors.grey,
-            ),
-            child: _saving
-                ? const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2))
-                : const Text('Save'),
-          )
-        ],
-      ),
-      body: SafeArea(
-        child: _loadingDetails
-            ? const Center(child: CircularProgressIndicator())
-            : ListView(
-                padding: AppPaddings.symmHorizontalReg.copyWith(
-                  top: AppSpacing.lg,
-                  bottom: AppSpacing.lg,
+    return Stack(
+      children: [
+        Scaffold(
+          appBar: AppBar(
+            leadingWidth: 48,
+            leading: const AppBackButton(),
+            title: Text('profile'.tr()),
+            backgroundColor: AppColors.white,
+            elevation: 0,
+            actions: [
+              TextButton(
+                onPressed: _saving ? null : _saveProfile,
+                style: TextButton.styleFrom(
+                  foregroundColor: AppColors.primary,
+                  disabledForegroundColor: AppColors.grey,
                 ),
-                children: [
-                  // Profile Photo Section
-                  _buildSectionCard(
-                    child: Column(
-                      children: [
-                        Center(
-                          child: Stack(
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.all(3),
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  border: Border.all(
-                                      color: AppColors.primary, width: 2),
-                                ),
-                                child: CircleAvatar(
-                                  radius: 52,
-                                  backgroundColor: AppColors.lightgrey,
-                                  backgroundImage: _localImage != null
-                                      ? FileImage(_localImage!)
-                                      : (photoUrl != null
-                                          ? CachedNetworkImageProvider(photoUrl)
-                                          : null) as ImageProvider?,
-                                  child:
-                                      (photoUrl == null && _localImage == null)
+                child: _saving
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Text('Save'),
+              )
+            ],
+          ),
+          body: SafeArea(
+            child: _loadingDetails
+                ? const Center(child: CircularProgressIndicator())
+                : ListView(
+                    padding: AppPaddings.symmHorizontalReg.copyWith(
+                      top: AppSpacing.lg,
+                      bottom: AppSpacing.lg,
+                    ),
+                    children: [
+                      // Profile Photo Section
+                      _buildSectionCard(
+                        child: Column(
+                          children: [
+                            Center(
+                              child: Stack(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.all(3),
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      border: Border.all(
+                                          color: AppColors.primary, width: 2),
+                                    ),
+                                    child: CircleAvatar(
+                                      radius: 52,
+                                      backgroundColor: AppColors.lightgrey,
+                                      backgroundImage: _localImage != null
+                                          ? FileImage(_localImage!)
+                                          : (photoUrl != null
+                                              ? CachedNetworkImageProvider(
+                                                  photoUrl)
+                                              : null) as ImageProvider?,
+                                      child: (photoUrl == null &&
+                                              _localImage == null)
                                           ? const Icon(Icons.person,
                                               size: 52, color: Colors.white)
                                           : null,
-                                ),
-                              ),
-                              Positioned(
-                                right: 0,
-                                bottom: 0,
-                                child: Material(
-                                  color: AppColors.white,
-                                  shape: const CircleBorder(),
-                                  elevation: 2,
-                                  child: IconButton(
-                                    icon: _uploading
-                                        ? const SizedBox(
-                                            width: 18,
-                                            height: 18,
-                                            child: CircularProgressIndicator(
-                                                strokeWidth: 2))
-                                        : const Icon(Icons.camera_alt,
-                                            size: 20),
-                                    onPressed:
-                                        _uploading ? null : _pickAndUploadPhoto,
-                                    tooltip: 'profile_change_photo'.tr(),
+                                    ),
                                   ),
-                                ),
-                              )
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: AppSpacing.lg),
-
-                  // Basic Details Section
-                  _buildSectionCard(
-                    title: 'profile_basic_details'.tr(),
-                    child: Column(
-                      children: [
-                        _buildInputTile(
-                          icon: Icons.person_outline,
-                          title: 'profile_display_name'.tr(),
-                          child: TextField(
-                            controller: _nameController,
-                            textInputAction: TextInputAction.done,
-                            inputFormatters: [
-                              LengthLimitingTextInputFormatter(24),
-                            ],
-                            decoration: const InputDecoration(
-                              border: InputBorder.none,
-                              hintText: 'Enter your nickname or first name',
-                            ),
-                            onSubmitted: (_) => _saveProfile(),
-                          ),
-                        ),
-                        const Divider(height: 1, color: AppColors.lightgrey),
-                        _buildInputTile(
-                          icon: Icons.cake_outlined,
-                          title: 'profile_date_of_birth'.tr(),
-                          child: InkWell(
-                            onTap: _pickDob,
-                            child: Text(
-                              _dateOfBirth == null
-                                  ? 'profile_pick_date'.tr()
-                                  : DateFormat.yMMMMd().format(_dateOfBirth!),
-                              style: AppTextStyles.body.copyWith(
-                                color: _dateOfBirth == null
-                                    ? AppColors.grey
-                                    : AppColors.text,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: AppSpacing.lg),
-                  // Phone number section
-                  _buildSectionCard(
-                    title: 'profile_phone_title'.tr(),
-                    child: Column(
-                      children: [
-                        ListTile(
-                          contentPadding: EdgeInsets.zero,
-                          leading: const Icon(Icons.phone_outlined,
-                              color: AppColors.primary),
-                          title: SizedBox(
-                            height: 40,
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.center,
-                              children: [
-                                InkWell(
-                                  onTap: _pickCountryWithFlags,
-                                  borderRadius: BorderRadius.circular(6),
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 12, vertical: 8),
-                                    decoration: BoxDecoration(
-                                      border: Border.all(
-                                          color: AppColors.lightgrey),
-                                      borderRadius: BorderRadius.circular(20),
+                                  Positioned(
+                                    right: 0,
+                                    bottom: 0,
+                                    child: Material(
                                       color: AppColors.white,
+                                      shape: const CircleBorder(),
+                                      elevation: 2,
+                                      child: IconButton(
+                                        icon: _uploading
+                                            ? const SizedBox(
+                                                width: 18,
+                                                height: 18,
+                                                child:
+                                                    CircularProgressIndicator(
+                                                        strokeWidth: 2))
+                                            : const Icon(Icons.camera_alt,
+                                                size: 20),
+                                        onPressed: _uploading
+                                            ? null
+                                            : _pickAndUploadPhoto,
+                                        tooltip: 'profile_change_photo'.tr(),
+                                      ),
                                     ),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(
-                                              horizontal: 6, vertical: 2),
-                                          decoration: BoxDecoration(
-                                            color: AppColors.superlightgrey,
-                                            borderRadius:
-                                                BorderRadius.circular(4),
-                                          ),
-                                          child: Text(
-                                            _selectedIsoForCode(
-                                                _selectedCountryCode),
-                                            style: AppTextStyles.small,
-                                          ),
-                                        ),
-                                        const SizedBox(width: 8),
-                                        Text(_selectedCountryCode,
-                                            style: AppTextStyles.body),
-                                        const SizedBox(width: 4),
-                                        const Icon(Icons.arrow_drop_down,
-                                            size: 18),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: TextField(
-                                    controller: _phoneController,
-                                    keyboardType: TextInputType.phone,
-                                    decoration: InputDecoration(
-                                      border: InputBorder.none,
-                                      hintText: 'profile_phone_hint'.tr(),
-                                    ),
-                                    onSubmitted: (_) => _saveProfile(),
-                                  ),
-                                ),
-                              ],
+                                  )
+                                ],
+                              ),
                             ),
-                          ),
-                          subtitle: Text(
-                            'profile_phone_subtitle'.tr(),
-                            style: AppTextStyles.smallMuted,
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: AppSpacing.lg),
+
+                      // Basic Details Section
+                      _buildSectionCard(
+                        title: 'profile_basic_details'.tr(),
+                        child: Column(
+                          children: [
+                            _buildInputTile(
+                              icon: Icons.person_outline,
+                              title: 'profile_display_name'.tr(),
+                              child: TextField(
+                                controller: _nameController,
+                                textInputAction: TextInputAction.done,
+                                inputFormatters: [
+                                  LengthLimitingTextInputFormatter(24),
+                                ],
+                                decoration: const InputDecoration(
+                                  border: InputBorder.none,
+                                  hintText: 'Enter your nickname or first name',
+                                ),
+                                onSubmitted: (_) => _saveProfile(),
+                              ),
+                            ),
+                            const Divider(
+                                height: 1, color: AppColors.lightgrey),
+                            _buildInputTile(
+                              icon: Icons.cake_outlined,
+                              title: 'profile_date_of_birth'.tr(),
+                              child: InkWell(
+                                onTap: _pickDob,
+                                child: Text(
+                                  _dateOfBirth == null
+                                      ? 'profile_pick_date'.tr()
+                                      : DateFormat.yMMMMd()
+                                          .format(_dateOfBirth!),
+                                  style: AppTextStyles.body.copyWith(
+                                    color: _dateOfBirth == null
+                                        ? AppColors.grey
+                                        : AppColors.text,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: AppSpacing.lg),
+                      // Phone number section
+                      _buildSectionCard(
+                        title: 'profile_phone_title'.tr(),
+                        child: Column(
+                          children: [
+                            ListTile(
+                              contentPadding: EdgeInsets.zero,
+                              leading: const Icon(Icons.phone_outlined,
+                                  color: AppColors.primary),
+                              title: SizedBox(
+                                height: 40,
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.center,
+                                  children: [
+                                    InkWell(
+                                      onTap: _pickCountryWithFlags,
+                                      borderRadius: BorderRadius.circular(6),
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 12, vertical: 8),
+                                        decoration: BoxDecoration(
+                                          border: Border.all(
+                                              color: AppColors.lightgrey),
+                                          borderRadius:
+                                              BorderRadius.circular(20),
+                                          color: AppColors.white,
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                      horizontal: 6,
+                                                      vertical: 2),
+                                              decoration: BoxDecoration(
+                                                color: AppColors.superlightgrey,
+                                                borderRadius:
+                                                    BorderRadius.circular(4),
+                                              ),
+                                              child: Text(
+                                                _selectedIsoForCode(
+                                                    _selectedCountryCode),
+                                                style: AppTextStyles.small,
+                                              ),
+                                            ),
+                                            const SizedBox(width: 8),
+                                            Text(_selectedCountryCode,
+                                                style: AppTextStyles.body),
+                                            const SizedBox(width: 4),
+                                            const Icon(Icons.arrow_drop_down,
+                                                size: 18),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: TextField(
+                                        controller: _phoneController,
+                                        keyboardType: TextInputType.phone,
+                                        decoration: InputDecoration(
+                                          border: InputBorder.none,
+                                          hintText: 'profile_phone_hint'.tr(),
+                                        ),
+                                        onSubmitted: (_) => _saveProfile(),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              subtitle: Text(
+                                'profile_phone_subtitle'.tr(),
+                                style: AppTextStyles.smallMuted,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: AppSpacing.lg),
+
+                      // Account Section
+                      if (email.isNotEmpty)
+                        _buildSectionCard(
+                          title: 'profile_account'.tr(),
+                          child: Column(
+                            children: [
+                              _buildLinkTile(
+                                icon: Icons.email_outlined,
+                                title: 'profile_email'.tr(),
+                                subtitle: email,
+                                onTap: _changingEmail ? null : _changeEmail,
+                                trailing: _changingEmail
+                                    ? const SizedBox(
+                                        width: 16,
+                                        height: 16,
+                                        child: CircularProgressIndicator(
+                                            strokeWidth: 2),
+                                      )
+                                    : const Icon(Icons.edit, size: 16),
+                              ),
+                              const Divider(
+                                  height: 1, color: AppColors.lightgrey),
+                              _buildLinkTile(
+                                icon: Icons.lock_outline,
+                                title: 'profile_change_password'.tr(),
+                                onTap: () => _showChangePasswordDialog(),
+                                trailingChevron: true,
+                              ),
+                            ],
                           ),
                         ),
-                      ],
-                    ),
+                    ],
                   ),
-                  const SizedBox(height: AppSpacing.lg),
-
-                  // Account Section
-                  if (email.isNotEmpty)
-                    _buildSectionCard(
-                      title: 'profile_account'.tr(),
-                      child: Column(
-                        children: [
-                          _buildLinkTile(
-                            icon: Icons.email_outlined,
-                            title: 'profile_email'.tr(),
-                            subtitle: email,
-                            onTap: _changingEmail ? null : _changeEmail,
-                            trailing: _changingEmail
-                                ? const SizedBox(
-                                    width: 16,
-                                    height: 16,
-                                    child: CircularProgressIndicator(
-                                        strokeWidth: 2),
-                                  )
-                                : const Icon(Icons.edit, size: 16),
-                          ),
-                          const Divider(height: 1, color: AppColors.lightgrey),
-                          _buildLinkTile(
-                            icon: Icons.lock_outline,
-                            title: 'profile_change_password'.tr(),
-                            onTap: () => _showChangePasswordDialog(),
-                            trailingChevron: true,
-                          ),
-                        ],
-                      ),
-                    ),
-                ],
-              ),
-      ),
+          ),
+        ),
+        // Upload progress overlay
+        if (_uploading || _uploadError || _uploadSuccess)
+          UploadProgressOverlay(
+            progress: _uploadProgress,
+            isError: _uploadError,
+            isSuccess: _uploadSuccess,
+            onRetry: _uploadError
+                ? () {
+                    setState(() {
+                      _uploadError = false;
+                      _uploading = true;
+                      _uploadProgress = 0.0;
+                    });
+                    _performUpload();
+                  }
+                : null,
+            onDismiss: () {
+              setState(() {
+                _uploading = false;
+                _uploadError = false;
+                _uploadSuccess = false;
+                if (_uploadError) {
+                  _pendingUploadFile = null;
+                }
+              });
+            },
+          ),
+      ],
     );
   }
 

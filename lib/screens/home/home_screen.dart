@@ -13,6 +13,9 @@ import 'package:move_young/screens/settings/settings_screen.dart';
 import 'package:move_young/screens/help/help_screen.dart';
 import 'package:move_young/screens/maps/profile_screen.dart';
 import 'package:move_young/screens/friends/friends_screen.dart';
+import 'package:move_young/services/error_handler_service.dart';
+import 'package:move_young/services/image_cache_service.dart';
+import 'package:move_young/widgets/retry_error_view.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:move_young/services/cloud_games_service.dart';
 import 'dart:async';
@@ -43,8 +46,8 @@ class _HomeScreenNewState extends State<HomeScreenNew> {
       _watchPendingInvites();
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      precacheImage(
-          const AssetImage('assets/images/general_public.jpg'), context);
+      ImageCacheService.preloadImages(
+          context, ['assets/images/general_public.jpg']);
     });
   }
 
@@ -64,15 +67,10 @@ class _HomeScreenNewState extends State<HomeScreenNew> {
         _state = _LoadState.success;
       });
     } catch (e, st) {
-      assert(() {
-        debugPrint('Events load failed: $e\n$st');
-        return true;
-      }());
+      ErrorHandlerService.logError(e, st);
       if (!mounted) return;
       setState(() => _state = _LoadState.error);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('events_load_failed'.tr())),
-      );
+      ErrorHandlerService.showError(context, e, onRetry: _fetch);
     }
   }
 
@@ -886,19 +884,10 @@ class _UpcomingEventsCard extends StatelessWidget {
           child: _EventsSkeleton(),
         );
       case _LoadState.error:
-        return Padding(
-          padding: AppPaddings.allMedium,
-          child: Row(
-            children: [
-              const Icon(Icons.error_outline, color: AppColors.grey),
-              const SizedBox(width: AppWidths.small),
-              Expanded(
-                child: Text('events_load_failed'.tr(),
-                    style: AppTextStyles.bodyMuted),
-              ),
-              TextButton(onPressed: onRetry, child: Text('retry'.tr())),
-            ],
-          ),
+        return RetryErrorView(
+          message: 'events_load_failed'.tr(),
+          onRetry: onRetry,
+          icon: Icons.event_busy,
         );
       case _LoadState.success:
       case _LoadState.idle:

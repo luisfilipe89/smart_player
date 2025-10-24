@@ -7,6 +7,8 @@ import 'package:move_young/models/game.dart';
 import 'package:move_young/screens/games/games_join_screen.dart';
 import 'package:move_young/screens/games/games_my_screen.dart';
 import 'package:move_young/screens/friends/friends_screen.dart';
+import 'package:move_young/widgets/offline_banner.dart';
+import 'package:move_young/widgets/sync_status_indicator.dart';
 import 'package:easy_localization/easy_localization.dart';
 
 // ---------------------------- Navigation Controller Scope ----------------------------
@@ -206,35 +208,39 @@ class MainScaffoldState extends State<MainScaffold> {
             return;
           }
         },
-        child: Scaffold(
-          body: IndexedStack(
-            index: _currentIndex,
-            children: <Widget>[
-              HeroMode(
-                  enabled: _currentIndex == kTabHome,
-                  child: _HomeFlow(navigatorKey: _homeKey)),
-              HeroMode(
-                  enabled: _currentIndex == kTabFriends,
-                  child: _FriendsFlow(navigatorKey: _friendsKey)),
-              HeroMode(
-                  enabled: _currentIndex == kTabJoin,
-                  child:
-                      _MyGamesFlow(navigatorKey: _joinKey, args: _myGamesArgs)),
-              HeroMode(
-                  enabled: _currentIndex == kTabAgenda,
-                  child: _AgendaFlow(navigatorKey: _agendaKey)),
-            ],
-          ),
-          bottomNavigationBar: SafeArea(
-            child: _BottomBar(
-              currentIndex: _currentIndex,
-              onTap: (index) {
-                if (index == _currentIndex) {
-                  _popToRoot(index);
-                } else {
-                  setState(() => _currentIndex = index);
-                }
-              },
+        child: OfflineBanner(
+          child: GlobalSyncStatusBanner(
+            child: Scaffold(
+              body: IndexedStack(
+                index: _currentIndex,
+                children: <Widget>[
+                  HeroMode(
+                      enabled: _currentIndex == kTabHome,
+                      child: _HomeFlow(navigatorKey: _homeKey)),
+                  HeroMode(
+                      enabled: _currentIndex == kTabFriends,
+                      child: _FriendsFlow(navigatorKey: _friendsKey)),
+                  HeroMode(
+                      enabled: _currentIndex == kTabJoin,
+                      child: _MyGamesFlow(
+                          navigatorKey: _joinKey, args: _myGamesArgs)),
+                  HeroMode(
+                      enabled: _currentIndex == kTabAgenda,
+                      child: _AgendaFlow(navigatorKey: _agendaKey)),
+                ],
+              ),
+              bottomNavigationBar: SafeArea(
+                child: _BottomBar(
+                  currentIndex: _currentIndex,
+                  onTap: (index) {
+                    if (index == _currentIndex) {
+                      _popToRoot(index);
+                    } else {
+                      setState(() => _currentIndex = index);
+                    }
+                  },
+                ),
+              ),
             ),
           ),
         ),

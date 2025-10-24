@@ -1,6 +1,7 @@
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:move_young/services/image_cache_service.dart';
 import 'package:move_young/services/haptics_service.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 // QR rendering handled inside bottom sheet widget
@@ -17,6 +18,10 @@ import 'package:qr_flutter/qr_flutter.dart';
 import 'package:move_young/services/auth_service.dart';
 import 'package:move_young/services/friends_service.dart';
 import 'package:move_young/services/email_service.dart';
+import 'package:move_young/services/error_handler_service.dart';
+import 'package:move_young/utils/undo_helpers.dart';
+import 'package:move_young/widgets/rate_limit_feedback.dart';
+import 'package:move_young/widgets/cached_data_indicator.dart';
 import 'package:move_young/theme/tokens.dart';
 import 'package:move_young/theme/app_back_button.dart';
 import 'package:shimmer/shimmer.dart';
@@ -847,19 +852,17 @@ class _FriendsScreenState extends State<FriendsScreen>
                 final email = user['email'] ?? '';
 
                 return ListTile(
-                  leading: CircleAvatar(
-                    backgroundImage: user['photoURL'] != null
-                        ? CachedNetworkImageProvider(user['photoURL'])
-                        : null,
-                    child: user['photoURL'] == null
-                        ? Text(displayName.isNotEmpty
-                            ? displayName[0].toUpperCase()
-                            : '?')
-                        : null,
+                  leading: ImageCacheService.getOptimizedAvatar(
+                    imageUrl: user['photoURL'],
+                    radius: 20,
+                    fallbackText: displayName.isNotEmpty
+                        ? displayName[0].toUpperCase()
+                        : '?',
                   ),
                   title: Text(displayName),
                   subtitle: email.isNotEmpty ? Text(email) : null,
-                  trailing: TextButton(
+                  trailing: RateLimitButton(
+                    uid: AuthService.currentUser?.uid ?? '',
                     onPressed: () async {
                       Navigator.pop(context);
                       await _sendFriendRequest(user['uid']);
@@ -908,197 +911,221 @@ class _FriendsList extends StatelessWidget {
       stream: FriendsService.friendsStream(uid),
       builder: (context, snapshot) {
         final friends = snapshot.data ?? const <String>[];
-        return ListView(
-          padding: AppPaddings.symmHorizontalReg.copyWith(
-            top: AppSpacing.lg,
-            bottom: AppSpacing.lg,
-          ),
+        return Stack(
           children: [
-            Container(
-              decoration: BoxDecoration(
-                color: AppColors.white,
-                borderRadius: BorderRadius.circular(AppRadius.container),
-                boxShadow: AppShadows.md,
+            ListView(
+              padding: AppPaddings.symmHorizontalReg.copyWith(
+                top: AppSpacing.lg,
+                bottom: AppSpacing.lg,
               ),
-              padding: AppPaddings.allBig,
-              child: friends.isEmpty
-                  ? Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(Icons.group_outlined,
-                            size: 48, color: AppColors.grey),
-                        const SizedBox(height: 8),
-                        Text('friends_empty'.tr(), style: AppTextStyles.body),
-                        const SizedBox(height: 8),
-                        TextButton.icon(
-                          onPressed: onAddFriend,
-                          icon: const Icon(Icons.person_add_alt_1),
-                          label: Text('friends_add_title'.tr()),
-                        ),
-                      ],
-                    )
-                  : FutureBuilder<List<dynamic>>(
-                      future: Future.wait([
-                        FriendsService.fetchMinimalProfiles(friends),
-                        FriendsService.fetchMutualFriendsCounts(friends),
-                      ]),
-                      builder: (context, snap) {
-                        if (snap.connectionState == ConnectionState.waiting) {
-                          return const Center(
-                              child: CircularProgressIndicator());
-                        }
-                        if (!snap.hasData || snap.data == null) {
-                          return const SizedBox.shrink();
-                        }
-                        final Map<String, Map<String, String?>> profiles = (snap
-                            .data![0] as Map<String, Map<String, String?>>);
-                        final Map<String, int> mutual =
-                            (snap.data![1] as Map<String, int>);
-                        return ListView.separated(
-                          shrinkWrap: true,
-                          primary: false,
-                          itemCount: friends.length,
-                          separatorBuilder: (_, __) => const Divider(
-                              height: 1, color: AppColors.lightgrey),
-                          itemBuilder: (context, i) {
-                            final friendUid = friends[i];
-                            final data = profiles[friendUid] ??
-                                const {'displayName': 'User', 'photoURL': null};
-                            final name = data['displayName'] ?? 'User';
-                            final photo = data['photoURL'];
-                            final m = mutual[friendUid] ?? 0;
-                            return ListTile(
-                              contentPadding: EdgeInsets.zero,
-                              leading: CircleAvatar(
-                                backgroundColor: AppColors.superlightgrey,
-                                foregroundColor: AppColors.primary,
-                                backgroundImage:
-                                    (photo != null && photo.isNotEmpty)
-                                        ? CachedNetworkImageProvider(photo)
-                                        : null,
-                                child: (photo == null || photo.isEmpty)
-                                    ? Text(name.isNotEmpty
+              children: [
+                Container(
+                  decoration: BoxDecoration(
+                    color: AppColors.white,
+                    borderRadius: BorderRadius.circular(AppRadius.container),
+                    boxShadow: AppShadows.md,
+                  ),
+                  padding: AppPaddings.allBig,
+                  child: friends.isEmpty
+                      ? Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.group_outlined,
+                                size: 48, color: AppColors.grey),
+                            const SizedBox(height: 8),
+                            Text('friends_empty'.tr(),
+                                style: AppTextStyles.body),
+                            const SizedBox(height: 8),
+                            TextButton.icon(
+                              onPressed: onAddFriend,
+                              icon: const Icon(Icons.person_add_alt_1),
+                              label: Text('friends_add_title'.tr()),
+                            ),
+                          ],
+                        )
+                      : FutureBuilder<List<dynamic>>(
+                          future: Future.wait([
+                            FriendsService.fetchMinimalProfiles(friends),
+                            FriendsService.fetchMutualFriendsCounts(friends),
+                          ]),
+                          builder: (context, snap) {
+                            if (snap.connectionState ==
+                                ConnectionState.waiting) {
+                              return const Center(
+                                  child: CircularProgressIndicator());
+                            }
+                            if (!snap.hasData || snap.data == null) {
+                              return const SizedBox.shrink();
+                            }
+                            final Map<String, Map<String, String?>> profiles =
+                                (snap.data![0]
+                                    as Map<String, Map<String, String?>>);
+                            final Map<String, int> mutual =
+                                (snap.data![1] as Map<String, int>);
+                            return ListView.separated(
+                              shrinkWrap: true,
+                              primary: false,
+                              itemCount: friends.length,
+                              separatorBuilder: (_, __) => const Divider(
+                                  height: 1, color: AppColors.lightgrey),
+                              itemBuilder: (context, i) {
+                                final friendUid = friends[i];
+                                final data = profiles[friendUid] ??
+                                    const {
+                                      'displayName': 'User',
+                                      'photoURL': null
+                                    };
+                                final name = data['displayName'] ?? 'User';
+                                final photo = data['photoURL'];
+                                final m = mutual[friendUid] ?? 0;
+                                return ListTile(
+                                  contentPadding: EdgeInsets.zero,
+                                  leading: ImageCacheService.getOptimizedAvatar(
+                                    imageUrl: photo,
+                                    radius: 20,
+                                    backgroundColor: AppColors.superlightgrey,
+                                    foregroundColor: AppColors.primary,
+                                    fallbackText: name.isNotEmpty
                                         ? name[0].toUpperCase()
-                                        : '?')
-                                    : null,
-                              ),
-                              title: Text(name, style: AppTextStyles.body),
-                              subtitle: m > 0
-                                  ? Text(
-                                      'friends_mutual'.tr(args: [m.toString()]),
-                                      style: AppTextStyles.small)
-                                  : const SizedBox.shrink(),
-                              trailing: IconButton(
-                                icon: const Icon(Icons.more_vert),
-                                onPressed: () async {
-                                  final currentContext = context;
-                                  final action =
-                                      await showModalBottomSheet<String>(
-                                    context: currentContext,
-                                    backgroundColor: Colors.transparent,
-                                    builder: (context) {
-                                      return Container(
-                                        decoration: const BoxDecoration(
-                                          color: AppColors.white,
-                                          borderRadius: BorderRadius.only(
-                                            topLeft: Radius.circular(20),
-                                            topRight: Radius.circular(20),
-                                          ),
-                                        ),
-                                        child: SafeArea(
-                                          child: Column(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              ListTile(
-                                                leading: const Icon(
-                                                    Icons.remove_circle_outline,
-                                                    color: Colors.red),
-                                                title: Text(
-                                                    'friends_remove'.tr(),
-                                                    style: const TextStyle(
-                                                        color: Colors.red)),
-                                                onTap: () => Navigator.pop(
-                                                    context, 'remove'),
+                                        : '?',
+                                  ),
+                                  title: Text(name, style: AppTextStyles.body),
+                                  subtitle: m > 0
+                                      ? Text(
+                                          'friends_mutual'
+                                              .tr(args: [m.toString()]),
+                                          style: AppTextStyles.small)
+                                      : const SizedBox.shrink(),
+                                  trailing: IconButton(
+                                    icon: const Icon(Icons.more_vert),
+                                    onPressed: () async {
+                                      final currentContext = context;
+                                      final action =
+                                          await showModalBottomSheet<String>(
+                                        context: currentContext,
+                                        backgroundColor: Colors.transparent,
+                                        builder: (context) {
+                                          return Container(
+                                            decoration: const BoxDecoration(
+                                              color: AppColors.white,
+                                              borderRadius: BorderRadius.only(
+                                                topLeft: Radius.circular(20),
+                                                topRight: Radius.circular(20),
                                               ),
-                                              ListTile(
-                                                leading: const Icon(Icons.block,
-                                                    color: Colors.red),
-                                                title: Text(
-                                                    'friends_block'.tr(),
-                                                    style: const TextStyle(
-                                                        color: Colors.red)),
-                                                onTap: () => Navigator.pop(
-                                                    context, 'block'),
+                                            ),
+                                            child: SafeArea(
+                                              child: Column(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  ListTile(
+                                                    leading: const Icon(
+                                                        Icons
+                                                            .remove_circle_outline,
+                                                        color: Colors.red),
+                                                    title: Text(
+                                                        'friends_remove'.tr(),
+                                                        style: const TextStyle(
+                                                            color: Colors.red)),
+                                                    onTap: () => Navigator.pop(
+                                                        context, 'remove'),
+                                                  ),
+                                                  ListTile(
+                                                    leading: const Icon(
+                                                        Icons.block,
+                                                        color: Colors.red),
+                                                    title: Text(
+                                                        'friends_block'.tr(),
+                                                        style: const TextStyle(
+                                                            color: Colors.red)),
+                                                    onTap: () => Navigator.pop(
+                                                        context, 'block'),
+                                                  ),
+                                                  const SizedBox(height: 8),
+                                                ],
                                               ),
-                                              const SizedBox(height: 8),
-                                            ],
-                                          ),
-                                        ),
+                                            ),
+                                          );
+                                        },
                                       );
+                                      if (action == 'remove') {
+                                        bool? ok;
+                                        if (currentContext.mounted) {
+                                          ok = await showDialog<bool>(
+                                            context: currentContext,
+                                            builder: (ctx) => AlertDialog(
+                                              title: Text('are_you_sure'.tr()),
+                                              content: Text(
+                                                  'friends_confirm_remove'
+                                                      .tr()),
+                                              actions: [
+                                                TextButton(
+                                                    onPressed: () =>
+                                                        Navigator.pop(
+                                                            ctx, false),
+                                                    child: Text('cancel'.tr())),
+                                                TextButton(
+                                                    onPressed: () =>
+                                                        Navigator.pop(
+                                                            ctx, true),
+                                                    child: Text('ok'.tr())),
+                                              ],
+                                            ),
+                                          );
+                                        }
+                                        if (ok == true) {
+                                          await FriendsService.removeFriend(
+                                              friendUid);
+                                        }
+                                      } else if (action == 'block') {
+                                        bool? ok;
+                                        if (currentContext.mounted) {
+                                          ok = await showDialog<bool>(
+                                            context: currentContext,
+                                            builder: (ctx) => AlertDialog(
+                                              title: Text('are_you_sure'.tr()),
+                                              content: Text(
+                                                  'friends_confirm_block'.tr()),
+                                              actions: [
+                                                TextButton(
+                                                    onPressed: () =>
+                                                        Navigator.pop(
+                                                            ctx, false),
+                                                    child: Text('cancel'.tr())),
+                                                TextButton(
+                                                    onPressed: () =>
+                                                        Navigator.pop(
+                                                            ctx, true),
+                                                    child: Text('ok'.tr())),
+                                              ],
+                                            ),
+                                          );
+                                        }
+                                        if (ok == true) {
+                                          await FriendsService.blockUser(
+                                              friendUid);
+                                        }
+                                      }
                                     },
-                                  );
-                                  if (action == 'remove') {
-                                    bool? ok;
-                                    if (currentContext.mounted) {
-                                      ok = await showDialog<bool>(
-                                        context: currentContext,
-                                        builder: (ctx) => AlertDialog(
-                                          title: Text('are_you_sure'.tr()),
-                                          content: Text(
-                                              'friends_confirm_remove'.tr()),
-                                          actions: [
-                                            TextButton(
-                                                onPressed: () =>
-                                                    Navigator.pop(ctx, false),
-                                                child: Text('cancel'.tr())),
-                                            TextButton(
-                                                onPressed: () =>
-                                                    Navigator.pop(ctx, true),
-                                                child: Text('ok'.tr())),
-                                          ],
-                                        ),
-                                      );
-                                    }
-                                    if (ok == true) {
-                                      await FriendsService.removeFriend(
-                                          friendUid);
-                                    }
-                                  } else if (action == 'block') {
-                                    bool? ok;
-                                    if (currentContext.mounted) {
-                                      ok = await showDialog<bool>(
-                                        context: currentContext,
-                                        builder: (ctx) => AlertDialog(
-                                          title: Text('are_you_sure'.tr()),
-                                          content: Text(
-                                              'friends_confirm_block'.tr()),
-                                          actions: [
-                                            TextButton(
-                                                onPressed: () =>
-                                                    Navigator.pop(ctx, false),
-                                                child: Text('cancel'.tr())),
-                                            TextButton(
-                                                onPressed: () =>
-                                                    Navigator.pop(ctx, true),
-                                                child: Text('ok'.tr())),
-                                          ],
-                                        ),
-                                      );
-                                    }
-                                    if (ok == true) {
-                                      await FriendsService.blockUser(friendUid);
-                                    }
-                                  }
-                                },
-                              ),
+                                  ),
+                                );
+                              },
                             );
                           },
-                        );
-                      },
-                    ),
+                        ),
+                ),
+                const SizedBox(height: 16),
+                _SentRequests(uid: uid),
+              ],
             ),
-            const SizedBox(height: 16),
-            _SentRequests(uid: uid),
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: ConnectivityAwareCachedIndicator(
+                onRefresh: () {},
+                child: const SizedBox.shrink(),
+              ),
+            ),
           ],
         );
       },
@@ -1145,15 +1172,12 @@ class _BatchedFriendTileState extends State<_BatchedFriendTile> {
 
     return ListTile(
       contentPadding: EdgeInsets.zero,
-      leading: CircleAvatar(
+      leading: ImageCacheService.getOptimizedAvatar(
+        imageUrl: photo,
+        radius: 20,
         backgroundColor: AppColors.superlightgrey,
         foregroundColor: AppColors.primary,
-        backgroundImage: (photo != null && photo.isNotEmpty)
-            ? CachedNetworkImageProvider(photo)
-            : null,
-        child: (photo == null || photo.isEmpty)
-            ? Text(name.isNotEmpty ? name[0].toUpperCase() : '?')
-            : null,
+        fallbackText: name.isNotEmpty ? name[0].toUpperCase() : '?',
       ),
       title: Text(name, style: AppTextStyles.body),
       subtitle: m > 0
@@ -1419,21 +1443,16 @@ class _RequestsListState extends State<_RequestsList> {
                                       return ListTile(
                                         contentPadding: EdgeInsets.zero,
                                         leading: _AvatarRing(
-                                          child: CircleAvatar(
+                                          child: ImageCacheService
+                                              .getOptimizedAvatar(
+                                            imageUrl: photo,
+                                            radius: 20,
                                             backgroundColor:
                                                 _avatarBgFromName(name),
                                             foregroundColor: Colors.white,
-                                            backgroundImage: (photo != null &&
-                                                    photo.isNotEmpty)
-                                                ? CachedNetworkImageProvider(
-                                                    photo)
-                                                : null,
-                                            child:
-                                                (photo == null || photo.isEmpty)
-                                                    ? Text(name.isNotEmpty
-                                                        ? name[0].toUpperCase()
-                                                        : '?')
-                                                    : null,
+                                            fallbackText: name.isNotEmpty
+                                                ? name[0].toUpperCase()
+                                                : '?',
                                           ),
                                         ),
                                         title: Text(
@@ -1759,13 +1778,20 @@ class _SentRequests extends StatelessWidget {
                                 await FriendsService.cancelSentFriendRequest(
                                     toUid);
                             if (!context.mounted) return;
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(ok
-                                    ? 'friends_request_canceled'.tr()
-                                    : 'friends_request_cancel_failed'.tr()),
-                              ),
-                            );
+
+                            if (ok) {
+                              UndoHelpers.showSuccessWithUndo(
+                                context,
+                                'friend_request_cancelled',
+                                onUndo: () async {
+                                  await FriendsService.sendFriendRequestToUid(
+                                      toUid);
+                                },
+                              );
+                            } else {
+                              ErrorHandlerService.showError(
+                                  context, 'friends_request_cancel_failed');
+                            }
                           },
                           child: Text('cancel'.tr()),
                         ),
@@ -1887,9 +1913,12 @@ class _SuggestionsSectionState extends State<_SuggestionsSection> {
               itemCount: _suggestions.length,
               itemBuilder: (context, index) {
                 final suggestion = _suggestions[index];
-                return _SuggestionCard(
-                  suggestion: suggestion,
-                  onAddFriend: () => _sendFriendRequest(suggestion['uid']),
+                return RateLimitFeedback(
+                  uid: AuthService.currentUser?.uid ?? '',
+                  child: _SuggestionCard(
+                    suggestion: suggestion,
+                    onAddFriend: () => _sendFriendRequest(suggestion['uid']),
+                  ),
                 );
               },
             ),
@@ -1943,20 +1972,11 @@ class _SuggestionCard extends StatelessWidget {
         children: [
           Stack(
             children: [
-              CircleAvatar(
+              ImageCacheService.getOptimizedAvatar(
+                imageUrl: photoURL,
                 radius: 30,
-                backgroundImage: photoURL != null && photoURL.isNotEmpty
-                    ? CachedNetworkImageProvider(photoURL)
-                    : null,
-                child: photoURL == null || photoURL.isEmpty
-                    ? Text(
-                        displayName.isNotEmpty
-                            ? displayName[0].toUpperCase()
-                            : '?',
-                        style:
-                            AppTextStyles.h3.copyWith(color: AppColors.white),
-                      )
-                    : null,
+                fallbackText:
+                    displayName.isNotEmpty ? displayName[0].toUpperCase() : '?',
               ),
               Positioned(
                 bottom: 0,
