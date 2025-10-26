@@ -14,3 +14,5 @@ export declare const onInviteStatusChange: import("firebase-functions/core").Clo
     gameId: string;
     inviteeUid: string;
 }>>;
+export declare const fetchSportEvents: import("firebase-functions/v2/scheduler").ScheduleFunction;
+export declare const manualFetchEvents: import("firebase-functions/v2/https").HttpsFunction;

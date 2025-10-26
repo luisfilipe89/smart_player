@@ -15,6 +15,10 @@ class CloudGamesServiceInstance {
   final FirebaseAuth _auth;
   final NotificationServiceInstance _notificationService;
 
+  // Query limits to prevent memory issues
+  static const int _maxJoinableGames = 50;
+  static const int _maxMyGames = 100;
+
   CloudGamesServiceInstance(
     this._database,
     this._auth,
@@ -93,9 +97,12 @@ class CloudGamesServiceInstance {
         return cached.data;
       }
 
-      // Fetch from Firebase
-      final snapshot =
-          await _gamesRef.orderByChild('organizerId').equalTo(userId).get();
+      // Fetch from Firebase with limit
+      final snapshot = await _gamesRef
+          .orderByChild('organizerId')
+          .equalTo(userId)
+          .limitToFirst(_maxMyGames)
+          .get();
 
       final games = <Game>[];
       if (snapshot.exists) {
@@ -135,9 +142,12 @@ class CloudGamesServiceInstance {
         return cached.data;
       }
 
-      // Fetch from Firebase
-      final snapshot =
-          await _gamesRef.orderByChild('isActive').equalTo(true).get();
+      // Fetch from Firebase with limit
+      final snapshot = await _gamesRef
+          .orderByChild('isActive')
+          .equalTo(true)
+          .limitToFirst(_maxJoinableGames)
+          .get();
 
       final games = <Game>[];
       if (snapshot.exists) {
@@ -187,22 +197,29 @@ class CloudGamesServiceInstance {
       final games = <Game>[];
       if (snapshot.exists) {
         final data = Map<dynamic, dynamic>.from(snapshot.value as Map);
-        for (final entry in data.entries) {
-          try {
-            final gameId = entry.key;
-            final inviteData = entry.value as Map<dynamic, dynamic>;
 
-            // Only include pending invites
-            if (inviteData['status'] == 'pending') {
-              final gameSnapshot = await _gamesRef.child(gameId).get();
-              if (gameSnapshot.exists) {
-                final game = Game.fromJson(
-                    Map<String, dynamic>.from(gameSnapshot.value as Map));
-                games.add(game);
-              }
+        // Collect pending invite gameIds first
+        final gameIds = <String>[];
+        for (final entry in data.entries) {
+          final inviteData = entry.value as Map<dynamic, dynamic>;
+          if (inviteData['status'] == 'pending') {
+            gameIds.add(entry.key);
+          }
+        }
+
+        // Batch fetch all games in parallel to avoid N+1 query pattern
+        final gameFutures = gameIds.map((id) => _gamesRef.child(id).get());
+        final gameSnapshots = await Future.wait(gameFutures);
+
+        for (final gameSnapshot in gameSnapshots) {
+          if (gameSnapshot.exists) {
+            try {
+              final game = Game.fromJson(
+                  Map<String, dynamic>.from(gameSnapshot.value as Map));
+              games.add(game);
+            } catch (e) {
+              debugPrint('Error parsing invited game: $e');
             }
-          } catch (e) {
-            debugPrint('Error parsing invited game: $e');
           }
         }
       }
@@ -215,6 +232,139 @@ class CloudGamesServiceInstance {
       debugPrint('Error getting invited games: $e');
       return [];
     }
+  }
+
+  /// Validates that user indexes and game documents are consistent.
+  /// Returns a list of human-readable issues; empty if healthy.
+  Future<List<String>> validateUserGameIndexes({String? userId}) async {
+    final issues = <String>[];
+    final uid = userId ?? _currentUserId;
+    if (uid == null) return issues;
+
+    try {
+      // 1) createdGames index must reference existing games
+      final createdIdx =
+          await _usersRef.child(DbPaths.userCreatedGames(uid)).get();
+      if (createdIdx.exists) {
+        final map = Map<dynamic, dynamic>.from(createdIdx.value as Map);
+        for (final gameId in map.keys) {
+          final snap = await _gamesRef.child(gameId.toString()).get();
+          if (!snap.exists) {
+            issues.add('Orphan createdGames index: $gameId');
+          }
+        }
+      }
+
+      // 2) joinedGames index must reference existing games and contain the user in players
+      final joinedIdx =
+          await _usersRef.child(DbPaths.userJoinedGames(uid)).get();
+      if (joinedIdx.exists) {
+        final map = Map<dynamic, dynamic>.from(joinedIdx.value as Map);
+        for (final gameId in map.keys) {
+          final snap = await _gamesRef.child(gameId.toString()).get();
+          if (!snap.exists) {
+            issues.add('Orphan joinedGames index: $gameId');
+            continue;
+          }
+          try {
+            final game =
+                Game.fromJson(Map<String, dynamic>.from(snap.value as Map));
+            if (!game.players.contains(uid)) {
+              issues
+                  .add('joinedGames mismatch: $gameId missing user in players');
+            }
+          } catch (_) {
+            issues.add('Corrupt game json for $gameId');
+          }
+        }
+      }
+
+      // 3) invites pointing to non-existing games
+      final invitesIdx =
+          await _usersRef.child(DbPaths.userGameInvites(uid)).get();
+      if (invitesIdx.exists) {
+        final map = Map<dynamic, dynamic>.from(invitesIdx.value as Map);
+        for (final gameId in map.keys) {
+          final snap = await _gamesRef.child(gameId.toString()).get();
+          if (!snap.exists) {
+            issues.add('Invite to non-existing game: $gameId');
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('validateUserGameIndexes error: $e');
+    }
+
+    return issues;
+  }
+
+  /// Opportunistic self-healing for simple inconsistencies
+  /// Only removes obviously broken indexes; never mutates game docs here.
+  Future<int> fixSimpleInconsistencies({String? userId}) async {
+    int fixes = 0;
+    final uid = userId ?? _currentUserId;
+    if (uid == null) return fixes;
+
+    try {
+      // Remove createdGames entries whose game does not exist
+      final createdIdx =
+          await _usersRef.child(DbPaths.userCreatedGames(uid)).get();
+      if (createdIdx.exists) {
+        final map = Map<dynamic, dynamic>.from(createdIdx.value as Map);
+        for (final gameId in map.keys) {
+          final exists =
+              (await _gamesRef.child(gameId.toString()).get()).exists;
+          if (!exists) {
+            await _usersRef
+                .child(DbPaths.userCreatedGames(uid))
+                .child(gameId.toString())
+                .remove();
+            fixes++;
+          }
+        }
+      }
+
+      // Remove joinedGames entries whose game does not exist
+      final joinedIdx =
+          await _usersRef.child(DbPaths.userJoinedGames(uid)).get();
+      if (joinedIdx.exists) {
+        final map = Map<dynamic, dynamic>.from(joinedIdx.value as Map);
+        for (final gameId in map.keys) {
+          final exists =
+              (await _gamesRef.child(gameId.toString()).get()).exists;
+          if (!exists) {
+            await _usersRef
+                .child(DbPaths.userJoinedGames(uid))
+                .child(gameId.toString())
+                .remove();
+            fixes++;
+          }
+        }
+      }
+
+      // Remove invites that point to non-existing games
+      final invitesIdx =
+          await _usersRef.child(DbPaths.userGameInvites(uid)).get();
+      if (invitesIdx.exists) {
+        final map = Map<dynamic, dynamic>.from(invitesIdx.value as Map);
+        for (final gameId in map.keys) {
+          final exists =
+              (await _gamesRef.child(gameId.toString()).get()).exists;
+          if (!exists) {
+            await _usersRef
+                .child(DbPaths.userGameInvites(uid))
+                .child(gameId.toString())
+                .remove();
+            fixes++;
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('fixSimpleInconsistencies error: $e');
+    }
+
+    if (fixes > 0) _clearCache();
+    return fixes;
   }
 
   // Watch pending invites count

@@ -48,7 +48,7 @@ class _UploadProgressIndicatorState extends State<UploadProgressIndicator>
     _animationController.forward();
 
     // Auto-dismiss on success after 2 seconds
-    if (widget.isSuccess) {
+    if (widget.isSuccess && widget.onDismiss != null) {
       Future.delayed(const Duration(seconds: 2), () {
         if (mounted) {
           widget.onDismiss?.call();

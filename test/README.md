@@ -59,6 +59,10 @@ flutter test test/models/ test/utils/ test/services/
 flutter test test/widgets/
 
 # Integration tests only
+scripts/start_emulators.bat   # Windows (run in a separate terminal)
+./scripts/start_emulators.sh  # macOS/Linux (separate terminal)
+
+# Then in another terminal:
 flutter test test/integration/
 
 # Golden tests only

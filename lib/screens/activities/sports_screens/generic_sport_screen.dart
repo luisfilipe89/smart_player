@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:move_young/services/system/haptics_provider.dart';
 import 'package:geolocator/geolocator.dart';
@@ -14,6 +15,31 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:move_young/config/_config.dart';
 import 'package:move_young/theme/_theme.dart';
 import 'package:move_young/services/system/location_service.dart';
+
+// Top-level function for isolate processing (distance calculations)
+List<Map<String, dynamic>> _processLocationsIsolate(
+    Map<String, dynamic> params) {
+  final locations = params['locations'] as List<Map<String, dynamic>>;
+  final userLat = params['userLat'] as double;
+  final userLon = params['userLon'] as double;
+
+  for (var loc in locations) {
+    final lat = loc['lat'];
+    final lon = loc['lon'];
+
+    final distance = Geolocator.distanceBetween(
+      userLat,
+      userLon,
+      lat ?? 0,
+      lon ?? 0,
+    );
+    loc['distance'] = distance.isFinite ? distance : double.infinity;
+  }
+
+  locations.sort(
+      (a, b) => (a['distance'] as double).compareTo(b['distance'] as double));
+  return locations;
+}
 
 class GenericSportScreen extends ConsumerStatefulWidget {
   final String title;
@@ -56,7 +82,8 @@ class _GenericSportScreenState extends ConsumerState<GenericSportScreen>
     _filters = SportFiltersRegistry.buildForSport(widget.sportType);
     _loadFavorites();
     _loadData();
-    _searchController.addListener(() => setState(() {}));
+    _searchController
+        .addListener(() => _onSearchChanged(_searchController.text));
   }
 
   Future<void> _loadFavorites() async {
@@ -86,6 +113,17 @@ class _GenericSportScreenState extends ConsumerState<GenericSportScreen>
     super.dispose();
   }
 
+  void _onSearchChanged(String query) {
+    if (_debounce?.isActive ?? false) _debounce!.cancel();
+    _debounce = Timer(const Duration(milliseconds: 300), () {
+      if (!mounted) return;
+      setState(() {
+        _searchQuery = query;
+        _applyFilters();
+      });
+    });
+  }
+
   Future<void> _loadData({bool bypassCache = false}) async {
     try {
       final pos = await const LocationService()
@@ -99,35 +137,30 @@ class _GenericSportScreenState extends ConsumerState<GenericSportScreen>
         bypassCache: bypassCache,
       );
 
-      for (var loc in locations) {
-        final lat = loc['lat'];
-        final lon = loc['lon'];
+      // Process distance calculations in isolate to avoid blocking UI
+      final processedLocations = await compute(_processLocationsIsolate, {
+        'locations': List<Map<String, dynamic>>.from(locations),
+        'userLat': _userPosition!.latitude,
+        'userLon': _userPosition!.longitude,
+      });
 
-        final distance = _calculateDistance(lat, lon);
-        loc['distance'] = distance.isFinite ? distance : double.infinity;
-
-        //Distance calc
+      // Set display names (with name if available, otherwise defer reverse geocoding)
+      for (var loc in processedLocations) {
         if (loc['name'] != null && loc['name'].toString().trim().isNotEmpty) {
           loc['displayName'] = loc['name'];
         } else {
-          final key = '$lat,$lon';
-          if (_locationCache.containsKey(key)) {
-            loc['displayName'] = _locationCache[key];
-          } else {
-            final streetName = await getNearestStreetName(lat, lon);
-            _locationCache[key] = streetName;
-            loc['displayName'] = streetName;
-          }
+          // Defer reverse geocoding - will be lazy loaded when needed
+          final key = '${loc['lat']},${loc['lon']}';
+          loc['displayName'] = 'Loading...'; // Temporary placeholder
+          loc['_needsGeocoding'] = true;
+          loc['_geocodingKey'] = key;
         }
         if (!mounted) return;
       }
 
-      locations.sort((a, b) =>
-          (a['distance'] as double).compareTo(b['distance'] as double));
-
       if (!mounted) return;
       setState(() {
-        _allLocations = locations;
+        _allLocations = processedLocations;
         _applyFilters();
         _isLoading = false;
       });
@@ -137,6 +170,35 @@ class _GenericSportScreenState extends ConsumerState<GenericSportScreen>
         _isLoading = false;
       });
       debugPrint('Error in _loadData: $e');
+    }
+  }
+
+  Future<void> _loadStreetNameIfNeeded(Map<String, dynamic> loc) async {
+    if (loc['_needsGeocoding'] == true && loc['displayName'] == 'Loading...') {
+      final key = loc['_geocodingKey'] as String;
+      if (_locationCache.containsKey(key)) {
+        setState(() {
+          loc['displayName'] = _locationCache[key];
+          loc['_needsGeocoding'] = false;
+        });
+      } else {
+        try {
+          final streetName = await getNearestStreetName(
+            loc['lat'] as double,
+            loc['lon'] as double,
+          );
+          _locationCache[key] = streetName;
+          setState(() {
+            loc['displayName'] = streetName;
+            loc['_needsGeocoding'] = false;
+          });
+        } catch (e) {
+          setState(() {
+            loc['displayName'] = 'Unknown Location';
+            loc['_needsGeocoding'] = false;
+          });
+        }
+      }
     }
   }
 
@@ -171,18 +233,6 @@ class _GenericSportScreenState extends ConsumerState<GenericSportScreen>
     );
   }
 
-  double _calculateDistance(double? lat, double? lon) {
-    if (_userPosition == null || lat == null || lon == null) {
-      return double.infinity;
-    }
-    return Geolocator.distanceBetween(
-      _userPosition!.latitude,
-      _userPosition!.longitude,
-      lat,
-      lon,
-    );
-  }
-
   void _openDirections(String lat, String lon) async {
     final url =
         'https://www.google.com/maps/dir/?api=1&destination=$lat,$lon&travelmode=walking';
@@ -211,20 +261,36 @@ class _GenericSportScreenState extends ConsumerState<GenericSportScreen>
   }
 
   Future<String> _getDisplayName(Map<String, dynamic> loc) async {
+    // If name exists, use it
     if (loc['name'] != null && loc['name'].toString().trim().isNotEmpty) {
       return loc['name'];
     }
 
+    // Check if already has displayName (from initial load or cache)
+    if (loc['displayName'] != null && loc['displayName'] != 'Loading...') {
+      return loc['displayName'];
+    }
+
+    // If needs geocoding, load it
+    if (loc['_needsGeocoding'] == true) {
+      await _loadStreetNameIfNeeded(loc);
+      return loc['displayName'] ?? 'Unknown Location';
+    }
+
+    // Fallback: direct geocoding
     final lat = loc['lat'];
     final lon = loc['lon'];
     final key = '$lat,$lon';
 
     if (_locationCache.containsKey(key)) {
-      return _locationCache[key]!;
+      final streetName = _locationCache[key]!;
+      loc['displayName'] = streetName;
+      return streetName;
     }
 
     final streetName = await getNearestStreetName(lat, lon);
     _locationCache[key] = streetName;
+    loc['displayName'] = streetName;
     return streetName;
   }
 

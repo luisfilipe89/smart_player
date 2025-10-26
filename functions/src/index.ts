@@ -3,6 +3,8 @@ import { setGlobalOptions } from "firebase-functions/v2";
 import { onValueCreated } from "firebase-functions/v2/database";
 import { onValueWritten } from "firebase-functions/v2/database";
 import { onSchedule } from "firebase-functions/v2/scheduler";
+import { onRequest } from "firebase-functions/v2/https";
+import * as puppeteer from "puppeteer";
 
 admin.initializeApp();
 setGlobalOptions({ region: "europe-west1" });
@@ -395,6 +397,219 @@ export const onInviteStatusChange = onValueWritten(
       }
     } catch (e) {
       console.error("Error processing invite status change:", e);
+    }
+  }
+);
+
+// Extract info from raw text block
+function extractInfoDict(rawText: string): {
+  location: string;
+  target_group: string;
+  cost: string;
+  date_time: string;
+} {
+  const lines = rawText.split("\n").map(line => line.trim()).filter(line => line);
+  const info = {
+    location: "-",
+    target_group: "-",
+    cost: "-",
+    date_time: "-"
+  };
+  let currentKey: string | null = null;
+
+  for (const line of lines) {
+    const lower = line.toLowerCase();
+    if (lower.startsWith("locatie") || lower.startsWith("location")) {
+      currentKey = "location";
+    } else if (lower.startsWith("doelgroep") || lower.startsWith("target group") || lower.startsWith("targetgroup")) {
+      currentKey = "target_group";
+    } else if (lower.startsWith("kosten") || lower.startsWith("cost")) {
+      currentKey = "cost";
+    } else if (lower.startsWith("datum") || lower.startsWith("date")) {
+      currentKey = "date_time";
+    } else if (currentKey) {
+      if (info[currentKey as keyof typeof info] === "-") {
+        info[currentKey as keyof typeof info] = line;
+      } else {
+        info[currentKey as keyof typeof info] += " | " + line;
+      }
+    }
+  }
+
+  // Clean up trailing junk from date_time
+  if (info.date_time !== "-") {
+    info.date_time = info.date_time.split("|")[0].trim();
+  }
+
+  return info;
+}
+
+// Determine if event is recurring
+function isRecurringDateTime(input: string): boolean {
+  const lower = input.toLowerCase();
+  return !(lower.includes("1x") || lower.includes("eenmalig") || lower.includes("op inschrijving"));
+}
+
+// Scrape sport events from s-port.nl
+async function scrapeSportEvents(): Promise<any[]> {
+  let browser;
+  try {
+    browser = await puppeteer.launch({
+      headless: true,
+      args: [
+        "--no-sandbox",
+        "--disable-setuid-sandbox",
+        "--disable-dev-shm-usage",
+        "--disable-gpu",
+        "--single-process",
+        "--disable-software-rasterizer"
+      ],
+      executablePath: puppeteer.executablePath()
+    });
+
+    const page = await browser.newPage();
+
+    // Set language
+    await page.setCookie({
+      name: 'locale',
+      value: 'en',
+      path: '/',
+      domain: 'www.aanbod.s-port.nl'
+    });
+
+    // Load activities page
+    await page.goto(
+      "https://www.aanbod.s-port.nl/activiteiten?gemeente%5B0%5D=40&projecten%5B0%5D=5395&sort=name&order=asc",
+      { waitUntil: "networkidle2" }
+    );
+
+    // Scroll to load all content
+    for (let i = 0; i < 10; i++) {
+      await page.evaluate(() => {
+        window.scrollTo(0, document.body.scrollHeight);
+      });
+      await page.waitForTimeout(2000);
+    }
+
+    // Wait for activity cards
+    await page.waitForSelector(".activity", { timeout: 15000 });
+
+    // Extract all events
+    const events = await page.evaluate(() => {
+      const cards = Array.from(document.querySelectorAll(".activity"));
+      const results: any[] = [];
+
+      for (const card of cards) {
+        try {
+          const titleElem = card.querySelector("h2 a");
+          const title = titleElem?.textContent?.trim() || "-";
+          const url = titleElem?.getAttribute("href") || "-";
+
+          const imageElem = card.querySelector("img");
+          const imageUrl = imageElem?.getAttribute("src") || "";
+
+          const organizerElem = card.querySelector("span.location");
+          const organizer = organizerElem?.textContent?.trim() || "-";
+
+          const infoElem = card.querySelector(".info");
+          const rawInfo = infoElem?.textContent?.trim() || "";
+
+          results.push({
+            title,
+            url,
+            organizer,
+            rawInfo,
+            imageUrl
+          });
+        } catch (err) {
+          console.error("Error extracting card:", err);
+        }
+      }
+
+      return results;
+    });
+
+    // Process events
+    const processedEvents = events.map((event: any) => {
+      const info = extractInfoDict(event.rawInfo || "");
+      const cost = info.cost.trim().replace(/^·\s*/, "").trim();
+      const isRecurring = isRecurringDateTime(info.date_time);
+
+      return {
+        title: event.title,
+        url: event.url,
+        organizer: event.organizer,
+        location: info.location,
+        target_group: info.target_group,
+        cost: cost,
+        date_time: info.date_time,
+        imageUrl: event.imageUrl,
+        isRecurring
+      };
+    });
+
+    console.log(`Scraped ${processedEvents.length} events`);
+    return processedEvents;
+
+  } catch (error) {
+    console.error("Error scraping events:", error);
+    throw error;
+  } finally {
+    if (browser) {
+      await browser.close();
+    }
+  }
+}
+
+// Scheduled function to fetch sport events weekly
+export const fetchSportEvents = onSchedule(
+  {
+    schedule: "0 2 * * 1", // Every Monday at 2 AM
+    timeZone: "Europe/Amsterdam",
+    memory: "1GiB",
+    timeoutSeconds: 540, // 9 minutes
+  },
+  async (event) => {
+    console.log("Starting weekly event scrape...");
+
+    try {
+      const events = await scrapeSportEvents();
+
+      // Save to Firebase Realtime Database
+      const db = admin.database();
+      await db.ref("events/latest").set({
+        events,
+        lastUpdated: Date.now(),
+      });
+
+      console.log(`Successfully stored ${events.length} events`);
+      return;
+    } catch (error) {
+      console.error("Error in fetchSportEvents:", error);
+      throw error;
+    }
+  }
+);
+
+// Manual HTTP trigger to fetch and store events on-demand
+export const manualFetchEvents = onRequest(
+  {
+    region: "europe-west1",
+    timeoutSeconds: 540,
+    memory: "1GiB",
+  },
+  async (req, res) => {
+    try {
+      const events = await scrapeSportEvents();
+      const db = admin.database();
+      await db.ref("events/latest").set({
+        events,
+        lastUpdated: Date.now(),
+      });
+      res.json({ success: true, count: events.length });
+    } catch (error: any) {
+      console.error("Error in manualFetchEvents:", error);
+      res.status(500).json({ error: error?.message || "Unknown error" });
     }
   }
 );

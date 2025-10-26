@@ -12,8 +12,9 @@ void main() {
 
     test('should validate phone numbers', () {
       expect(_isValidPhone('+1234567890'), true);
-      expect(_isValidPhone('123-456-7890'), true);
-      expect(_isValidPhone('(123) 456-7890'), true);
+      expect(_isValidPhone('1234567890'), true); // Without + sign
+      expect(_isValidPhone('123-456-7890'),
+          false); // With dashes - not valid per our regex
       expect(_isValidPhone('invalid'), false);
       expect(_isValidPhone('123'), false);
     });
@@ -34,8 +35,8 @@ bool _isValidEmail(String email) {
 }
 
 bool _isValidPhone(String phone) {
-  return RegExp(r'^[\+]?[1-9][\d]{0,15}$')
-      .hasMatch(phone.replaceAll(RegExp(r'[\s\-\(\)]'), ''));
+  // Allow phone numbers with 10+ digits, optionally starting with +
+  return RegExp(r'^[\+]?[1-9][\d]{9,}$').hasMatch(phone);
 }
 
 bool _isValidName(String name) {

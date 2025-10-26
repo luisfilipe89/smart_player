@@ -1,0 +1,5 @@
+node_modules/
+.gcloudignore
+__pycache__/
+*.pyc
+.DS_Store

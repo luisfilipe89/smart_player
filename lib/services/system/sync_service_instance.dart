@@ -22,6 +22,11 @@ class SyncServiceInstance {
   final StreamController<SyncStatus> _statusController =
       StreamController<SyncStatus>.broadcast();
   Timer? _retryTimer;
+  Timer? _healthLogTimer;
+
+  // Health monitoring configuration
+  static const Duration _stuckThreshold = Duration(minutes: 15);
+  static const Duration _healthLogInterval = Duration(minutes: 10);
 
   SyncServiceInstance(
     this._cloudGamesService,
@@ -43,10 +48,12 @@ class SyncServiceInstance {
     try {
       await _loadSyncQueue();
       _startRetryTimer();
+      _startHealthLogTimer();
     } catch (e) {
       // If SharedPreferences fails during initialization, start with empty queue
       _syncQueue.clear();
       _startRetryTimer();
+      _startHealthLogTimer();
     }
   }
 
@@ -155,6 +162,7 @@ class SyncServiceInstance {
   /// Dispose resources
   void dispose() {
     _retryTimer?.cancel();
+    _healthLogTimer?.cancel();
     _statusController.close();
   }
 
@@ -198,6 +206,14 @@ class SyncServiceInstance {
       if (_syncQueue.isNotEmpty) {
         retryFailedOperations();
       }
+    });
+  }
+
+  /// Start periodic health logs (non-invasive telemetry via debugPrint)
+  void _startHealthLogTimer() {
+    _healthLogTimer?.cancel();
+    _healthLogTimer = Timer.periodic(_healthLogInterval, (_) {
+      _logHealthSnapshot();
     });
   }
 
@@ -298,4 +314,96 @@ enum SyncStatus {
   synced,
   pending,
   failed,
+}
+
+/// Health snapshot for the sync system
+class SyncHealthSnapshot {
+  final int total;
+  final int pending;
+  final int failed;
+  final int stuck;
+  final Duration? oldestPendingAge;
+  final Map<String, int> byTypePending;
+  final Map<String, int> byTypeFailed;
+
+  const SyncHealthSnapshot({
+    required this.total,
+    required this.pending,
+    required this.failed,
+    required this.stuck,
+    required this.oldestPendingAge,
+    required this.byTypePending,
+    required this.byTypeFailed,
+  });
+}
+
+extension _SyncServiceHealth on SyncServiceInstance {
+  /// Returns a health snapshot of the current queue
+  SyncHealthSnapshot getHealthSnapshot() {
+    final now = DateTime.now();
+    int pending = 0;
+    int failed = 0;
+    int stuck = 0;
+    Duration? oldestPendingAge;
+    final Map<String, int> byTypePending = {};
+    final Map<String, int> byTypeFailed = {};
+
+    for (final op in _syncQueue) {
+      if (op.status == SyncServiceInstance._statusPending) {
+        pending++;
+        final age = now.difference(op.timestamp);
+        if (oldestPendingAge == null || age > oldestPendingAge) {
+          oldestPendingAge = age;
+        }
+        byTypePending.update(op.type, (v) => v + 1, ifAbsent: () => 1);
+        if (age > SyncServiceInstance._stuckThreshold) stuck++;
+      } else if (op.status == SyncServiceInstance._statusFailed) {
+        failed++;
+        byTypeFailed.update(op.type, (v) => v + 1, ifAbsent: () => 1);
+      }
+    }
+
+    return SyncHealthSnapshot(
+      total: _syncQueue.length,
+      pending: pending,
+      failed: failed,
+      stuck: stuck,
+      oldestPendingAge: oldestPendingAge,
+      byTypePending: byTypePending,
+      byTypeFailed: byTypeFailed,
+    );
+  }
+
+  /// Returns operations older than [_stuckThreshold]
+  List<SyncOperation> getStuckOperations() {
+    final now = DateTime.now();
+    return _syncQueue.where((op) {
+      if (op.status != SyncServiceInstance._statusPending) return false;
+      return now.difference(op.timestamp) > SyncServiceInstance._stuckThreshold;
+    }).toList(growable: false);
+  }
+
+  void _logHealthSnapshot() {
+    final snap = getHealthSnapshot();
+    if (snap.total == 0) return; // keep noise low
+    debugPrint(
+        '[SyncHealth] total=${snap.total} pending=${snap.pending} failed=${snap.failed} '
+        'stuck=${snap.stuck} oldestPendingAge=${snap.oldestPendingAge?.inMinutes}m');
+    if (snap.byTypePending.isNotEmpty) {
+      debugPrint('[SyncHealth] pendingByType=${snap.byTypePending}');
+    }
+    if (snap.byTypeFailed.isNotEmpty) {
+      debugPrint('[SyncHealth] failedByType=${snap.byTypeFailed}');
+    }
+    final stuckOps = getStuckOperations();
+    if (stuckOps.isNotEmpty) {
+      final sample = stuckOps.take(3).map((o) => {
+            'id': o.id,
+            'type': o.type,
+            'ageMin': DateTime.now().difference(o.timestamp).inMinutes,
+            'retries': o.retryCount,
+          });
+      debugPrint('[SyncHealth] stuckOps=${stuckOps.length} sample=$sample');
+    }
+  }
 }

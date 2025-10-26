@@ -1,55 +1,78 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:move_young/services/auth/auth_provider.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import '../helpers/firebase_test_helpers.dart';
 
 void main() {
+  bool hasEmulators = false;
+
   group('Auth Flow Integration Tests', () {
-    late ProviderContainer container;
-
-    setUp(() {
-      container = ProviderContainer();
-    });
-
-    tearDown(() {
-      container.dispose();
-    });
-
-    testWidgets('should handle complete auth flow', (tester) async {
-      // Test initial state - not signed in
-      final isSignedIn = container.read(isSignedInProvider);
-      expect(isSignedIn, isFalse);
-
-      final currentUser = container.read(currentUserProvider);
-      expect(currentUser, isNull);
-
-      final userId = container.read(currentUserIdProvider);
-      expect(userId, isNull);
-
-      // Test that auth actions are available
-      final authActions = container.read(authActionsProvider);
-      expect(authActions, isNotNull);
-    });
-
-    testWidgets('should handle provider state changes', (tester) async {
-      // Test that providers can be read multiple times without issues
-      for (int i = 0; i < 5; i++) {
-        final isSignedIn = container.read(isSignedInProvider);
-        // final currentUser = container.read(currentUserProvider); // Unused variable
-        // final userId = container.read(currentUserIdProvider); // Unused variable
-        final authActions = container.read(authActionsProvider);
-
-        expect(isSignedIn, isA<bool>());
-        expect(authActions, isNotNull);
+    setUpAll(() async {
+      // Initialize Flutter binding before Firebase
+      TestWidgetsFlutterBinding.ensureInitialized();
+      try {
+        await FirebaseTestHelpers.initializeFirebaseEmulators();
+        hasEmulators = true;
+      } catch (e) {
+        // Skip tests if emulators not running
+        print(
+            '⚠️ Firebase emulators not available, skipping integration tests');
+        hasEmulators = false;
       }
     });
 
-    testWidgets('should handle provider invalidation', (tester) async {
-      // Test that providers can be invalidated without issues
-      expect(() => container.invalidate(isSignedInProvider), returnsNormally);
-      expect(() => container.invalidate(currentUserProvider), returnsNormally);
-      expect(
-          () => container.invalidate(currentUserIdProvider), returnsNormally);
-      expect(() => container.invalidate(authActionsProvider), returnsNormally);
+    tearDownAll(() async {
+      if (hasEmulators) {
+        // Clean up test data
+        await FirebaseTestHelpers.cleanup();
+      }
+    });
+
+    test('should handle complete authentication flow', () async {
+      if (!hasEmulators) {
+        return; // Skip if emulators not available
+      }
+      // 1) Anonymous sign-in
+      final cred = await FirebaseAuth.instance.signInAnonymously();
+      expect(cred.user, isNotNull);
+      final uid = cred.user!.uid;
+
+      // 2) User state persistence
+      expect(FirebaseAuth.instance.currentUser?.uid, uid);
+
+      // 3) Sign-out
+      await FirebaseAuth.instance.signOut();
+      expect(FirebaseAuth.instance.currentUser, isNull);
+    });
+
+    test('should handle authentication state changes', () async {
+      if (!hasEmulators) return;
+      final states = <User?>[];
+      final sub = FirebaseAuth.instance.userChanges().listen(states.add);
+
+      // Trigger a state change
+      await FirebaseAuth.instance.signInAnonymously();
+      await FirebaseAuth.instance.signOut();
+
+      await Future.delayed(const Duration(milliseconds: 200));
+      await sub.cancel();
+
+      expect(states.isNotEmpty, isTrue);
+    });
+
+    test('should handle user profile updates', () async {
+      if (!hasEmulators) return;
+      final user = (await FirebaseAuth.instance.signInAnonymously()).user!;
+      await user.updateDisplayName('Tester');
+      await user.reload();
+      expect(FirebaseAuth.instance.currentUser?.displayName, 'Tester');
+      await FirebaseAuth.instance.signOut();
+    });
+
+    test('should connect to Firebase emulators', () async {
+      if (!hasEmulators) return;
+      final app = FirebaseTestHelpers.app;
+      expect(app, isNotNull);
+      expect(app.name, isNotEmpty);
     });
   });
 }

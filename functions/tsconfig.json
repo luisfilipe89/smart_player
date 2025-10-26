@@ -3,10 +3,12 @@
         "target": "es2018",
         "module": "commonjs",
         "lib": [
-            "es2018"
+            "es2018",
+            "dom"
         ],
         "declaration": true,
         "strict": false,
+        "skipLibCheck": true,
         "noImplicitAny": false,
         "strictNullChecks": false,
         "noImplicitThis": false,

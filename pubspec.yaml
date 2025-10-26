@@ -93,9 +93,10 @@ dev_dependencies:
   mockito: ^5.4.4
   
   # Testing infrastructure
-  golden_toolkit: ^0.15.0
   faker: ^2.1.0
   network_image_mock: ^2.1.1
+  sqflite_common_ffi: ^2.3.0
+  golden_toolkit: ^0.15.0
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

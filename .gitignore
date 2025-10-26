@@ -53,3 +53,11 @@ flutter_*.log
 flutter_*.png
 *_output*.txt
 analyzer_*.txt
+
+# Coverage reports
+coverage/
+*.lcov
+
+# Test outputs
+test/.test_coverage.dart.json
+test-results*.txt
