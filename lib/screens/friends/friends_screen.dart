@@ -168,9 +168,7 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen>
                             children: [
                               RefreshIndicator(
                                 onRefresh: () async {
-                                  // Trigger streams by a small delay
-                                  await Future.delayed(
-                                      const Duration(milliseconds: 400));
+                                  // Refresh data immediately
                                   ref.invalidate(watchFriendsListProvider);
                                 },
                                 child: _FriendsList(
@@ -178,8 +176,6 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen>
                               ),
                               RefreshIndicator(
                                 onRefresh: () async {
-                                  await Future.delayed(
-                                      const Duration(milliseconds: 400));
                                   ref.invalidate(
                                       watchFriendRequestsReceivedProvider);
                                 },

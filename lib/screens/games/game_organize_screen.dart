@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:easy_localization/easy_localization.dart';
@@ -8,10 +7,10 @@ import 'package:move_young/theme/_theme.dart';
 import 'package:move_young/services/auth/auth_provider.dart';
 import 'package:move_young/services/games/games_provider.dart';
 import 'package:move_young/services/games/cloud_games_provider.dart';
-import 'package:move_young/services/friends/friends_provider.dart';
 import 'package:move_young/services/external/weather_provider.dart';
 import 'package:move_young/services/external/overpass_provider.dart';
 import 'package:move_young/services/system/haptics_provider.dart';
+import 'package:move_young/widgets/friends/friend_picker_widget.dart';
 
 class GameOrganizeScreen extends ConsumerStatefulWidget {
   final Game? initialGame;
@@ -274,9 +273,6 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
   Future<void> _loadWeather() async {
     if (_selectedDate == null) return;
 
-    debugPrint(
-        '🌤️ Loading weather for date: ${_selectedDate!.toIso8601String().split('T')[0]}');
-
     try {
       final weatherActions = ref.read(weatherActionsProvider);
       if (weatherActions == null) {
@@ -293,12 +289,10 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
         longitude: 5.3037,
       );
 
-      debugPrint('🌤️ Weather data received: ${weatherData.length} hours');
       setState(() {
         _weatherData = weatherData;
       });
     } catch (e) {
-      debugPrint('🌤️ Weather loading error: $e');
       // Set default weather data on error
       setState(() {
         _weatherData = {};
@@ -578,12 +572,7 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
         players: [userId], // Creator is counted as the first player
       );
 
-      debugPrint('Creating game with data: ${game.toJson()}');
-      final createdId = await ref.read(gamesActionsProvider).createGame(game);
-      final effectiveGame =
-          game.id == createdId ? game : game.copyWith(id: createdId);
-
-      debugPrint('Game created and saved: ${effectiveGame.id}');
+      await ref.read(gamesActionsProvider).createGame(game);
 
       if (mounted) {
         ref.read(hapticsActionsProvider)?.lightImpact();
@@ -600,7 +589,7 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
             // invitePlayers would need to be implemented in cloudGamesActionsProvider
             // await ref.read(cloudGamesActionsProvider).invitePlayers(...);
           } catch (e) {
-            debugPrint('Failed to send invites: $e');
+            // Silent fail for invites
           }
         }
 
@@ -609,7 +598,6 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
         }
       }
     } catch (e) {
-      debugPrint('Game creation error: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -1125,7 +1113,6 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                               ],
                             ),
                           ),
-                          //const SizedBox(height: AppHeights.reg),
 
                           // Available Fields Section (only show if sport is selected)
                           if (_selectedSport != null) ...[
@@ -1290,7 +1277,6 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                             ),
 
                             // Date Selection Section (only show if field is selected)
-                            //const SizedBox(height: AppHeights.reg),
                             Transform.translate(
                               offset: const Offset(0, -8),
                               child: PanelHeader(
@@ -1359,7 +1345,6 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                                 ],
                               ),
                             ),
-                            //const SizedBox(height: AppHeights.huge),
                           ],
 
                           // Time Selection Section (only show if date is selected)
@@ -1501,7 +1486,7 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                             PanelHeader('invite_friends_label'.tr()),
                             Padding(
                               padding: AppPaddings.symmHorizontalReg,
-                              child: _FriendPicker(
+                              child: FriendPicker(
                                 currentUid:
                                     ref.read(currentUserIdProvider) ?? '',
                                 initiallySelected: _selectedFriendUids,
@@ -1578,7 +1563,6 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                               ),
                             ),
                           ),
-                          // Invite friends moved to Join a Game screen
                         ],
                       ),
                     ),
@@ -1606,92 +1590,5 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
           ..addAll(statuses.keys);
       });
     } catch (_) {}
-  }
-}
-
-class _FriendPicker extends ConsumerWidget {
-  final String currentUid;
-  final Set<String> initiallySelected;
-  final Set<String> lockedUids;
-  final void Function(String uid, bool selected) onToggle;
-
-  const _FriendPicker({
-    required this.currentUid,
-    required this.initiallySelected,
-    required this.lockedUids,
-    required this.onToggle,
-  });
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.white,
-        borderRadius: BorderRadius.circular(AppRadius.container),
-        boxShadow: AppShadows.md,
-      ),
-      child: ref.watch(watchFriendsListProvider).when(
-            data: (friendUids) {
-              if (friendUids.isEmpty) {
-                return Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Text('no_friends_to_invite'.tr(),
-                      style:
-                          AppTextStyles.small.copyWith(color: AppColors.grey)),
-                );
-              }
-              return ListView.separated(
-                shrinkWrap: true,
-                primary: false,
-                itemCount: friendUids.length,
-                separatorBuilder: (_, __) =>
-                    const Divider(height: 1, color: AppColors.lightgrey),
-                itemBuilder: (context, i) {
-                  final uid = friendUids[i];
-                  return FutureBuilder<Map<String, String?>>(
-                    future: ref
-                        .read(friendsActionsProvider)
-                        .fetchMinimalProfile(uid),
-                    builder: (context, snap) {
-                      final data = snap.data ??
-                          const {'displayName': 'User', 'photoURL': null};
-                      final name = data['displayName'] ?? 'User';
-                      final photo = data['photoURL'];
-                      final selected = initiallySelected.contains(uid);
-                      final locked = lockedUids.contains(uid);
-                      return ListTile(
-                        leading: CircleAvatar(
-                          backgroundColor: AppColors.superlightgrey,
-                          backgroundImage: (photo != null && photo.isNotEmpty)
-                              ? CachedNetworkImageProvider(photo)
-                              : null,
-                          child: (photo == null || photo.isEmpty)
-                              ? Text(
-                                  name.isNotEmpty ? name[0].toUpperCase() : '?')
-                              : null,
-                        ),
-                        title: Text(name,
-                            style: AppTextStyles.body.copyWith(
-                                color: locked ? AppColors.grey : null)),
-                        trailing: Checkbox(
-                          value: selected || locked,
-                          onChanged:
-                              locked ? null : (v) => onToggle(uid, v == true),
-                        ),
-                        onTap: locked ? null : () => onToggle(uid, !selected),
-                      );
-                    },
-                  );
-                },
-              );
-            },
-            loading: () => const Center(child: CircularProgressIndicator()),
-            error: (_, __) => Padding(
-              padding: const EdgeInsets.all(16),
-              child: Text('no_friends_to_invite'.tr(),
-                  style: AppTextStyles.small.copyWith(color: AppColors.grey)),
-            ),
-          ),
-    );
   }
 }

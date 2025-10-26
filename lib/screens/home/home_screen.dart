@@ -1045,7 +1045,6 @@ class _HomeImageTile extends StatelessWidget {
                           style: AppTextStyles.smallCardTitle,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis),
-                      //const SizedBox(height: 1),
                       Text(subtitle,
                           style: AppTextStyles.superSmall,
                           maxLines: 2,

@@ -139,15 +139,13 @@ class _MoveYoungAppState extends ConsumerState<MoveYoungApp>
       // Initialize SharedPreferences after first frame
       if (mounted) {
         await initializeSharedPreferences(ref);
-      }
-      // Wait another frame to be extra safe
-      Future.delayed(const Duration(milliseconds: 100), () {
+        // Mark as initialized after SharedPreferences is ready
         if (mounted) {
           setState(() {
             _isInitialized = true;
           });
         }
-      });
+      }
     });
   }
 
