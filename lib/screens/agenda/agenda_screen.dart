@@ -10,6 +10,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:move_young/models/external/event_model.dart';
 import 'package:move_young/services/load_events_from_json.dart';
+import 'package:move_young/services/events_service.dart';
 import 'package:move_young/theme/_theme.dart';
 
 class AgendaScreen extends ConsumerStatefulWidget {
@@ -22,6 +23,7 @@ class AgendaScreen extends ConsumerStatefulWidget {
 class _AgendaScreenState extends ConsumerState<AgendaScreen> {
   Set<String> _favoriteTitles = {};
   final TextEditingController _searchController = TextEditingController();
+  final EventsService _eventsService = EventsService();
 
   List<Event> allEvents = [];
   List<Event> filteredEvents = [];
@@ -30,6 +32,7 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
   bool _showRecurring = true;
   bool _showOneTime = true;
   Timer? _debounce;
+  bool _isRefreshing = false;
 
   @override
   void initState() {
@@ -64,6 +67,67 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
         .map((event) => event.imageUrl!)
         .toList();
     await ref.read(imageCacheServiceProvider).preloadImages(context, imageUrls);
+  }
+
+  Future<void> _manualRefreshEvents() async {
+    if (_isRefreshing) return;
+
+    setState(() {
+      _isRefreshing = true;
+    });
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('refreshing_events'.tr()),
+          duration: const Duration(seconds: 30),
+        ),
+      );
+    }
+
+    try {
+      final success = await _eventsService.triggerManualRefresh();
+
+      if (mounted) {
+        if (success) {
+          // Wait a moment for Firebase to update
+          await Future.delayed(const Duration(seconds: 2));
+
+          // Reload events from Firebase
+          await loadEvents();
+
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('refresh_success'.tr()),
+              backgroundColor: AppColors.green,
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('refresh_error'.tr()),
+              backgroundColor: AppColors.red,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('refresh_error'.tr()),
+            backgroundColor: AppColors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isRefreshing = false;
+        });
+      }
+    }
   }
 
   Future<void> _loadFavorites() async {
@@ -503,6 +567,19 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
       appBar: AppBar(
         leading: const AppBackButton(goHome: true),
         title: Text('agenda'.tr()),
+        actions: [
+          IconButton(
+            icon: _isRefreshing
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.refresh),
+            onPressed: _isRefreshing ? null : _manualRefreshEvents,
+            tooltip: 'refresh_events'.tr(),
+          ),
+        ],
       ),
       body: Padding(
         padding: AppPaddings.symmHorizontalReg,

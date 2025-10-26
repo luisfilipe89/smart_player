@@ -490,5 +490,9 @@
     "photo_permission_denied": "Toegang tot fotobibliotheek is vereist. Schakel dit in bij instellingen.",
     "location_permission_denied": "Locatietoegang is vereist. Schakel dit in bij instellingen.",
     "contacts_permission_denied": "Toegang tot contacten is vereist. Schakel dit in bij instellingen.",
-    "storage_permission_denied": "Opslagtoegang is vereist. Schakel dit in bij instellingen."
+    "storage_permission_denied": "Opslagtoegang is vereist. Schakel dit in bij instellingen.",
+    "refresh_events": "Evenementen Vernieuwen",
+    "refreshing_events": "Laatste evenementen ophalen...",
+    "refresh_success": "Evenementen bijgewerkt",
+    "refresh_error": "Evenementen vernieuwen mislukt"
 }

@@ -10,6 +10,8 @@ android {
     namespace = "com.example.sportappdenbosch"
     // Use compileSdk 36 as required by plugins (plugins require SDK 36)
     compileSdk = 36
+    // Use NDK 27 for compatibility with integration_test plugin
+    ndkVersion = "27.0.12077973"
 
     compileOptions {
         // Use Java 17 to eliminate Java 8 toolchain warnings

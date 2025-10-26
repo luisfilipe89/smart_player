@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/material.dart';
 import 'package:move_young/services/cache/image_cache_service_instance.dart';
 
 void main() {
@@ -38,38 +39,173 @@ void main() {
     });
 
     test('should create optimized image widget', () {
-      // Skip - requires platform channels (path_provider)
-      expect(true, true);
+      const imageUrl = 'https://example.com/image.jpg';
+
+      final widget = imageCacheService.getOptimizedImage(
+        imageUrl: imageUrl,
+        width: 200,
+        height: 200,
+      );
+
+      expect(widget, isNotNull);
+      expect(widget, isA<Widget>());
     });
 
     test('should handle infinite dimensions', () {
-      // Skip - requires platform channels (path_provider)
-      expect(true, true);
+      const imageUrl = 'https://example.com/image.jpg';
+
+      // Test with infinite width
+      final widget = imageCacheService.getOptimizedImage(
+        imageUrl: imageUrl,
+        width: double.infinity,
+        height: 100,
+      );
+
+      expect(widget, isNotNull);
+      expect(widget, isA<Widget>());
     });
 
     test('should handle null dimensions', () {
-      // Skip - requires platform channels (path_provider)
-      expect(true, true);
+      const imageUrl = 'https://example.com/image.jpg';
+
+      final widget = imageCacheService.getOptimizedImage(
+        imageUrl: imageUrl,
+        width: null,
+        height: null,
+      );
+
+      expect(widget, isNotNull);
+      expect(widget, isA<Widget>());
     });
 
     test('should use custom fit parameter', () {
-      // Skip - requires platform channels (path_provider)
-      expect(true, true);
+      const imageUrl = 'https://example.com/image.jpg';
+
+      final widget = imageCacheService.getOptimizedImage(
+        imageUrl: imageUrl,
+        width: 200,
+        height: 200,
+        fit: BoxFit.cover,
+      );
+
+      expect(widget, isNotNull);
+
+      // Test other fit options
+      final widget2 = imageCacheService.getOptimizedImage(
+        imageUrl: imageUrl,
+        width: 200,
+        height: 200,
+        fit: BoxFit.contain,
+      );
+
+      expect(widget2, isNotNull);
     });
 
     test('should support different box fit options', () {
-      // Skip - requires platform channels (path_provider)
-      expect(true, true);
+      const imageUrl = 'https://example.com/image.jpg';
+      final fits = [
+        BoxFit.cover,
+        BoxFit.contain,
+        BoxFit.fill,
+        BoxFit.fitWidth,
+        BoxFit.fitHeight,
+        BoxFit.none,
+        BoxFit.scaleDown,
+      ];
+
+      for (final fit in fits) {
+        final widget = imageCacheService.getOptimizedImage(
+          imageUrl: imageUrl,
+          width: 200,
+          height: 200,
+          fit: fit,
+        );
+        expect(widget, isNotNull);
+      }
     });
 
     test('should handle various fade in durations', () {
-      // Skip - requires platform channels (path_provider)
-      expect(true, true);
+      const imageUrl = 'https://example.com/image.jpg';
+
+      final widget1 = imageCacheService.getOptimizedImage(
+        imageUrl: imageUrl,
+        width: 200,
+        height: 200,
+        fadeInDuration: Duration(milliseconds: 100),
+      );
+
+      expect(widget1, isNotNull);
+
+      final widget2 = imageCacheService.getOptimizedImage(
+        imageUrl: imageUrl,
+        width: 200,
+        height: 200,
+        fadeInDuration: Duration(milliseconds: 500),
+      );
+
+      expect(widget2, isNotNull);
     });
 
     test('should support different fade curves', () {
-      // Skip - requires platform channels (path_provider)
-      expect(true, true);
+      const imageUrl = 'https://example.com/image.jpg';
+
+      final curves = [
+        Curves.easeIn,
+        Curves.easeOut,
+        Curves.easeInOut,
+        Curves.linear,
+        Curves.elasticIn,
+        Curves.elasticOut,
+      ];
+
+      for (final curve in curves) {
+        final widget = imageCacheService.getOptimizedImage(
+          imageUrl: imageUrl,
+          width: 200,
+          height: 200,
+          fadeInCurve: curve,
+        );
+        expect(widget, isNotNull);
+      }
+    });
+
+    test('should create optimized avatar widget with null URL', () {
+      final widget = imageCacheService.getOptimizedAvatar(
+        imageUrl: null,
+        radius: 25,
+        fallbackText: 'AB',
+      );
+
+      expect(widget, isNotNull);
+      expect(widget, isA<Widget>());
+    });
+
+    test('should create optimized avatar widget with empty URL', () {
+      final widget = imageCacheService.getOptimizedAvatar(
+        imageUrl: '',
+        radius: 25,
+        fallbackText: 'CD',
+      );
+
+      expect(widget, isNotNull);
+      expect(widget, isA<Widget>());
+    });
+
+    test('should get cache statistics', () async {
+      await imageCacheService.initialize();
+
+      final stats = imageCacheService.getCacheStats();
+
+      expect(stats, isNotNull);
+      expect(stats, isA<Map<String, dynamic>>());
+      expect(stats['currentSize'], isNotNull);
+      expect(stats['maximumSize'], isNotNull);
+    });
+
+    test('should clear cache without errors', () async {
+      await imageCacheService.initialize();
+
+      expect(() => imageCacheService.clearCache(), returnsNormally);
     });
   });
 }

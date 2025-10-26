@@ -1,4 +1,6 @@
 import 'package:mockito/mockito.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:move_young/services/auth/auth_service_instance.dart';
 import 'package:move_young/services/games/games_service_instance.dart';
 import 'package:move_young/services/friends/friends_service_instance.dart';
@@ -26,6 +28,12 @@ class MockConnectivityServiceInstance extends Mock
 // Mock Notification Service
 class MockNotificationServiceInstance extends Mock
     implements NotificationServiceInstance {}
+
+// Mock Connectivity (from connectivity_plus package)
+class MockConnectivity extends Mock implements Connectivity {}
+
+// Mock Share (from share_plus package)
+class MockShare extends Mock implements Share {}
 
 // Mock Service Factory
 class MockServiceFactory {

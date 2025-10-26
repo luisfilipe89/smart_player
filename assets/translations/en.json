@@ -490,5 +490,9 @@
     "photo_permission_denied": "Photo library access is required. Please enable it in settings.",
     "location_permission_denied": "Location access is required. Please enable it in settings.",
     "contacts_permission_denied": "Contacts access is required. Please enable it in settings.",
-    "storage_permission_denied": "Storage access is required. Please enable it in settings."
+    "storage_permission_denied": "Storage access is required. Please enable it in settings.",
+    "refresh_events": "Refresh Events",
+    "refreshing_events": "Fetching latest events...",
+    "refresh_success": "Events updated successfully",
+    "refresh_error": "Failed to refresh events"
 }
