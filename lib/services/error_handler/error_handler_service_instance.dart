@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:easy_localization/easy_localization.dart';
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
+import '../../utils/service_error.dart';
 
 /// Instance-based ErrorHandlerService for use with Riverpod dependency injection
 class ErrorHandlerServiceInstance {
@@ -11,10 +13,14 @@ class ErrorHandlerServiceInstance {
       debugPrint('Stack trace: $stackTrace');
     }
 
-    // In production, you would send this to a crash reporting service
-    // like Firebase Crashlytics, Sentry, etc.
+    // Send to Crashlytics in production
     if (kReleaseMode) {
-      // TODO: Send to crash reporting service
+      FirebaseCrashlytics.instance.recordError(
+        error,
+        stackTrace,
+        reason: 'Non-fatal error',
+        fatal: false,
+      );
     }
   }
 
@@ -22,7 +28,9 @@ class ErrorHandlerServiceInstance {
   void showError(BuildContext context, dynamic error, {VoidCallback? onRetry}) {
     String errorMessage = 'error_generic'.tr();
 
-    if (error is Exception) {
+    if (error is ServiceException) {
+      errorMessage = error.message;
+    } else if (error is Exception) {
       errorMessage = error.toString();
     } else if (error is String) {
       errorMessage = error;

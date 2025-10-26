@@ -1,3 +1,4 @@
+import 'dart:developer' as developer;
 import 'package:integration_test/integration_test.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -18,7 +19,7 @@ void main() {
           options: DefaultFirebaseOptions.currentPlatform,
         );
       } catch (e) {
-        print('Firebase initialization: $e');
+        developer.log('Firebase initialization: $e');
       }
     });
 
@@ -55,7 +56,7 @@ void main() {
 
         await gameRef.remove();
       } catch (e) {
-        print('Offline persistence test failed: $e');
+        developer.log('Offline persistence test failed: $e');
       }
     });
 
@@ -79,7 +80,7 @@ void main() {
 
         await gameRef.remove();
       } catch (e) {
-        print('Sync test failed: $e');
+        developer.log('Sync test failed: $e');
       }
     });
 
@@ -112,7 +113,7 @@ void main() {
         await game1.remove();
         await game2.remove();
       } catch (e) {
-        print('Operation queue test failed: $e');
+        developer.log('Operation queue test failed: $e');
       }
     });
 

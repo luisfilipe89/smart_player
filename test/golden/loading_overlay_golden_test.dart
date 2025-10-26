@@ -1,13 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:golden_toolkit/golden_toolkit.dart';
+import 'package:alchemist/alchemist.dart';
 import 'package:move_young/widgets/common/loading_overlay.dart';
 import '../helpers/golden_test_helper.dart';
 
 void main() {
   group('LoadingOverlay Golden Tests', () {
-    testGoldens('LoadingOverlay with spinner only', (tester) async {
-      await tester.pumpWidgetBuilder(
+    goldenTest(
+      'LoadingOverlay with spinner only',
+      fileName: 'loading_overlay_spinner_only',
+      builder: () => goldenMaterialAppWrapper(
         const LoadingOverlay(
           isLoading: true,
           child: Scaffold(
@@ -16,15 +18,13 @@ void main() {
             ),
           ),
         ),
-        surfaceSize: goldenSurfaceSize(),
-        wrapper: goldenMaterialAppWrapper,
-      );
+      ),
+    );
 
-      await screenMatchesGolden(tester, 'loading_overlay_spinner_only');
-    });
-
-    testGoldens('LoadingOverlay with message', (tester) async {
-      await tester.pumpWidgetBuilder(
+    goldenTest(
+      'LoadingOverlay with message',
+      fileName: 'loading_overlay_with_message',
+      builder: () => goldenMaterialAppWrapper(
         const LoadingOverlay(
           isLoading: true,
           message: 'Loading data...',
@@ -34,15 +34,13 @@ void main() {
             ),
           ),
         ),
-        surfaceSize: goldenSurfaceSize(),
-        wrapper: goldenMaterialAppWrapper,
-      );
+      ),
+    );
 
-      await screenMatchesGolden(tester, 'loading_overlay_with_message');
-    });
-
-    testGoldens('LoadingOverlay with long message', (tester) async {
-      await tester.pumpWidgetBuilder(
+    goldenTest(
+      'LoadingOverlay with long message',
+      fileName: 'loading_overlay_long_message',
+      builder: () => goldenMaterialAppWrapper(
         const LoadingOverlay(
           isLoading: true,
           message: 'Synchronizing with server, please wait...',
@@ -52,15 +50,13 @@ void main() {
             ),
           ),
         ),
-        surfaceSize: goldenSurfaceSize(),
-        wrapper: goldenMaterialAppWrapper,
-      );
+      ),
+    );
 
-      await screenMatchesGolden(tester, 'loading_overlay_long_message');
-    });
-
-    testGoldens('LoadingOverlay when not loading', (tester) async {
-      await tester.pumpWidgetBuilder(
+    goldenTest(
+      'LoadingOverlay when not loading',
+      fileName: 'loading_overlay_not_loading',
+      builder: () => goldenMaterialAppWrapper(
         const LoadingOverlay(
           isLoading: false,
           child: Scaffold(
@@ -69,11 +65,7 @@ void main() {
             ),
           ),
         ),
-        surfaceSize: goldenSurfaceSize(),
-        wrapper: goldenMaterialAppWrapper,
-      );
-
-      await screenMatchesGolden(tester, 'loading_overlay_not_loading');
-    });
+      ),
+    );
   });
 }

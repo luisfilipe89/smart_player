@@ -2,7 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/material.dart';
 import 'error_handler_service_instance.dart';
 
-/// ErrorHandlerService provider with dependency injection
+/// Error handler service provider with dependency injection
 final errorHandlerServiceProvider =
     Provider<ErrorHandlerServiceInstance>((ref) {
   return ErrorHandlerServiceInstance();

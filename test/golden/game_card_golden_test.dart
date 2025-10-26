@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:golden_toolkit/golden_toolkit.dart';
+import 'package:alchemist/alchemist.dart';
 import '../helpers/golden_test_helper.dart';
 
 /// Simplified game card widget for golden tests
@@ -53,7 +53,7 @@ class TestGameCard extends StatelessWidget {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
-                    color: color.withOpacity(0.1),
+                    color: color.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
@@ -93,8 +93,10 @@ class TestGameCard extends StatelessWidget {
 
 void main() {
   group('Game Card Golden Tests', () {
-    testGoldens('game card with soccer match', (tester) async {
-      await tester.pumpWidgetBuilder(
+    goldenTest(
+      'game card with soccer match',
+      fileName: 'game_card_soccer_test',
+      builder: () => goldenMaterialAppWrapper(
         const TestGameCard(
           title: 'Soccer Game',
           location: 'Central Park Field',
@@ -103,15 +105,13 @@ void main() {
           icon: Icons.sports_soccer,
           color: Colors.green,
         ),
-        surfaceSize: goldenSurfaceSize(),
-        wrapper: (child) => MaterialApp(home: Scaffold(body: child)),
-      );
+      ),
+    );
 
-      await screenMatchesGolden(tester, 'game_card_soccer');
-    });
-
-    testGoldens('game card with basketball game', (tester) async {
-      await tester.pumpWidgetBuilder(
+    goldenTest(
+      'game card with basketball game',
+      fileName: 'game_card_basketball_test',
+      builder: () => goldenMaterialAppWrapper(
         const TestGameCard(
           title: 'Basketball Game',
           location: 'Sports Complex',
@@ -120,11 +120,7 @@ void main() {
           icon: Icons.sports_basketball,
           color: Colors.orange,
         ),
-        surfaceSize: goldenSurfaceSize(),
-        wrapper: (child) => MaterialApp(home: Scaffold(body: child)),
-      );
-
-      await screenMatchesGolden(tester, 'game_card_basketball');
-    });
+      ),
+    );
   });
 }

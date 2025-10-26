@@ -5,7 +5,7 @@ import 'package:move_young/models/core/game.dart';
 import 'package:move_young/db/db_paths.dart';
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:move_young/models/infrastructure/cached_data.dart';
-import '../notifications/notification_service_instance.dart';
+import '../notifications/notification_interface.dart';
 
 // Background processing will be added when needed
 
@@ -13,7 +13,7 @@ import '../notifications/notification_service_instance.dart';
 class CloudGamesServiceInstance {
   final FirebaseDatabase _database;
   final FirebaseAuth _auth;
-  final NotificationServiceInstance _notificationService;
+  final INotificationService _notificationService;
 
   // Query limits to prevent memory issues
   static const int _maxJoinableGames = 50;

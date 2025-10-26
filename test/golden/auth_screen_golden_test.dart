@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:golden_toolkit/golden_toolkit.dart';
-import '../helpers/golden_test_helper.dart';
+import 'package:alchemist/alchemist.dart';
 
 /// Simplified auth screen widget for golden tests
 class TestAuthScreen extends StatelessWidget {
@@ -78,14 +77,10 @@ class TestAuthScreen extends StatelessWidget {
 
 void main() {
   group('Auth Screen Golden Tests', () {
-    testGoldens('Auth screen login layout', (tester) async {
-      await tester.pumpWidgetBuilder(
-        const TestAuthScreen(),
-        surfaceSize: goldenSurfaceSize(),
-        wrapper: (child) => MaterialApp(home: child),
-      );
-
-      await screenMatchesGolden(tester, 'auth_screen_login');
-    });
+    goldenTest(
+      'Auth screen login layout',
+      fileName: 'auth_screen_login',
+      builder: () => MaterialApp(home: const TestAuthScreen()),
+    );
   });
 }

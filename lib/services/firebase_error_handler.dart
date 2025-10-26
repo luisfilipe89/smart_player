@@ -1,4 +1,6 @@
 import 'package:easy_localization/easy_localization.dart';
+import '../utils/service_error.dart';
+import 'package:firebase_core/firebase_core.dart';
 
 /// Centralized Firebase error handling service
 class FirebaseErrorHandler {
@@ -89,5 +91,55 @@ class FirebaseErrorHandler {
       return match?.group(1);
     }
     return null;
+  }
+
+  /// Convert Firebase errors to typed ServiceException
+  static ServiceException toServiceException(dynamic error) {
+    if (error is FirebaseException) {
+      if (isPermissionDenied(error)) {
+        return PermissionException(
+          'firebase_permission_denied'.tr(),
+          code: error.code,
+          originalError: error,
+        );
+      }
+      if (isNetworkError(error)) {
+        return NetworkException(
+          'network_error'.tr(),
+          code: error.code,
+          originalError: error,
+        );
+      }
+      if (isAuthError(error)) {
+        return AuthException(
+          'auth_error'.tr(),
+          code: error.code,
+          originalError: error,
+        );
+      }
+      return ServiceException(
+        error.message ?? 'error_generic'.tr(),
+        code: error.code,
+        originalError: error,
+      );
+    }
+    if (error is ServiceException) {
+      return error;
+    }
+    return ServiceException(
+      'error_generic'.tr(),
+      originalError: error,
+    );
+  }
+
+  /// Extract user-friendly error message from any error type
+  static String getUserMessage(dynamic error) {
+    if (error is ServiceException) {
+      return error.message;
+    }
+    if (error is FirebaseException) {
+      return getErrorMessage(error);
+    }
+    return error?.toString() ?? 'error_generic'.tr();
   }
 }

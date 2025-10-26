@@ -1,5 +1,4 @@
 // lib/providers/services/haptics_provider.dart
-import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'haptics_service_instance.dart';
 import 'package:move_young/providers/infrastructure/shared_preferences_provider.dart';

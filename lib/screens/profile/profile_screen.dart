@@ -1,25 +1,20 @@
-// lib/screens/maps/profile_screen.dart
 import 'dart:io';
 
 import 'package:easy_localization/easy_localization.dart';
 import 'package:firebase_storage/firebase_storage.dart';
-import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/material.dart';
-// import 'package:flutter/services.dart'; // Unused import
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
-// import 'package:cached_network_image/cached_network_image.dart'; // Unused import
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:image_cropper/image_cropper.dart';
-// import 'package:permission_handler/permission_handler.dart'; // Unused import
+import 'package:permission_handler/permission_handler.dart';
 import 'package:move_young/services/auth/auth_provider.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:move_young/services/system/profile_settings_provider.dart';
 import 'package:move_young/utils/profanity.dart';
 import 'package:move_young/utils/country_data.dart';
 import 'package:move_young/theme/app_back_button.dart';
 import 'package:move_young/theme/tokens.dart';
-import 'package:move_young/db/db_paths.dart';
-// import 'package:move_young/widgets/upload_progress_indicator.dart'; // Unused import
-// import 'package:move_young/utils/retry_helpers.dart'; // Unused import
 
 class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
@@ -32,10 +27,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _phoneController = TextEditingController();
   DateTime? _dateOfBirth;
+  bool _saving = false;
   bool _uploading = false;
-  double _uploadProgress = 0.0;
-  File? _pendingUploadFile;
   File? _localImage;
+  bool _loadingDetails = true;
+  bool _changingEmail = false;
   // Phone country code (default Netherlands)
   String _selectedCountryCode = '+31';
   List<Map<String, String>> get _countryList => CountryData.list;
@@ -43,10 +39,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   @override
   void initState() {
     super.initState();
-    // Load user details when the screen initializes
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _loadUserDetails();
-    });
+    _loadUserDetails();
   }
 
   @override
@@ -57,30 +50,36 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   }
 
   Future<void> _loadUserDetails() async {
-    // Watch current user reactively
     final user = ref.read(currentUserProvider).value;
     if (user != null) {
       _nameController.text = user.displayName ?? '';
-
-      // Load additional profile details from database
-      try {
-        final uid = user.uid;
-        final snapshot =
-            await FirebaseDatabase.instance.ref(DbPaths.userProfile(uid)).get();
-        if (snapshot.exists && snapshot.value is Map) {
-          final data = Map<String, dynamic>.from(snapshot.value as Map);
-          _phoneController.text = data['phone'] ?? '';
-          _selectedCountryCode = data['phoneCode'] ?? '+31';
-          if (data['dateOfBirth'] != null) {
-            _dateOfBirth =
-                DateTime.fromMillisecondsSinceEpoch(data['dateOfBirth']);
-          }
-        }
-      } catch (e) {
-        // Handle error silently for now
-        debugPrint('Error loading profile details: $e');
-      }
     }
+
+    final uid = ref.read(currentUserIdProvider);
+    if (uid == null) {
+      if (mounted) setState(() => _loadingDetails = false);
+      return;
+    }
+
+    try {
+      final data =
+          await ref.read(profileSettingsActionsProvider).getUserProfile(uid);
+      if (data != null) {
+        final dob = int.tryParse('${data['dateOfBirth'] ?? ''}');
+        if (dob != null && dob > 0) {
+          _dateOfBirth = DateTime.fromMillisecondsSinceEpoch(dob);
+        }
+        final phone = (data['phone'] ?? '').toString();
+        if (phone.isNotEmpty) {
+          _phoneController.text = phone;
+        }
+        final code = (data['phoneCode'] ?? '').toString();
+        if (code.isNotEmpty) {
+          _selectedCountryCode = code;
+        }
+      }
+    } catch (_) {}
+    if (mounted) setState(() => _loadingDetails = false);
   }
 
   Future<void> _saveProfile() async {
@@ -103,22 +102,18 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       }
       return;
     }
-
+    setState(() => _saving = true);
     try {
-      // Update display name using auth actions
       await ref.read(authActionsProvider).updateProfile(displayName: newName);
-
-      // Update additional profile details in database
       final uid = ref.read(currentUserIdProvider);
       if (uid != null) {
-        await FirebaseDatabase.instance.ref(DbPaths.userProfile(uid)).update({
+        await ref.read(profileSettingsActionsProvider).updateUserProfile(uid, {
           'dateOfBirth': _dateOfBirth?.millisecondsSinceEpoch ?? '',
           'phone': _phoneController.text.trim(),
           'phoneCode': _selectedCountryCode,
           'updatedAt': DateTime.now().millisecondsSinceEpoch,
         });
       }
-
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Profile updated')),
@@ -126,516 +121,1059 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: ${e.toString()}')),
+        SnackBar(
+            content: Text('Error: ${e.toString()}'),
+            backgroundColor: Colors.red),
       );
-    }
-  }
-
-  Future<void> _pickImage() async {
-    try {
-      final ImagePicker picker = ImagePicker();
-      final XFile? image = await picker.pickImage(source: ImageSource.gallery);
-
-      if (image != null) {
-        final File imageFile = File(image.path);
-        await _cropImage(imageFile);
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error picking image: $e')),
-        );
-      }
-    }
-  }
-
-  Future<void> _cropImage(File imageFile) async {
-    try {
-      final CroppedFile? croppedFile = await ImageCropper().cropImage(
-        sourcePath: imageFile.path,
-        aspectRatio: const CropAspectRatio(ratioX: 1, ratioY: 1),
-        uiSettings: [
-          AndroidUiSettings(
-            toolbarTitle: 'Crop Image',
-            toolbarColor: AppColors.primary,
-            toolbarWidgetColor: Colors.white,
-            initAspectRatio: CropAspectRatioPreset.square,
-            lockAspectRatio: true,
-          ),
-        ],
-      );
-
-      if (croppedFile != null) {
-        setState(() {
-          _localImage = File(croppedFile.path);
-          _pendingUploadFile = File(croppedFile.path);
-        });
-        await _uploadImage();
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error cropping image: $e')),
-        );
-      }
-    }
-  }
-
-  Future<void> _uploadImage() async {
-    if (_pendingUploadFile == null) return;
-
-    setState(() {
-      _uploading = true;
-      _uploadProgress = 0.0;
-    });
-
-    try {
-      final uid = ref.read(currentUserIdProvider);
-      if (uid == null) throw Exception('User not authenticated');
-
-      final storageRef = FirebaseStorage.instance
-          .ref()
-          .child('profile_images')
-          .child('$uid.jpg');
-
-      final uploadTask = storageRef.putFile(_pendingUploadFile!);
-
-      uploadTask.snapshotEvents.listen((TaskSnapshot snapshot) {
-        setState(() {
-          _uploadProgress = snapshot.bytesTransferred / snapshot.totalBytes;
-        });
-      });
-
-      await uploadTask;
-      final downloadUrl = await storageRef.getDownloadURL();
-
-      // Update user profile with new photo URL
-      await ref.read(authActionsProvider).updateProfile(photoURL: downloadUrl);
-
-      // Update database with new photo URL
-      await FirebaseDatabase.instance.ref(DbPaths.userProfile(uid)).update({
-        'photoURL': downloadUrl,
-        'updatedAt': DateTime.now().millisecondsSinceEpoch,
-      });
-
-      setState(() {
-        _uploading = false;
-        _pendingUploadFile = null;
-      });
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Profile picture updated')),
-        );
-      }
-    } catch (e) {
-      setState(() {
-        _uploading = false;
-      });
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error uploading image: $e')),
-        );
-      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    // Watch current user reactively
-    final userAsync = ref.watch(currentUserProvider);
+    final user = ref.watch(currentUserProvider).value;
+    final photoUrl = user?.photoURL;
+    final email = user?.email ?? '';
 
     return Scaffold(
-      backgroundColor: AppColors.white,
-      extendBodyBehindAppBar: true,
       appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
         leadingWidth: 48,
-        leading: const AppBackButton(goHome: true),
+        leading: const AppBackButton(),
         title: Text('profile'.tr()),
+        backgroundColor: AppColors.white,
+        elevation: 0,
         actions: [
           TextButton(
-            onPressed: _saveProfile,
-            child: Text(
-              'save'.tr(),
-              style: const TextStyle(
-                color: AppColors.primary,
-                fontWeight: FontWeight.bold,
-              ),
+            onPressed: _saving ? null : _saveProfile,
+            style: TextButton.styleFrom(
+              foregroundColor: AppColors.primary,
+              disabledForegroundColor: AppColors.grey,
             ),
-          ),
+            child: _saving
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2))
+                : const Text('Save'),
+          )
         ],
       ),
-      body: userAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, stack) => Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text('Error loading profile: $error'),
-              ElevatedButton(
-                onPressed: () => ref.invalidate(currentUserProvider),
-                child: const Text('Retry'),
-              ),
-            ],
-          ),
-        ),
-        data: (user) {
-          if (user == null) {
-            return const Center(child: Text('Please sign in to view profile'));
-          }
-
-          return _buildProfileContent(user);
-        },
-      ),
-    );
-  }
-
-  Widget _buildProfileContent(User user) {
-    return Column(
-      children: [
-        Container(
-          height: 120,
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [
-                AppColors.primary,
-                AppColors.primary.withValues(alpha: 0.8)
-              ],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-          ),
-        ),
-        Expanded(
-          child: Container(
-            decoration: const BoxDecoration(
-              color: AppColors.white,
-              borderRadius: BorderRadius.only(
-                topLeft: Radius.circular(24),
-                topRight: Radius.circular(24),
-              ),
-            ),
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+      body: SafeArea(
+        child: _loadingDetails
+            ? const Center(child: CircularProgressIndicator())
+            : ListView(
+                padding: AppPaddings.symmHorizontalReg.copyWith(
+                  top: AppSpacing.lg,
+                  bottom: AppSpacing.lg,
+                ),
                 children: [
-                  // Profile picture section
-                  Center(
-                    child: Stack(
+                  // Profile Photo Section
+                  _buildSectionCard(
+                    child: Column(
                       children: [
-                        CircleAvatar(
-                          radius: 60,
-                          backgroundColor:
-                              AppColors.primary.withValues(alpha: 0.1),
-                          backgroundImage: _localImage != null
-                              ? FileImage(_localImage!)
-                              : user.photoURL != null
-                                  ? NetworkImage(user.photoURL!)
-                                      as ImageProvider
-                                  : null,
-                          child: _localImage == null && user.photoURL == null
-                              ? Icon(
-                                  Icons.person,
-                                  size: 60,
-                                  color:
-                                      AppColors.primary.withValues(alpha: 0.5),
-                                )
-                              : null,
-                        ),
-                        if (_uploading)
-                          Positioned.fill(
-                            child: CircularProgressIndicator(
-                              value: _uploadProgress,
-                              backgroundColor: Colors.grey[300],
-                              valueColor: const AlwaysStoppedAnimation<Color>(
-                                  AppColors.primary),
-                            ),
+                        Center(
+                          child: Stack(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(3),
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                      color: AppColors.primary, width: 2),
+                                ),
+                                child: CircleAvatar(
+                                  radius: 52,
+                                  backgroundColor: AppColors.lightgrey,
+                                  backgroundImage: _localImage != null
+                                      ? FileImage(_localImage!)
+                                      : (photoUrl != null
+                                          ? CachedNetworkImageProvider(photoUrl)
+                                          : null) as ImageProvider?,
+                                  child:
+                                      (photoUrl == null && _localImage == null)
+                                          ? const Icon(Icons.person,
+                                              size: 52, color: Colors.white)
+                                          : null,
+                                ),
+                              ),
+                              Positioned(
+                                right: 0,
+                                bottom: 0,
+                                child: Material(
+                                  color: AppColors.white,
+                                  shape: const CircleBorder(),
+                                  elevation: 2,
+                                  child: IconButton(
+                                    icon: _uploading
+                                        ? const SizedBox(
+                                            width: 18,
+                                            height: 18,
+                                            child: CircularProgressIndicator(
+                                                strokeWidth: 2))
+                                        : const Icon(Icons.camera_alt,
+                                            size: 20),
+                                    onPressed:
+                                        _uploading ? null : _pickAndUploadPhoto,
+                                    tooltip: 'profile_change_photo'.tr(),
+                                  ),
+                                ),
+                              )
+                            ],
                           ),
-                        Positioned(
-                          bottom: 0,
-                          right: 0,
-                          child: Container(
-                            decoration: BoxDecoration(
-                              color: AppColors.primary,
-                              shape: BoxShape.circle,
-                              border: Border.all(color: Colors.white, width: 2),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.lg),
+
+                  // Basic Details Section
+                  _buildSectionCard(
+                    title: 'profile_basic_details'.tr(),
+                    child: Column(
+                      children: [
+                        _buildInputTile(
+                          icon: Icons.person_outline,
+                          title: 'profile_display_name'.tr(),
+                          child: TextField(
+                            controller: _nameController,
+                            textInputAction: TextInputAction.done,
+                            inputFormatters: [
+                              LengthLimitingTextInputFormatter(24),
+                            ],
+                            decoration: const InputDecoration(
+                              border: InputBorder.none,
+                              hintText: 'Enter your nickname or first name',
                             ),
-                            child: IconButton(
-                              icon: const Icon(Icons.camera_alt,
-                                  color: Colors.white),
-                              onPressed: _pickImage,
+                            onSubmitted: (_) => _saveProfile(),
+                          ),
+                        ),
+                        const Divider(height: 1, color: AppColors.lightgrey),
+                        _buildInputTile(
+                          icon: Icons.cake_outlined,
+                          title: 'profile_date_of_birth'.tr(),
+                          child: InkWell(
+                            onTap: _pickDob,
+                            child: Text(
+                              _dateOfBirth == null
+                                  ? 'profile_pick_date'.tr()
+                                  : DateFormat.yMMMMd().format(_dateOfBirth!),
+                              style: AppTextStyles.body.copyWith(
+                                color: _dateOfBirth == null
+                                    ? AppColors.grey
+                                    : AppColors.text,
+                              ),
                             ),
                           ),
                         ),
                       ],
                     ),
                   ),
-                  const SizedBox(height: 32),
-
-                  // Profile form
-                  Text(
-                    'profile_information'.tr(),
-                    style: const TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-
-                  // Name field
-                  TextFormField(
-                    controller: _nameController,
-                    decoration: InputDecoration(
-                      labelText: 'name'.tr(),
-                      prefixIcon: const Icon(Icons.person),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-
-                  // Email field (read-only)
-                  TextFormField(
-                    initialValue: user.email ?? '',
-                    readOnly: true,
-                    decoration: InputDecoration(
-                      labelText: 'email'.tr(),
-                      prefixIcon: const Icon(Icons.email),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      suffixIcon: IconButton(
-                        icon: const Icon(Icons.edit),
-                        onPressed: () {
-                          _showEmailChangeDialog();
-                        },
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-
-                  // Phone field
-                  Row(
-                    children: [
-                      Expanded(
-                        flex: 1,
-                        child: DropdownButtonFormField<String>(
-                          initialValue: _selectedCountryCode,
-                          decoration: InputDecoration(
-                            labelText: 'country'.tr(),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
+                  const SizedBox(height: AppSpacing.lg),
+                  // Phone number section
+                  _buildSectionCard(
+                    title: 'profile_phone_title'.tr(),
+                    child: Column(
+                      children: [
+                        ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: const Icon(Icons.phone_outlined,
+                              color: AppColors.primary),
+                          title: SizedBox(
+                            height: 40,
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                InkWell(
+                                  onTap: _pickCountryWithFlags,
+                                  borderRadius: BorderRadius.circular(6),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 12, vertical: 8),
+                                    decoration: BoxDecoration(
+                                      border: Border.all(
+                                          color: AppColors.lightgrey),
+                                      borderRadius: BorderRadius.circular(20),
+                                      color: AppColors.white,
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                              horizontal: 6, vertical: 2),
+                                          decoration: BoxDecoration(
+                                            color: AppColors.superlightgrey,
+                                            borderRadius:
+                                                BorderRadius.circular(4),
+                                          ),
+                                          child: Text(
+                                            _selectedIsoForCode(
+                                                _selectedCountryCode),
+                                            style: AppTextStyles.small,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Text(_selectedCountryCode,
+                                            style: AppTextStyles.body),
+                                        const SizedBox(width: 4),
+                                        const Icon(Icons.arrow_drop_down,
+                                            size: 18),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: TextField(
+                                    controller: _phoneController,
+                                    keyboardType: TextInputType.phone,
+                                    maxLength: 20,
+                                    inputFormatters: [
+                                      LengthLimitingTextInputFormatter(20),
+                                    ],
+                                    decoration: InputDecoration(
+                                      border: InputBorder.none,
+                                      hintText: 'profile_phone_hint'.tr(),
+                                    ),
+                                    onSubmitted: (_) => _saveProfile(),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                          items: _countryList.map((country) {
-                            return DropdownMenuItem<String>(
-                              value: country['code'],
-                              child: Text(country['code']!),
-                            );
-                          }).toList(),
-                          onChanged: (value) {
-                            setState(() {
-                              _selectedCountryCode = value ?? '+31';
-                            });
-                          },
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        flex: 2,
-                        child: TextFormField(
-                          controller: _phoneController,
-                          keyboardType: TextInputType.phone,
-                          decoration: InputDecoration(
-                            labelText: 'phone'.tr(),
-                            prefixIcon: const Icon(Icons.phone),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
+                          subtitle: Text(
+                            'profile_phone_subtitle'.tr(),
+                            style: AppTextStyles.smallMuted,
                           ),
                         ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-
-                  // Date of birth field
-                  InkWell(
-                    onTap: _selectDateOfBirth,
-                    child: InputDecorator(
-                      decoration: InputDecoration(
-                        labelText: 'date_of_birth'.tr(),
-                        prefixIcon: const Icon(Icons.calendar_today),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      child: Text(
-                        _dateOfBirth != null
-                            ? DateFormat('dd/MM/yyyy').format(_dateOfBirth!)
-                            : 'select_date'.tr(),
-                      ),
+                      ],
                     ),
                   ),
-                  const SizedBox(height: 32),
+                  const SizedBox(height: AppSpacing.lg),
 
-                  // Sign out button
-                  SizedBox(
-                    width: double.infinity,
-                    child: OutlinedButton.icon(
-                      onPressed: () => _showSignOutDialog(),
-                      icon: const Icon(Icons.logout, color: Colors.red),
-                      label: Text(
-                        'sign_out'.tr(),
-                        style: const TextStyle(color: Colors.red),
-                      ),
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
+                  // Account Section
+                  if (email.isNotEmpty)
+                    _buildSectionCard(
+                      title: 'profile_account'.tr(),
+                      child: Column(
+                        children: [
+                          _buildLinkTile(
+                            icon: Icons.email_outlined,
+                            title: 'profile_email'.tr(),
+                            subtitle: email,
+                            onTap: _changingEmail ? null : _changeEmail,
+                            trailing: _changingEmail
+                                ? const SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(
+                                        strokeWidth: 2),
+                                  )
+                                : const Icon(Icons.edit, size: 16),
+                          ),
+                          const Divider(height: 1, color: AppColors.lightgrey),
+                          _buildLinkTile(
+                            icon: Icons.lock_outline,
+                            title: 'profile_change_password'.tr(),
+                            onTap: () => _showChangePasswordDialog(),
+                            trailingChevron: true,
+                          ),
+                        ],
                       ),
                     ),
+                ],
+              ),
+      ),
+    );
+  }
+
+  Widget _buildSectionCard({String? title, required Widget child}) {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.white,
+        borderRadius: BorderRadius.circular(AppRadius.container),
+        boxShadow: AppShadows.md,
+      ),
+      padding: AppPaddings.allBig,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (title != null) ...[
+            Text(title, style: AppTextStyles.h3),
+            const SizedBox(height: AppSpacing.sm),
+          ],
+          child,
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLinkTile({
+    required IconData icon,
+    required String title,
+    String? subtitle,
+    required VoidCallback? onTap,
+    Widget? trailing,
+    bool trailingChevron = false,
+  }) {
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      leading: Icon(icon, color: AppColors.primary),
+      title: Text(title, style: AppTextStyles.body),
+      subtitle:
+          subtitle != null ? Text(subtitle, style: AppTextStyles.small) : null,
+      trailing: trailing ??
+          (trailingChevron ? const Icon(Icons.chevron_right) : null),
+      onTap: onTap,
+    );
+  }
+
+  Widget _buildInputTile({
+    required IconData icon,
+    required String title,
+    required Widget child,
+  }) {
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      visualDensity: const VisualDensity(vertical: -3),
+      leading: Icon(icon, color: AppColors.primary),
+      title: Text(title, style: AppTextStyles.body),
+      subtitle: child,
+    );
+  }
+
+  void _showChangePasswordDialog() {
+    final currentPasswordController = TextEditingController();
+    final newPasswordController = TextEditingController();
+    final confirmPasswordController = TextEditingController();
+    bool showCurrentPassword = false;
+    bool showNewPassword = false;
+    bool showConfirmPassword = false;
+    bool isSubmitting = false;
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: Text('profile_change_password'.tr()),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: currentPasswordController,
+                  obscureText: !showCurrentPassword,
+                  maxLength: 128,
+                  inputFormatters: [
+                    LengthLimitingTextInputFormatter(128),
+                  ],
+                  decoration: InputDecoration(
+                    labelText: 'settings_current_password'.tr(),
+                    border: const OutlineInputBorder(),
+                    suffixIcon: IconButton(
+                      icon: Icon(showCurrentPassword
+                          ? Icons.visibility
+                          : Icons.visibility_off),
+                      onPressed: () => setState(
+                          () => showCurrentPassword = !showCurrentPassword),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.md),
+                TextField(
+                  controller: newPasswordController,
+                  obscureText: !showNewPassword,
+                  maxLength: 128,
+                  inputFormatters: [
+                    LengthLimitingTextInputFormatter(128),
+                  ],
+                  decoration: InputDecoration(
+                    labelText: 'settings_new_password'.tr(),
+                    border: const OutlineInputBorder(),
+                    suffixIcon: IconButton(
+                      icon: Icon(showNewPassword
+                          ? Icons.visibility
+                          : Icons.visibility_off),
+                      onPressed: () =>
+                          setState(() => showNewPassword = !showNewPassword),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.md),
+                TextField(
+                  controller: confirmPasswordController,
+                  obscureText: !showConfirmPassword,
+                  decoration: InputDecoration(
+                    labelText: 'settings_confirm_password'.tr(),
+                    border: const OutlineInputBorder(),
+                    suffixIcon: IconButton(
+                      icon: Icon(showConfirmPassword
+                          ? Icons.visibility
+                          : Icons.visibility_off),
+                      onPressed: () => setState(
+                          () => showConfirmPassword = !showConfirmPassword),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed:
+                  isSubmitting ? null : () => Navigator.of(context).pop(),
+              child: Text('cancel'.tr()),
+            ),
+            ElevatedButton(
+              onPressed: isSubmitting
+                  ? null
+                  : () async {
+                      final current = currentPasswordController.text.trim();
+                      final newPassword = newPasswordController.text.trim();
+                      final confirm = confirmPasswordController.text.trim();
+
+                      if (current.isEmpty ||
+                          newPassword.isEmpty ||
+                          confirm.isEmpty) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('form_fill_all_fields'.tr())),
+                        );
+                        return;
+                      }
+
+                      if (newPassword != confirm) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                              content:
+                                  Text('settings_passwords_no_match'.tr())),
+                        );
+                        return;
+                      }
+
+                      if (newPassword.length < 6) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                              content: Text('auth_password_too_short'.tr())),
+                        );
+                        return;
+                      }
+
+                      setState(() => isSubmitting = true);
+                      final navigator = Navigator.of(context);
+                      final messenger = ScaffoldMessenger.of(context);
+                      try {
+                        await ref
+                            .read(authActionsProvider)
+                            .changePassword(current, newPassword);
+                        if (!context.mounted) return;
+                        navigator.pop();
+                        messenger.showSnackBar(
+                          SnackBar(
+                            content: Text('settings_password_changed'.tr()),
+                            backgroundColor: AppColors.primary,
+                          ),
+                        );
+                      } catch (e) {
+                        if (!context.mounted) return;
+                        String errorMessage = e
+                            .toString()
+                            .replaceFirst(RegExp(r'^Exception:\s*'), '');
+
+                        // Handle specific authentication errors
+                        if (errorMessage
+                            .contains('Current password is incorrect')) {
+                          errorMessage = 'settings_wrong_current_password'.tr();
+                        } else if (errorMessage
+                            .contains('Please sign in again')) {
+                          errorMessage = 'settings_requires_recent_login'.tr();
+                        } else if (errorMessage.contains('too weak')) {
+                          errorMessage = 'settings_weak_password'.tr();
+                        } else if (errorMessage
+                            .contains('No email on account')) {
+                          errorMessage = 'settings_no_email_on_account'.tr();
+                        }
+
+                        messenger.showSnackBar(
+                          SnackBar(
+                            content: Text(errorMessage),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                      } finally {
+                        if (context.mounted) {
+                          setState(() => isSubmitting = false);
+                        }
+                      }
+                    },
+              child: isSubmitting
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : Text('profile_change_password'.tr()),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _pickAndUploadPhoto() async {
+    try {
+      final messenger = ScaffoldMessenger.of(context);
+      final source = await showModalBottomSheet<dynamic>(
+            context: context,
+            builder: (ctx) => SafeArea(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  ListTile(
+                    leading: const Icon(Icons.photo_library_outlined),
+                    title: Text('profile_gallery'.tr()),
+                    onTap: () => Navigator.pop(ctx, ImageSource.gallery),
+                  ),
+                  const Divider(height: 1),
+                  ListTile(
+                    leading: const Icon(Icons.photo_camera_outlined),
+                    title: Text('profile_camera'.tr()),
+                    onTap: () => Navigator.pop(ctx, ImageSource.camera),
+                  ),
+                  Builder(
+                    builder: (_) {
+                      final user = ref.read(currentUserProvider).value;
+                      if (_localImage != null || (user?.photoURL != null)) {
+                        return const Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Divider(height: 1),
+                            ListTile(
+                              leading: Icon(Icons.delete_outline),
+                              title: Text('Remove photo'),
+                              onTap: null,
+                            ),
+                          ],
+                        );
+                      }
+                      return const SizedBox.shrink();
+                    },
                   ),
                 ],
               ),
             ),
+          ) ??
+          ImageSource.gallery;
+
+      if (source == 'remove') {
+        await _removePhoto();
+        return;
+      }
+
+      // Request permissions based on source
+      if (source == ImageSource.camera) {
+        final cameraStatus = await Permission.camera.request();
+        if (!cameraStatus.isGranted) {
+          if (!mounted) return;
+          messenger.showSnackBar(
+            SnackBar(content: Text('permission_camera_denied'.tr())),
+          );
+          return;
+        }
+      } else {
+        final storageStatus = await Permission.storage.request();
+        if (!storageStatus.isGranted) {
+          if (!mounted) return;
+          messenger.showSnackBar(
+            SnackBar(content: Text('permission_storage_denied'.tr())),
+          );
+          return;
+        }
+      }
+
+      final picker = ImagePicker();
+      final XFile? picked = await picker.pickImage(
+        source: source as ImageSource,
+        maxWidth: 2000,
+        maxHeight: 2000,
+        imageQuality: 95,
+      );
+      if (picked == null) return;
+
+      // Check file size (max 5MB)
+      const int maxImageSizeBytes = 5 * 1024 * 1024; // 5MB
+      final fileSize = await File(picked.path).length();
+      if (fileSize > maxImageSizeBytes) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Image too large. Maximum size: 5MB'),
+              backgroundColor: AppColors.red,
+            ),
+          );
+        }
+        return;
+      }
+
+      final CroppedFile? cropped = await ImageCropper().cropImage(
+        sourcePath: picked.path,
+        aspectRatio: const CropAspectRatio(ratioX: 1, ratioY: 1),
+        uiSettings: [
+          AndroidUiSettings(
+            toolbarTitle: 'Crop',
+            toolbarColor: AppColors.primary,
+            toolbarWidgetColor: Colors.white,
+            lockAspectRatio: true,
+            hideBottomControls: false,
+            showCropGrid: true,
           ),
-        ),
-      ],
-    );
-  }
+          IOSUiSettings(
+            title: 'Crop',
+            aspectRatioLockEnabled: true,
+            rotateButtonsHidden: false,
+            rotateClockwiseButtonHidden: false,
+            resetButtonHidden: false,
+          ),
+        ],
+        compressFormat: ImageCompressFormat.jpg,
+        compressQuality: 90,
+      );
 
-  Future<void> _selectDateOfBirth() async {
-    final DateTime? picked = await showDatePicker(
-      context: context,
-      initialDate: _dateOfBirth ??
-          DateTime.now().subtract(const Duration(days: 365 * 18)),
-      firstDate: DateTime(1900),
-      lastDate: DateTime.now(),
-    );
+      if (cropped == null) return;
 
-    if (picked != null && picked != _dateOfBirth) {
       setState(() {
-        _dateOfBirth = picked;
+        _localImage = File(cropped.path);
+        _uploading = true;
       });
+
+      final uid = ref.read(currentUserIdProvider);
+      if (uid == null) throw Exception('Not signed in');
+
+      final storageRef =
+          FirebaseStorage.instance.ref().child('users/$uid/profile.jpg');
+      final file = File(cropped.path);
+      final task = await storageRef.putFile(
+          file, SettableMetadata(contentType: 'image/jpeg'));
+      String downloadUrl;
+      try {
+        downloadUrl = await task.ref.getDownloadURL();
+      } catch (_) {
+        await Future.delayed(const Duration(milliseconds: 300));
+        downloadUrl = await task.ref.getDownloadURL();
+      }
+
+      await ref.read(authActionsProvider).updateProfile(photoURL: downloadUrl);
+
+      if (!mounted) return;
+      setState(() => _uploading = false);
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Photo updated')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _uploading = false);
+      final messenger = ScaffoldMessenger.of(context);
+      messenger.showSnackBar(
+        SnackBar(
+            content: Text('Error: ${e.toString()}'),
+            backgroundColor: Colors.red),
+      );
     }
   }
 
-  void _showSignOutDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('sign_out'.tr()),
-        content: Text('are_you_sure_sign_out'.tr()),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: Text('cancel'.tr()),
-          ),
-          TextButton(
-            onPressed: () async {
-              Navigator.of(context).pop();
-              try {
-                await ref.read(authActionsProvider).signOut();
-                if (mounted && context.mounted) {
-                  Navigator.of(context).pushReplacementNamed('/auth');
-                }
-              } catch (e) {
-                if (mounted && context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Error signing out: $e')),
-                  );
-                }
-              }
-            },
-            child: Text(
-              'sign_out'.tr(),
-              style: const TextStyle(color: Colors.red),
-            ),
-          ),
-        ],
-      ),
-    );
+  Future<void> _removePhoto() async {
+    try {
+      setState(() => _uploading = true);
+      final uid = ref.read(currentUserIdProvider);
+      if (uid != null) {
+        final ref =
+            FirebaseStorage.instance.ref().child('users/$uid/profile.jpg');
+        try {
+          await ref.delete();
+        } catch (_) {
+          // ignore if not found
+        }
+      }
+      await ref.read(authActionsProvider).updateProfile(photoURL: '');
+      if (!mounted) return;
+      setState(() {
+        _localImage = null;
+        _uploading = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Photo removed')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _uploading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+            content: Text('Error: ${e.toString()}'),
+            backgroundColor: Colors.red),
+      );
+    }
   }
 
-  void _showEmailChangeDialog() {
-    final TextEditingController emailController = TextEditingController();
+  Future<void> _changeEmail() async {
+    final currentEmail = ref.read(currentUserProvider).value?.email ?? '';
+    if (currentEmail.isEmpty) return;
 
-    showDialog(
+    final bool hasPassword = ref.read(authActionsProvider).hasPasswordProvider;
+    final newEmailController = TextEditingController(text: currentEmail);
+    final currentPasswordController = TextEditingController();
+    bool showPassword = false;
+    bool isSubmitting = false;
+
+    final submitted = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Change Email'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text(
-                'Enter your new email address. A verification email will be sent.'),
-            const SizedBox(height: 16),
-            TextField(
-              controller: emailController,
-              keyboardType: TextInputType.emailAddress,
-              decoration: const InputDecoration(
-                labelText: 'New Email',
-                hintText: 'Enter new email address',
-                border: OutlineInputBorder(),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: Text('profile_change_email'.tr()),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'profile_change_email_description'.tr(),
+                  style: AppTextStyles.small,
+                ),
+                const SizedBox(height: AppSpacing.md),
+                if (hasPassword) ...[
+                  TextField(
+                    controller: currentPasswordController,
+                    obscureText: !showPassword,
+                    decoration: InputDecoration(
+                      labelText: 'settings_current_password'.tr(),
+                      border: const OutlineInputBorder(),
+                      suffixIcon: IconButton(
+                        icon: Icon(
+                          showPassword
+                              ? Icons.visibility
+                              : Icons.visibility_off,
+                        ),
+                        onPressed: () => setState(() {
+                          showPassword = !showPassword;
+                        }),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                ] else ...[
+                  Text(
+                    'settings_google_account_hint'.tr(),
+                    style: AppTextStyles.smallMuted,
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                ],
+                TextField(
+                  controller: newEmailController,
+                  keyboardType: TextInputType.emailAddress,
+                  decoration: InputDecoration(
+                    labelText: 'profile_new_email'.tr(),
+                    border: const OutlineInputBorder(),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            if (!hasPassword)
+              TextButton(
+                onPressed: isSubmitting
+                    ? null
+                    : () async {
+                        // Allow social users to set a password via reset email
+                        try {
+                          final messenger = ScaffoldMessenger.of(context);
+                          setState(() => isSubmitting = true);
+                          await ref
+                              .read(authActionsProvider)
+                              .sendPasswordResetEmail(currentEmail);
+                          if (!context.mounted) return;
+                          messenger.showSnackBar(
+                            SnackBar(
+                              content: Text('settings_reset_email_sent'.tr()),
+                              backgroundColor: AppColors.primary,
+                            ),
+                          );
+                        } catch (e) {
+                          if (!context.mounted) return;
+                          final msg = e
+                              .toString()
+                              .replaceFirst(RegExp(r'^Exception:\s*'), '');
+                          final messenger = ScaffoldMessenger.of(context);
+                          messenger.showSnackBar(
+                            SnackBar(
+                                content: Text(msg),
+                                backgroundColor: Colors.red),
+                          );
+                        } finally {
+                          if (context.mounted) {
+                            setState(() => isSubmitting = false);
+                          }
+                        }
+                      },
+                child: Text('settings_send_reset_email'.tr()),
               ),
+            TextButton(
+              onPressed:
+                  isSubmitting ? null : () => Navigator.of(context).pop(false),
+              child: Text('cancel'.tr()),
+            ),
+            ElevatedButton(
+              onPressed: isSubmitting
+                  ? null
+                  : () async {
+                      final messenger = ScaffoldMessenger.of(context);
+                      final navigator = Navigator.of(context);
+                      final newEmail = newEmailController.text.trim();
+                      if (newEmail.isEmpty || newEmail == currentEmail) {
+                        messenger.showSnackBar(
+                          SnackBar(content: Text('auth_email_invalid'.tr())),
+                        );
+                        return;
+                      }
+
+                      setState(() => isSubmitting = true);
+                      try {
+                        if (hasPassword) {
+                          final currentPw =
+                              currentPasswordController.text.trim();
+                          if (currentPw.isEmpty) {
+                            messenger.showSnackBar(
+                              SnackBar(
+                                  content: Text('form_fill_all_fields'.tr())),
+                            );
+                            setState(() => isSubmitting = false);
+                            return;
+                          }
+                          await ref.read(authActionsProvider).changeEmail(
+                                currentPassword: currentPw,
+                                newEmail: newEmail,
+                              );
+                        } else {
+                          await ref
+                              .read(authActionsProvider)
+                              .updateEmail(newEmail);
+                        }
+
+                        if (!context.mounted) return;
+                        navigator.pop(true);
+                        messenger.showSnackBar(
+                          SnackBar(
+                            content: Text('profile_email_changed'.tr()),
+                            backgroundColor: AppColors.primary,
+                          ),
+                        );
+                      } catch (e) {
+                        if (!context.mounted) return;
+                        String errorMessage = e
+                            .toString()
+                            .replaceFirst(RegExp(r'^Exception:\s*'), '');
+
+                        if (errorMessage.contains('Invalid email')) {
+                          errorMessage = 'auth_email_invalid'.tr();
+                        } else if (errorMessage.contains('already in use')) {
+                          errorMessage = 'error_email_in_use'.tr();
+                        } else if (errorMessage
+                            .contains('Current password is incorrect')) {
+                          errorMessage = 'settings_wrong_current_password'.tr();
+                        } else if (errorMessage
+                            .contains('Please sign in again')) {
+                          errorMessage = 'settings_requires_recent_login'.tr();
+                        }
+
+                        messenger.showSnackBar(
+                          SnackBar(
+                            content: Text(errorMessage),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                      } finally {
+                        if (context.mounted) {
+                          setState(() => isSubmitting = false);
+                        }
+                      }
+                    },
+              child: isSubmitting
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : Text('profile_change_email'.tr()),
             ),
           ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              final newEmail = emailController.text.trim();
-              if (newEmail.isEmpty) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                      content: Text('Please enter a valid email address')),
-                );
-                return;
-              }
-
-              Navigator.pop(context);
-              await _changeEmail(newEmail);
-            },
-            child: const Text('Change Email'),
-          ),
-        ],
       ),
     );
+
+    if (submitted == true) {
+      setState(() => _changingEmail = false);
+    }
   }
 
-  Future<void> _changeEmail(String newEmail) async {
-    try {
-      final authActions = ref.read(authActionsProvider);
-      await authActions.updateEmail(newEmail);
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Verification email sent to $newEmail'),
-            backgroundColor: Colors.green,
+  Future<void> _pickDob() async {
+    final now = DateTime.now();
+    final initial = _dateOfBirth ?? DateTime(now.year - 18, now.month, now.day);
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initial,
+      firstDate: DateTime(1900),
+      lastDate: now,
+      helpText: 'profile_date_of_birth'.tr(),
+      builder: (context, child) {
+        // Force a neutral theme to avoid any pinkish accent from platform/theme
+        final theme = Theme.of(context);
+        return Theme(
+          data: theme.copyWith(
+            colorScheme: theme.colorScheme.copyWith(
+              primary: AppColors.primary,
+              onPrimary: Colors.white,
+              surface: AppColors.white,
+              onSurface: AppColors.text,
+            ),
+            dialogTheme: DialogThemeData(
+              backgroundColor: AppColors.white,
+            ),
           ),
+          child: child ?? const SizedBox.shrink(),
         );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to change email: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+      },
+    );
+    if (picked != null) {
+      setState(() => _dateOfBirth = picked);
     }
+  }
+
+  String _selectedIsoForCode(String code) {
+    final match = _countryList.firstWhere(
+      (c) => c['code'] == code,
+      orElse: () => const {'iso': 'NL'},
+    );
+    return match['iso'] ?? 'NL';
+  }
+
+  void _pickCountryWithFlags() {
+    showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) {
+        String query = '';
+        final controller = TextEditingController();
+        List<Map<String, String>> sortNumerically(
+            List<Map<String, String>> src) {
+          final copy = [...src];
+          copy.sort((a, b) {
+            final ai = int.tryParse((a['code'] ?? '').replaceAll('+', '')) ?? 0;
+            final bi = int.tryParse((b['code'] ?? '').replaceAll('+', '')) ?? 0;
+            return ai.compareTo(bi);
+          });
+          return copy;
+        }
+
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            final filtered = sortNumerically(_countryList).where((c) {
+              if (query.isEmpty) return true;
+              final q = query.toLowerCase();
+              return (c['name'] ?? '').toLowerCase().contains(q) ||
+                  (c['iso'] ?? '').toLowerCase().contains(q) ||
+                  (c['code'] ?? '').toLowerCase().contains(q);
+            }).toList();
+            return SafeArea(
+              child: Padding(
+                padding: EdgeInsets.only(
+                  bottom: MediaQuery.of(ctx).viewInsets.bottom,
+                ),
+                child: SizedBox(
+                  height: MediaQuery.of(ctx).size.height * 0.75,
+                  child: Column(
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                        child: TextField(
+                          controller: controller,
+                          onChanged: (v) => setSheetState(() => query = v),
+                          decoration: InputDecoration(
+                            hintText: 'Search country or code',
+                            prefixIcon: const Icon(Icons.search),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 10),
+                          ),
+                        ),
+                      ),
+                      const Divider(height: 1, color: AppColors.lightgrey),
+                      Expanded(
+                        child: ListView.builder(
+                          itemCount: filtered.length,
+                          itemBuilder: (context, i) {
+                            final c = filtered[i];
+                            final selected = c['code'] == _selectedCountryCode;
+                            return InkWell(
+                              onTap: () => Navigator.pop(ctx, c['code']),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 16, vertical: 12),
+                                decoration: const BoxDecoration(
+                                  border: Border(
+                                      bottom: BorderSide(
+                                          color: AppColors.lightgrey,
+                                          width: 0.5)),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 8, vertical: 4),
+                                      decoration: BoxDecoration(
+                                        color: AppColors.superlightgrey,
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: Text(c['iso'] ?? '',
+                                          style: AppTextStyles.small),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(c['name'] ?? '',
+                                              style: AppTextStyles.body),
+                                          const SizedBox(height: 2),
+                                          Text(c['code'] ?? '',
+                                              style: AppTextStyles.smallMuted),
+                                        ],
+                                      ),
+                                    ),
+                                    if (selected)
+                                      const Icon(Icons.check_circle,
+                                          color: AppColors.primary),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    ).then((val) {
+      if (val != null) setState(() => _selectedCountryCode = val);
+    });
   }
 }

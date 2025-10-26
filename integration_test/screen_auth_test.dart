@@ -1,3 +1,4 @@
+import 'dart:developer' as developer;
 import 'package:integration_test/integration_test.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -14,7 +15,7 @@ void main() {
           options: DefaultFirebaseOptions.currentPlatform,
         );
       } catch (e) {
-        print('Firebase initialization: $e');
+        developer.log('Firebase initialization: $e');
       }
     });
 
@@ -36,7 +37,7 @@ void main() {
 
         await FirebaseAuth.instance.signOut();
       } catch (e) {
-        print('Anonymous sign-in test failed: $e');
+        developer.log('Anonymous sign-in test failed: $e');
       }
     });
 
@@ -48,7 +49,7 @@ void main() {
         await FirebaseAuth.instance.signOut();
         expect(FirebaseAuth.instance.currentUser, isNull);
       } catch (e) {
-        print('Sign out test failed: $e');
+        developer.log('Sign out test failed: $e');
       }
     });
 
@@ -62,7 +63,7 @@ void main() {
         await FirebaseAuth.instance.signOut();
         expect(FirebaseAuth.instance.currentUser, isNull);
       } catch (e) {
-        print('Session persistence test failed: $e');
+        developer.log('Session persistence test failed: $e');
       }
     });
 
@@ -81,7 +82,7 @@ void main() {
 
         await FirebaseAuth.instance.signOut();
       } catch (e) {
-        print('Multiple users test failed: $e');
+        developer.log('Multiple users test failed: $e');
       }
     });
 

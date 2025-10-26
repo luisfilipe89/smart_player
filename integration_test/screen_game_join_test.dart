@@ -1,3 +1,4 @@
+import 'dart:developer' as developer;
 import 'package:integration_test/integration_test.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -19,7 +20,7 @@ void main() {
           options: DefaultFirebaseOptions.currentPlatform,
         );
       } catch (e) {
-        print('Firebase initialization: $e');
+        developer.log('Firebase initialization: $e');
       }
     });
 
@@ -73,7 +74,7 @@ void main() {
         expect(gameData['currentPlayers'], 1);
         expect(List.from(gameData['players']), contains(testUserId));
       } catch (e) {
-        print('Join game test failed: $e');
+        developer.log('Join game test failed: $e');
       }
     });
 
@@ -102,7 +103,7 @@ void main() {
         expect(gameData['currentPlayers'], 0);
         expect(List.from(gameData['players']), isEmpty);
       } catch (e) {
-        print('Leave game test failed: $e');
+        developer.log('Leave game test failed: $e');
       }
     });
 
@@ -122,7 +123,7 @@ void main() {
         expect(gameData['currentPlayers'], 10);
         expect(gameData['maxPlayers'], 10);
       } catch (e) {
-        print('Full game test failed: $e');
+        developer.log('Full game test failed: $e');
       }
     });
 

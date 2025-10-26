@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:golden_toolkit/golden_toolkit.dart';
+import 'package:alchemist/alchemist.dart';
 import '../helpers/golden_test_helper.dart';
 
 /// Test wrapper for OfflineBanner - simplified without connectivity
@@ -56,8 +56,10 @@ class TestOfflineBanner extends StatelessWidget {
 
 void main() {
   group('OfflineBanner Golden Tests', () {
-    testGoldens('OfflineBanner shows online state (green)', (tester) async {
-      await tester.pumpWidgetBuilder(
+    goldenTest(
+      'OfflineBanner shows online state (green)',
+      fileName: 'offline_banner_online',
+      builder: () => goldenMaterialAppWrapper(
         const TestOfflineBanner(
           isConnected: true,
           child: Scaffold(
@@ -66,15 +68,13 @@ void main() {
             ),
           ),
         ),
-        surfaceSize: goldenSurfaceSize(),
-        wrapper: goldenMaterialAppWrapper,
-      );
+      ),
+    );
 
-      await screenMatchesGolden(tester, 'offline_banner_online');
-    });
-
-    testGoldens('OfflineBanner shows offline state (red)', (tester) async {
-      await tester.pumpWidgetBuilder(
+    goldenTest(
+      'OfflineBanner shows offline state (red)',
+      fileName: 'offline_banner_offline',
+      builder: () => goldenMaterialAppWrapper(
         const TestOfflineBanner(
           isConnected: false,
           child: Scaffold(
@@ -83,11 +83,7 @@ void main() {
             ),
           ),
         ),
-        surfaceSize: goldenSurfaceSize(),
-        wrapper: goldenMaterialAppWrapper,
-      );
-
-      await screenMatchesGolden(tester, 'offline_banner_offline');
-    });
+      ),
+    );
   });
 }

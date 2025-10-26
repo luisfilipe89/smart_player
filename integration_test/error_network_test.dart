@@ -1,3 +1,4 @@
+import 'dart:developer' as developer;
 import 'package:integration_test/integration_test.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -18,7 +19,7 @@ void main() {
           options: DefaultFirebaseOptions.currentPlatform,
         );
       } catch (e) {
-        print('Firebase initialization: $e');
+        developer.log('Firebase initialization: $e');
       }
     });
 
@@ -57,7 +58,7 @@ void main() {
           expect(e, isNotNull);
         }
       } catch (e) {
-        print('Timeout handling test failed: $e');
+        developer.log('Timeout handling test failed: $e');
       }
     });
 
@@ -89,7 +90,7 @@ void main() {
         expect(success, isTrue);
         expect(attempts, greaterThan(0));
       } catch (e) {
-        print('Retry mechanism test failed: $e');
+        developer.log('Retry mechanism test failed: $e');
       }
     });
 
@@ -102,10 +103,10 @@ void main() {
           await ref.set({'test': 'data'});
         } catch (e) {
           expect(e, isNotNull);
-          print('Expected error caught: $e');
+          developer.log('Expected error caught: $e');
         }
       } catch (e) {
-        print('Error message display test failed: $e');
+        developer.log('Error message display test failed: $e');
       }
     });
 
@@ -128,7 +129,7 @@ void main() {
 
         await gameRef.remove();
       } catch (e) {
-        print('Partial operations test failed: $e');
+        developer.log('Partial operations test failed: $e');
       }
     });
 

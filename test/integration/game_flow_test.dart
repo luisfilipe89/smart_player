@@ -1,3 +1,4 @@
+import 'dart:developer' as developer;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_database/firebase_database.dart';
@@ -19,7 +20,7 @@ void main() {
         hasEmulators = true;
       } catch (e) {
         // Skip tests if emulators not running
-        print(
+        developer.log(
             '⚠️ Firebase emulators not available, skipping integration tests');
         hasEmulators = false;
       }

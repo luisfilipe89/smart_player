@@ -83,7 +83,7 @@ class AuthActions {
 
   AuthActions(this._authService);
 
-  Future<UserCredential?> signInAnonymously() =>
+  Future<UserCredential> signInAnonymously() =>
       _authService.signInAnonymously();
   Future<UserCredential?> signInWithGoogle() => _authService.signInWithGoogle();
   Future<UserCredential> signInWithEmailAndPassword(
@@ -98,4 +98,17 @@ class AuthActions {
   Future<void> updateEmail(String newEmail) =>
       _authService.updateEmail(newEmail);
   Future<bool> deleteAccount() => _authService.deleteAccount();
+  Future<void> changePassword(String currentPassword, String newPassword) =>
+      _authService.changePassword(currentPassword, newPassword);
+  Future<void> sendPasswordResetEmail(String email) =>
+      _authService.sendPasswordResetEmail(email);
+  Future<void> changeEmail({
+    required String currentPassword,
+    required String newEmail,
+  }) =>
+      _authService.changeEmail(
+        currentPassword: currentPassword,
+        newEmail: newEmail,
+      );
+  bool get hasPasswordProvider => _authService.hasPasswordProvider;
 }

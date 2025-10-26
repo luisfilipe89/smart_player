@@ -1,3 +1,4 @@
+import 'dart:developer' as developer;
 import 'package:integration_test/integration_test.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -18,7 +19,7 @@ void main() {
         );
       } catch (e) {
         // Firebase already initialized
-        print('Firebase initialization: $e');
+        developer.log('Firebase initialization: $e');
       }
     });
 
@@ -56,7 +57,7 @@ void main() {
         // Cleanup
         await requestRef.remove();
       } catch (e) {
-        print('Note: Friend request structure may differ: $e');
+        developer.log('Note: Friend request structure may differ: $e');
       }
     });
 
@@ -91,7 +92,7 @@ void main() {
         // Cleanup
         await receivedRequestRef.child(receivedRequestKey).remove();
       } catch (e) {
-        print('Note: Friend request acceptance flow may differ: $e');
+        developer.log('Note: Friend request acceptance flow may differ: $e');
       }
     });
 
@@ -126,7 +127,7 @@ void main() {
         // Cleanup
         await receivedRequestRef.child(receivedRequestKey).remove();
       } catch (e) {
-        print('Note: Friend request rejection flow may differ: $e');
+        developer.log('Note: Friend request rejection flow may differ: $e');
       }
     });
 

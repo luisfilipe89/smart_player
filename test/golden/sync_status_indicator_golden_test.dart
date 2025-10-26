@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:golden_toolkit/golden_toolkit.dart';
+import 'package:alchemist/alchemist.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:move_young/widgets/common/sync_status_indicator.dart';
 import 'package:move_young/services/system/sync_provider.dart';
@@ -63,9 +63,10 @@ class MockSyncService extends Mock implements SyncServiceInstance {
 
 void main() {
   group('SyncStatusIndicator Golden Tests', () {
-    testGoldens('SyncStatusIndicator synced state (no indicator)',
-        (tester) async {
-      await tester.pumpWidgetBuilder(
+    goldenTest(
+      'SyncStatusIndicator synced state (no indicator)',
+      fileName: 'sync_status_synced',
+      builder: () => goldenMaterialAppWrapper(
         TestSyncStatusIndicator(
           status: SyncStatus.synced,
           child: Container(
@@ -75,15 +76,13 @@ void main() {
             child: const Center(child: Text('Synced Content')),
           ),
         ),
-        surfaceSize: goldenSurfaceSize(),
-        wrapper: goldenMaterialAppWrapper,
-      );
+      ),
+    );
 
-      await screenMatchesGolden(tester, 'sync_status_synced');
-    });
-
-    testGoldens('SyncStatusIndicator pending state', (tester) async {
-      await tester.pumpWidgetBuilder(
+    goldenTest(
+      'SyncStatusIndicator pending state',
+      fileName: 'sync_status_pending',
+      builder: () => goldenMaterialAppWrapper(
         TestSyncStatusIndicator(
           status: SyncStatus.pending,
           child: Container(
@@ -93,15 +92,13 @@ void main() {
             child: const Center(child: Text('Syncing Content')),
           ),
         ),
-        surfaceSize: goldenSurfaceSize(),
-        wrapper: goldenMaterialAppWrapper,
-      );
+      ),
+    );
 
-      await screenMatchesGolden(tester, 'sync_status_pending');
-    });
-
-    testGoldens('SyncStatusIndicator failed state', (tester) async {
-      await tester.pumpWidgetBuilder(
+    goldenTest(
+      'SyncStatusIndicator failed state',
+      fileName: 'sync_status_failed',
+      builder: () => goldenMaterialAppWrapper(
         TestSyncStatusIndicator(
           status: SyncStatus.failed,
           failedCount: 3,
@@ -112,11 +109,7 @@ void main() {
             child: const Center(child: Text('Failed Content')),
           ),
         ),
-        surfaceSize: goldenSurfaceSize(),
-        wrapper: goldenMaterialAppWrapper,
-      );
-
-      await screenMatchesGolden(tester, 'sync_status_failed');
-    });
+      ),
+    );
   });
 }

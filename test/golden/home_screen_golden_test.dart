@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:golden_toolkit/golden_toolkit.dart';
-import '../helpers/golden_test_helper.dart';
+import 'package:alchemist/alchemist.dart';
 
 /// Simplified home screen widget for golden tests
 class TestHomeScreen extends StatelessWidget {
@@ -42,14 +41,10 @@ class TestHomeScreen extends StatelessWidget {
 
 void main() {
   group('Home Screen Golden Tests', () {
-    testGoldens('home screen renders correctly', (tester) async {
-      await tester.pumpWidgetBuilder(
-        const TestHomeScreen(),
-        surfaceSize: goldenSurfaceSize(),
-        wrapper: (child) => MaterialApp(home: child),
-      );
-
-      await screenMatchesGolden(tester, 'home_screen_basic');
-    });
+    goldenTest(
+      'home screen renders correctly',
+      fileName: 'home_screen_basic',
+      builder: () => MaterialApp(home: const TestHomeScreen()),
+    );
   });
 }

@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:move_young/providers/infrastructure/shared_preferences_provider.dart';
 import 'favorites_service_instance.dart';

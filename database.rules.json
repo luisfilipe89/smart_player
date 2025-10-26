@@ -30,8 +30,8 @@
                 "$field": {
                     "$hhmm": {
                         ".read": "auth != null",
-                        ".write": "auth != null && (!data.exists() || newData.val() == null)",
-                        ".validate": "newData.val() === true || newData.val() == null"
+                        ".write": "auth != null && newData.val() === true && (!data.exists() || newData.val() == null)",
+                        ".validate": "newData.isBoolean() && newData.val() === true && !data.exists()"
                     }
                 }
             }

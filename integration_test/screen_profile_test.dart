@@ -1,3 +1,4 @@
+import 'dart:developer' as developer;
 import 'package:integration_test/integration_test.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -18,7 +19,7 @@ void main() {
           options: DefaultFirebaseOptions.currentPlatform,
         );
       } catch (e) {
-        print('Firebase initialization: $e');
+        developer.log('Firebase initialization: $e');
       }
     });
 
@@ -45,7 +46,7 @@ void main() {
             await db.ref(DbPaths.userProfileDisplayName(testUserId)).get();
         expect(snapshot.value, 'Test User Name');
       } catch (e) {
-        print('Update display name test failed: $e');
+        developer.log('Update display name test failed: $e');
       }
     });
 
@@ -61,7 +62,7 @@ void main() {
         final snapshot = await profileRef.child('bio').get();
         expect(snapshot.value, 'Test bio for integration test');
       } catch (e) {
-        print('Update bio test failed: $e');
+        developer.log('Update bio test failed: $e');
       }
     });
 
@@ -75,7 +76,7 @@ void main() {
         final snapshot = await photoUrlRef.get();
         expect(snapshot.value, 'https://example.com/avatar.jpg');
       } catch (e) {
-        print('Update photo URL test failed: $e');
+        developer.log('Update photo URL test failed: $e');
       }
     });
 
@@ -96,7 +97,7 @@ void main() {
         expect(profile['displayName'], 'Integration Test User');
         expect(profile['bio'], 'Testing profile screen');
       } catch (e) {
-        print('View profile data test failed: $e');
+        developer.log('View profile data test failed: $e');
       }
     });
 

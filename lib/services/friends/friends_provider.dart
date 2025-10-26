@@ -117,6 +117,15 @@ class FriendsActions {
       _friendsService.getRemainingCooldown(uid);
   Future<bool> canSendFriendRequest(String uid) =>
       _friendsService.canSendFriendRequest(uid);
+  Future<String> generateFriendToken() => _friendsService.generateFriendToken();
+  Future<bool> consumeFriendToken(String token) =>
+      _friendsService.consumeFriendToken(token);
+  Future<List<Map<String, String>>> getSuggestedFriends() =>
+      _friendsService.getSuggestedFriends();
+  Future<int> fetchMutualFriendsCount(String uid) =>
+      _friendsService.fetchMutualFriendsCount(uid);
+  Stream<void> watchFriendRequestReceived(String uid) =>
+      _friendsService.watchFriendRequestReceived(uid);
 }
 
 // Friends actions provider (for friend operations)

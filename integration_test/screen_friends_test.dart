@@ -1,3 +1,4 @@
+import 'dart:developer' as developer;
 import 'package:integration_test/integration_test.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -18,7 +19,7 @@ void main() {
           options: DefaultFirebaseOptions.currentPlatform,
         );
       } catch (e) {
-        print('Firebase initialization: $e');
+        developer.log('Firebase initialization: $e');
       }
     });
 
@@ -55,7 +56,7 @@ void main() {
         // Cleanup
         await requestRef.remove();
       } catch (e) {
-        print('Send friend request test failed: $e');
+        developer.log('Send friend request test failed: $e');
       }
     });
 
@@ -88,7 +89,7 @@ void main() {
         // Cleanup
         await receivedRequestRef.child(requestKey).remove();
       } catch (e) {
-        print('Accept friend request test failed: $e');
+        developer.log('Accept friend request test failed: $e');
       }
     });
 
@@ -120,7 +121,7 @@ void main() {
         // Cleanup
         await receivedRequestRef.child(requestKey).remove();
       } catch (e) {
-        print('Reject friend request test failed: $e');
+        developer.log('Reject friend request test failed: $e');
       }
     });
 
@@ -147,7 +148,7 @@ void main() {
         await friendsRef.child(friend1Id).remove();
         await friendsRef.child(friend2Id).remove();
       } catch (e) {
-        print('View friends list test failed: $e');
+        developer.log('View friends list test failed: $e');
       }
     });
 

@@ -58,4 +58,10 @@ class ProfileSettingsActions {
   // Combined settings stream
   Stream<Map<String, dynamic>> settingsStream(String uid) =>
       _profileSettingsService.settingsStream(uid);
+
+  // Profile data operations
+  Future<Map<String, dynamic>?> getUserProfile(String uid) =>
+      _profileSettingsService.getUserProfile(uid);
+  Future<void> updateUserProfile(String uid, Map<String, dynamic> data) =>
+      _profileSettingsService.updateUserProfile(uid, data);
 }

@@ -5,7 +5,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:move_young/theme/tokens.dart';
-import 'package:move_young/services/system/location_service.dart';
+import 'package:move_young/services/system/location_service_instance.dart';
 
 class GenericMapScreen extends StatefulWidget {
   final String title;
@@ -47,7 +47,7 @@ class _GenericMapScreenState extends State<GenericMapScreen> {
 
   Future<void> _initializeMap() async {
     try {
-      final position = await const LocationService()
+      final position = await LocationServiceInstance()
           .getCurrentPosition(accuracy: LocationAccuracy.high);
       if (!mounted) return;
       setState(() {
@@ -57,7 +57,7 @@ class _GenericMapScreenState extends State<GenericMapScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _locationError = const LocationService().mapError(e);
+        _locationError = LocationServiceInstance().mapError(e);
       });
       debugPrint("Failed to get location: $e");
     }
@@ -157,7 +157,7 @@ class _GenericMapScreenState extends State<GenericMapScreen> {
           ? _LocationErrorView(
               message: _locationError!,
               onOpenSettings: () async {
-                await const LocationService().openSettings();
+                await LocationServiceInstance().openSettings();
               },
               onRetry: _initializeMap,
             )

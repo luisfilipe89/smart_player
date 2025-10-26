@@ -115,4 +115,16 @@ class ProfileSettingsServiceInstance {
       };
     }).asBroadcastStream();
   }
+
+  /// Get user profile data
+  Future<Map<String, dynamic>?> getUserProfile(String uid) async {
+    final snap = await _database.ref(DbPaths.userProfile(uid)).get();
+    if (!snap.exists) return null;
+    return Map<String, dynamic>.from(snap.value as Map);
+  }
+
+  /// Update user profile data
+  Future<void> updateUserProfile(String uid, Map<String, dynamic> data) async {
+    await _database.ref(DbPaths.userProfile(uid)).update(data);
+  }
 }

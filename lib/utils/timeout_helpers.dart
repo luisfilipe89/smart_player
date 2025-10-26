@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import '../services/error_handler_service.dart';
+import '../services/error_handler/error_handler_service_instance.dart';
 
 /// Helper utilities for adding timeout protection to operations
 class TimeoutHelpers {
@@ -41,7 +41,7 @@ class TimeoutHelpers {
         timeoutMessage: timeoutMessage,
       );
     } catch (e) {
-      ErrorHandlerService.showError(
+      ErrorHandlerServiceInstance().showError(
         context,
         e,
         onRetry: onRetry,

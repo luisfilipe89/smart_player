@@ -1,18 +1,16 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mockito/mockito.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
-import 'package:move_young/services/system/connectivity_service_instance.dart';
+import 'package:move_young/services/connectivity/connectivity_service_instance.dart';
 
 class MockConnectivity extends Mock implements Connectivity {}
 
 void main() {
   group('ConnectivityServiceInstance Tests', () {
     late ConnectivityServiceInstance connectivityService;
-    late MockConnectivity mockConnectivity;
 
     setUp(() {
-      mockConnectivity = MockConnectivity();
-      connectivityService = ConnectivityServiceInstance(mockConnectivity);
+      connectivityService = ConnectivityServiceInstance();
     });
 
     tearDown(() {

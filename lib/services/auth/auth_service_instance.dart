@@ -2,6 +2,8 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
 import 'package:google_sign_in/google_sign_in.dart';
+import '../../utils/service_error.dart';
+import '../firebase_error_handler.dart';
 
 /// Instance-based AuthService for use with Riverpod dependency injection
 class AuthServiceInstance {
@@ -52,14 +54,14 @@ class AuthServiceInstance {
   Stream<User?> get userChanges => _auth.userChanges();
 
   // Sign in anonymously
-  Future<UserCredential?> signInAnonymously() async {
+  Future<UserCredential> signInAnonymously() async {
     try {
       final userCredential = await _auth.signInAnonymously();
-      // Signed in anonymously successfully
       return userCredential;
+    } on FirebaseAuthException catch (e) {
+      throw FirebaseErrorHandler.toServiceException(e);
     } catch (e) {
-      // Error signing in anonymously
-      return null;
+      throw ServiceException('Failed to sign in anonymously', originalError: e);
     }
   }
 
@@ -80,7 +82,7 @@ class AuthServiceInstance {
       if (googleUser == null) {
         // User aborted the sign-in flow
         debugPrint('Google Sign-In: User cancelled');
-        return null;
+        return null; // User cancellation is not an error
       }
 
       debugPrint('Google Sign-In: User selected: ${googleUser.email}');
@@ -89,8 +91,8 @@ class AuthServiceInstance {
           await googleUser.authentication;
 
       if (googleAuth.accessToken == null || googleAuth.idToken == null) {
-        debugPrint('Google Sign-In: Missing tokens');
-        return null;
+        throw ServiceException(
+            'Failed to get authentication tokens from Google');
       }
 
       final oauthCredential = GoogleAuthProvider.credential(
@@ -102,10 +104,12 @@ class AuthServiceInstance {
       await _auth.currentUser?.reload();
       debugPrint('Google Sign-In: Success');
       return userCredential;
+    } on FirebaseAuthException catch (e) {
+      throw FirebaseErrorHandler.toServiceException(e);
     } catch (e) {
-      // Error signing in with Google
       debugPrint('Google Sign-In Error: $e');
-      return null;
+      if (e is ServiceException) rethrow;
+      throw ServiceException('Failed to sign in with Google', originalError: e);
     }
   }
 
@@ -113,7 +117,7 @@ class AuthServiceInstance {
   Future<UserCredential> signInWithEmailAndPassword(
       String email, String password) async {
     if (password.isEmpty) {
-      throw Exception('auth_password_required');
+      throw ValidationException('auth_password_required');
     }
     try {
       final userCredential = await _auth.signInWithEmailAndPassword(
@@ -122,12 +126,12 @@ class AuthServiceInstance {
       );
       // Ensure latest profile (displayName) is loaded
       await _auth.currentUser?.reload();
-      // Signed in with email successfully
       return userCredential;
     } on FirebaseAuthException catch (e) {
-      throw Exception(_mapFirebaseError(e, isSignup: false));
+      throw AuthException(_mapFirebaseError(e, isSignup: false), code: e.code);
     } catch (e) {
-      throw Exception('Sign in failed: ${e.toString()}');
+      if (e is ServiceException) rethrow;
+      throw ServiceException('Sign in failed', originalError: e);
     }
   }
 
@@ -147,12 +151,12 @@ class AuthServiceInstance {
       await userCredential.user?.updateDisplayName(displayName);
       await userCredential.user?.reload();
 
-      // Created account with email successfully
       return userCredential;
     } on FirebaseAuthException catch (e) {
-      throw Exception(_mapFirebaseError(e, isSignup: true));
+      throw AuthException(_mapFirebaseError(e, isSignup: true), code: e.code);
     } catch (e) {
-      throw Exception('Account creation failed: ${e.toString()}');
+      if (e is ServiceException) rethrow;
+      throw ServiceException('Account creation failed', originalError: e);
     }
   }
 
@@ -160,9 +164,9 @@ class AuthServiceInstance {
   Future<void> signOut() async {
     try {
       await _auth.signOut();
-      // Signed out successfully
     } catch (e) {
-      // Error signing out
+      debugPrint('Error signing out: $e');
+      rethrow; // Re-throw to let UI know there was an error
     }
   }
 
@@ -173,7 +177,9 @@ class AuthServiceInstance {
   }) async {
     try {
       final user = _auth.currentUser;
-      if (user == null) return;
+      if (user == null) {
+        throw Exception('No user signed in');
+      }
 
       await user.updateDisplayName(displayName);
       if (photoURL != null) {
@@ -181,9 +187,9 @@ class AuthServiceInstance {
       }
 
       await user.reload();
-      // Profile updated successfully
     } catch (e) {
-      // Error updating profile
+      debugPrint('Error updating profile: $e');
+      rethrow;
     }
   }
 
@@ -205,16 +211,20 @@ class AuthServiceInstance {
   Future<void> updateDisplayName(String displayName) async {
     try {
       final user = _auth.currentUser;
-      if (user != null && displayName.isNotEmpty) {
-        await user.updateDisplayName(displayName);
-        await user.reload();
-        // Force refresh the user data
-        await user.getIdToken(true);
-        // Nickname updated successfully
+      if (user == null) {
+        throw Exception('No user signed in');
       }
+      if (displayName.isEmpty) {
+        throw Exception('Display name cannot be empty');
+      }
+
+      await user.updateDisplayName(displayName);
+      await user.reload();
+      // Force refresh the user data
+      await user.getIdToken(true);
     } catch (e) {
       debugPrint('Error updating nickname: $e');
-      // Error updating nickname
+      rethrow;
     }
   }
 
@@ -235,6 +245,95 @@ class AuthServiceInstance {
       debugPrint('Error deleting account: $e');
       return false;
     }
+  }
+
+  // Change password
+  Future<void> changePassword(
+    String currentPassword,
+    String newPassword,
+  ) async {
+    try {
+      final user = _auth.currentUser;
+      if (user == null) throw Exception('Not signed in');
+
+      final email = user.email;
+      if (email == null) {
+        throw Exception('No email on account');
+      }
+
+      // Reauthenticate with current password
+      final credential = EmailAuthProvider.credential(
+        email: email,
+        password: currentPassword,
+      );
+      await user.reauthenticateWithCredential(credential);
+
+      // Change password
+      await user.updatePassword(newPassword);
+      debugPrint('Password changed successfully');
+    } on FirebaseAuthException catch (e) {
+      throw Exception(_mapFirebaseError(e, isSignup: false));
+    } catch (e) {
+      throw Exception('Password change failed: ${e.toString()}');
+    }
+  }
+
+  // Send password reset email
+  Future<void> sendPasswordResetEmail(String email) async {
+    try {
+      await _auth.sendPasswordResetEmail(email: email);
+      debugPrint('Password reset email sent to: $email');
+    } on FirebaseAuthException catch (e) {
+      throw Exception(_mapFirebaseError(e, isSignup: false));
+    } catch (e) {
+      throw Exception('Failed to send password reset email: ${e.toString()}');
+    }
+  }
+
+  // Change email
+  Future<void> changeEmail({
+    required String currentPassword,
+    required String newEmail,
+  }) async {
+    try {
+      final user = _auth.currentUser;
+      if (user == null) throw Exception('Not signed in');
+
+      final email = user.email;
+      if (email == null) {
+        throw Exception('No email on account');
+      }
+
+      // Reauthenticate with current password
+      final credential = EmailAuthProvider.credential(
+        email: email,
+        password: currentPassword,
+      );
+      await user.reauthenticateWithCredential(credential);
+
+      // Change email (requires verification)
+      await user.verifyBeforeUpdateEmail(newEmail);
+      debugPrint('Verification email sent to: $newEmail');
+    } on FirebaseAuthException catch (e) {
+      throw Exception(_mapFirebaseError(e, isSignup: false));
+    } catch (e) {
+      throw Exception('Email change failed: ${e.toString()}');
+    }
+  }
+
+  // Check if user has password provider
+  bool get hasPasswordProvider {
+    final user = _auth.currentUser;
+    if (user == null) return false;
+
+    // Check if user has email/password provider
+    final providers = user.providerData;
+    for (var provider in providers) {
+      if (provider.providerId == 'password') {
+        return true;
+      }
+    }
+    return false;
   }
 
   // Map FirebaseAuthException to friendly message

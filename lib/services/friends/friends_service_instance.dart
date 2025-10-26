@@ -8,13 +8,13 @@ import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:move_young/db/db_paths.dart';
 import 'package:move_young/models/infrastructure/cached_data.dart';
 import 'package:move_young/services/firebase_error_handler.dart';
-import '../notifications/notification_service_instance.dart';
+import '../notifications/notification_interface.dart';
 
 /// Instance-based FriendsService for use with Riverpod dependency injection
 class FriendsServiceInstance {
   final FirebaseAuth _auth;
   final FirebaseDatabase _db;
-  final NotificationServiceInstance _notificationService;
+  final INotificationService _notificationService;
 
   // Cache for friends data
   final Map<String, CachedData<List<String>>> _friendsCache = {};
@@ -443,6 +443,21 @@ class FriendsServiceInstance {
     _friendsCache.removeWhere((key, value) => value.isExpired);
   }
 
+  // Safe DateTime parsing for rate limiting
+  DateTime? _parseTimestamp(dynamic value) {
+    try {
+      if (value is String) {
+        return DateTime.parse(value);
+      } else if (value is int) {
+        return DateTime.fromMillisecondsSinceEpoch(value);
+      }
+      return null;
+    } catch (e) {
+      debugPrint('Invalid timestamp format: $value');
+      return null;
+    }
+  }
+
   // Rate limiting functionality
   static const int _maxRequestsPerHour = 10;
   static const Duration _rateLimitWindow = Duration(hours: 1);
@@ -458,7 +473,8 @@ class FriendsServiceInstance {
 
         // Filter requests within the last hour
         final recentRequests = requests.where((request) {
-          final requestTime = DateTime.parse(request['timestamp']);
+          final requestTime = _parseTimestamp(request['timestamp']);
+          if (requestTime == null) return false;
           return now.difference(requestTime) < _rateLimitWindow;
         }).toList();
 
@@ -482,9 +498,15 @@ class FriendsServiceInstance {
 
         if (requests.isNotEmpty) {
           // Find the oldest request within the rate limit window
-          final oldestRequest = requests.map((request) {
-            return DateTime.parse(request['timestamp']);
-          }).reduce((a, b) => a.isBefore(b) ? a : b);
+          final validTimestamps = requests
+              .map((request) => _parseTimestamp(request['timestamp']))
+              .where((timestamp) => timestamp != null)
+              .cast<DateTime>();
+
+          if (validTimestamps.isEmpty) return Duration.zero;
+
+          final oldestRequest =
+              validTimestamps.reduce((a, b) => a.isBefore(b) ? a : b);
 
           final timeUntilReset =
               oldestRequest.add(_rateLimitWindow).difference(now);
@@ -519,5 +541,147 @@ class FriendsServiceInstance {
     } catch (e) {
       debugPrint('Error recording friend request for $uid: $e');
     }
+  }
+
+  // Generate friend token for QR code
+  Future<String> generateFriendToken() async {
+    final user = _auth.currentUser;
+    if (user == null) throw Exception('Not signed in');
+
+    final uid = user.uid;
+    final now = DateTime.now();
+    final expiry =
+        now.add(const Duration(minutes: 10)); // Token expires in 10 minutes
+
+    final tokenData = {
+      'uid': uid,
+      'expiry': expiry.millisecondsSinceEpoch,
+    };
+
+    final token = crypto.sha256
+        .convert(utf8.encode('$uid-${now.millisecondsSinceEpoch}'))
+        .toString();
+
+    // Store token in database
+    await _db.ref('friendTokens/$token').set(tokenData);
+
+    return token;
+  }
+
+  // Consume friend token from QR scan
+  Future<bool> consumeFriendToken(String token) async {
+    try {
+      final snap = await _safeGet('friendTokens/$token');
+
+      if (!snap.exists) {
+        debugPrint('Friend token not found: $token');
+        return false;
+      }
+
+      final data = snap.value as Map<dynamic, dynamic>;
+      final expiry = DateTime.fromMillisecondsSinceEpoch(data['expiry'] as int);
+
+      if (DateTime.now().isAfter(expiry)) {
+        debugPrint('Friend token expired: $token');
+        return false;
+      }
+
+      final fromUid = data['uid'] as String;
+      final user = _auth.currentUser;
+
+      if (user == null || user.uid == fromUid) {
+        debugPrint('Cannot add self as friend');
+        return false;
+      }
+
+      // Send friend request
+      await sendFriendRequest(fromUid);
+
+      // Clean up used token
+      await _db.ref('friendTokens/$token').remove();
+
+      return true;
+    } catch (e) {
+      debugPrint('Error consuming friend token: $e');
+      return false;
+    }
+  }
+
+  // Get suggested friends based on mutual friends
+  Future<List<Map<String, String>>> getSuggestedFriends() async {
+    final user = _auth.currentUser;
+    if (user == null) return [];
+
+    final uid = user.uid;
+
+    try {
+      // Get current friends
+      final friends = await getUserFriends(uid);
+
+      if (friends.isEmpty) return [];
+
+      // Get friends of friends
+      final suggestionsMap = <String, Set<String>>{};
+
+      for (final friendUid in friends.take(5)) {
+        // Limit to first 5 friends
+        final friendFriends = await getUserFriends(friendUid);
+        for (final potentialFriend in friendFriends) {
+          if (potentialFriend != uid && !friends.contains(potentialFriend)) {
+            suggestionsMap
+                .putIfAbsent(potentialFriend, () => <String>{})
+                .add(friendUid);
+          }
+        }
+      }
+
+      // Convert to list with mutual friends count
+      final suggestions = suggestionsMap.entries.map((entry) {
+        return {
+          'uid': entry.key,
+          'mutualCount': entry.value.length.toString(),
+        };
+      }).toList();
+
+      // Sort by mutual friends count (descending)
+      suggestions.sort((a, b) {
+        final aCount = int.tryParse(a['mutualCount'] ?? '0') ?? 0;
+        final bCount = int.tryParse(b['mutualCount'] ?? '0') ?? 0;
+        return bCount.compareTo(aCount);
+      });
+
+      return suggestions.take(10).toList(); // Return top 10 suggestions
+    } catch (e) {
+      debugPrint('Error getting suggested friends: $e');
+      return [];
+    }
+  }
+
+  // Get mutual friends count with another user
+  Future<int> fetchMutualFriendsCount(String uid) async {
+    final user = _auth.currentUser;
+    if (user == null) return 0;
+
+    final myUid = user.uid;
+
+    try {
+      final myFriends = await getUserFriends(myUid);
+      final theirFriends = await getUserFriends(uid);
+
+      // Count mutual friends
+      final mutualCount =
+          myFriends.where((friend) => theirFriends.contains(friend)).length;
+
+      return mutualCount;
+    } catch (e) {
+      debugPrint('Error getting mutual friends count: $e');
+      return 0;
+    }
+  }
+
+  // Stream that emits when a new friend request is received
+  Stream<void> watchFriendRequestReceived(String uid) {
+    final receivedRef = _db.ref('users/$uid/friendRequests/received');
+    return receivedRef.limitToLast(1).onChildAdded.map((_) {});
   }
 }

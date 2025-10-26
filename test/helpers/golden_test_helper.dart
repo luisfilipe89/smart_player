@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:golden_toolkit/golden_toolkit.dart';
 
 /// Standard device size for golden tests (iPhone 11 Pro)
 const standardPhoneSize = Size(414, 896);
@@ -29,11 +28,6 @@ Widget goldenMaterialAppWrapper(Widget child) {
       ),
     ),
   );
-}
-
-/// Helper to get standard device configuration for golden tests
-Device phoneConfig() {
-  return Device.phone;
 }
 
 /// Helper to get surface size for golden tests

@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:golden_toolkit/golden_toolkit.dart';
-import '../helpers/golden_test_helper.dart';
+import 'package:alchemist/alchemist.dart';
 
 /// Simplified friends screen widget for golden tests
 class TestFriendsScreen extends StatelessWidget {
@@ -111,24 +110,16 @@ class TestFriendsScreen extends StatelessWidget {
 
 void main() {
   group('Friends Screen Golden Tests', () {
-    testGoldens('Friends screen with friends list', (tester) async {
-      await tester.pumpWidgetBuilder(
-        const TestFriendsScreen(isEmpty: false),
-        surfaceSize: goldenSurfaceSize(),
-        wrapper: (child) => MaterialApp(home: child),
-      );
+    goldenTest(
+      'Friends screen with friends list',
+      fileName: 'friends_screen_with_list',
+      builder: () => MaterialApp(home: const TestFriendsScreen(isEmpty: false)),
+    );
 
-      await screenMatchesGolden(tester, 'friends_screen_with_list');
-    });
-
-    testGoldens('Friends screen empty state', (tester) async {
-      await tester.pumpWidgetBuilder(
-        const TestFriendsScreen(isEmpty: true),
-        surfaceSize: goldenSurfaceSize(),
-        wrapper: (child) => MaterialApp(home: child),
-      );
-
-      await screenMatchesGolden(tester, 'friends_screen_empty');
-    });
+    goldenTest(
+      'Friends screen empty state',
+      fileName: 'friends_screen_empty',
+      builder: () => MaterialApp(home: const TestFriendsScreen(isEmpty: true)),
+    );
   });
 }

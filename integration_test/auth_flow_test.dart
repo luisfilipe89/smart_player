@@ -1,3 +1,4 @@
+import 'dart:developer' as developer;
 import 'package:integration_test/integration_test.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -16,7 +17,7 @@ void main() {
         );
       } catch (e) {
         // Firebase already initialized
-        print('Firebase initialization: $e');
+        developer.log('Firebase initialization: $e');
       }
     });
 
@@ -127,7 +128,7 @@ void main() {
         await FirebaseAuth.instance.signOut();
       } catch (e) {
         // Some features might not be available in test mode
-        print('Note: Profile update may not be available: $e');
+        developer.log('Note: Profile update may not be available: $e');
       }
     });
   });

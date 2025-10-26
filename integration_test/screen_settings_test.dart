@@ -1,3 +1,4 @@
+import 'dart:developer' as developer;
 import 'package:integration_test/integration_test.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -18,7 +19,7 @@ void main() {
           options: DefaultFirebaseOptions.currentPlatform,
         );
       } catch (e) {
-        print('Firebase initialization: $e');
+        developer.log('Firebase initialization: $e');
       }
     });
 
@@ -57,7 +58,7 @@ void main() {
         expect(invitesSnapshot.value, isTrue);
         expect(updatesSnapshot.value, isFalse);
       } catch (e) {
-        print('Notification settings test failed: $e');
+        developer.log('Notification settings test failed: $e');
       }
     });
 
@@ -80,7 +81,7 @@ void main() {
         expect(showOnlineSnapshot.value, isTrue);
         expect(allowRequestsSnapshot.value, isTrue);
       } catch (e) {
-        print('Privacy settings test failed: $e');
+        developer.log('Privacy settings test failed: $e');
       }
     });
 
@@ -102,7 +103,7 @@ void main() {
         expect(profileSnapshot.exists, isTrue);
         expect(notificationsSnapshot.exists, isTrue);
       } catch (e) {
-        print('View settings test failed: $e');
+        developer.log('View settings test failed: $e');
       }
     });
 

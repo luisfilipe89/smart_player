@@ -12,6 +12,7 @@ import 'package:move_young/screens/settings/settings_screen.dart';
 import 'package:move_young/screens/help/help_screen.dart';
 import 'package:move_young/screens/profile/profile_screen.dart';
 import 'package:move_young/screens/friends/friends_screen.dart';
+import 'package:move_young/screens/auth/auth_screen.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:move_young/services/games/cloud_games_provider.dart';
 import 'package:move_young/services/system/haptics_provider.dart';
@@ -89,10 +90,20 @@ class _HomeScreenNewState extends ConsumerState<HomeScreenNew> {
     _invitesSub?.cancel();
     try {
       final cloudGamesService = ref.read(cloudGamesServiceProvider);
-      _invitesSub = cloudGamesService.watchPendingInvitesCount().listen((n) {
-        if (!mounted) return;
-        setState(() => _pendingInvites = n);
-      });
+      _invitesSub = cloudGamesService.watchPendingInvitesCount().listen(
+        (n) {
+          if (!mounted) return;
+          setState(() => _pendingInvites = n);
+        },
+        onError: (error) {
+          debugPrint('Error watching pending invites: $error');
+          // Optionally refresh on error
+          if (mounted) {
+            _refreshInvites();
+          }
+        },
+        cancelOnError: true,
+      );
     } catch (_) {}
   }
 
@@ -258,6 +269,7 @@ class _HomeScreenNewState extends ConsumerState<HomeScreenNew> {
   void _showUserBottomSheet(BuildContext context,
       {bool showSignInPrompt = false}) {
     final isSignedIn = ref.read(isSignedInProvider);
+    final userAsync = ref.read(currentUserProvider);
 
     showModalBottomSheet(
       context: context,
@@ -296,8 +308,10 @@ class _HomeScreenNewState extends ConsumerState<HomeScreenNew> {
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          'sign_in_to_organize'.tr(),
-                          style: AppTextStyles.body,
+                          'please_sign_in_to_organize'.tr(),
+                          style: AppTextStyles.body.copyWith(
+                            color: AppColors.red,
+                          ),
                         ),
                       ),
                     ],
@@ -305,7 +319,62 @@ class _HomeScreenNewState extends ConsumerState<HomeScreenNew> {
                 ),
 
               // User Header
-              if (showSignInPrompt && !isSignedIn) ...[
+              if (isSignedIn)
+                Builder(builder: (_) {
+                  final user = userAsync.value;
+                  final displayName =
+                      user?.displayName ?? user?.email ?? 'User';
+                  final email = user?.email ?? '';
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 24, vertical: 16),
+                    child: Row(
+                      children: [
+                        CircleAvatar(
+                          radius: 24,
+                          backgroundColor: AppColors.primary,
+                          child: Text(
+                            displayName.isNotEmpty
+                                ? displayName[0].toUpperCase()
+                                : 'U',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 20,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                displayName,
+                                style: AppTextStyles.h3.copyWith(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.blackText,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                email.isNotEmpty ? email : 'user@example.com',
+                                style: AppTextStyles.body.copyWith(
+                                  color: AppColors.grey,
+                                  fontSize: 14,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                })
+              else
                 Padding(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
@@ -344,8 +413,7 @@ class _HomeScreenNewState extends ConsumerState<HomeScreenNew> {
                     ],
                   ),
                 ),
-                const Divider(height: 1, color: AppColors.lightgrey),
-              ],
+              const Divider(height: 1, color: AppColors.lightgrey),
 
               // Menu Items
               Padding(
@@ -391,8 +459,8 @@ class _HomeScreenNewState extends ConsumerState<HomeScreenNew> {
                         },
                       ),
                       _buildBottomSheetButton(
-                        icon: Icons.help_outline,
-                        label: 'help'.tr(),
+                        icon: Icons.help_outline_rounded,
+                        label: 'help_title'.tr(),
                         onTap: () {
                           Navigator.of(context).pop();
                           Navigator.of(context).push(
@@ -402,9 +470,9 @@ class _HomeScreenNewState extends ConsumerState<HomeScreenNew> {
                           );
                         },
                       ),
-                      const Divider(),
+                      const SizedBox(height: 16),
                       _buildBottomSheetButton(
-                        icon: Icons.logout,
+                        icon: Icons.logout_rounded,
                         label: 'sign_out'.tr(),
                         onTap: () async {
                           Navigator.of(context).pop();
@@ -418,33 +486,46 @@ class _HomeScreenNewState extends ConsumerState<HomeScreenNew> {
                             }
                           }
                         },
+                        isDestructive: true,
                       ),
                     ] else ...[
                       // Anonymous user menu
                       _buildBottomSheetButton(
                         icon: Icons.login,
-                        label: 'sign_in'.tr(),
-                        onTap: () {
+                        label: 'auth_signin'.tr(),
+                        onTap: () async {
                           Navigator.of(context).pop();
-                          Navigator.of(context).pushNamed('/auth');
-                        },
-                      ),
-                      _buildBottomSheetButton(
-                        icon: Icons.help_outline,
-                        label: 'help'.tr(),
-                        onTap: () {
-                          Navigator.of(context).pop();
-                          Navigator.of(context).push(
+                          await Navigator.of(context).push(
                             MaterialPageRoute(
-                              builder: (_) => const HelpScreen(),
+                              builder: (context) => const AuthScreen(
+                                startWithRegistration: false,
+                              ),
                             ),
                           );
                         },
+                      ),
+                      _buildBottomSheetButton(
+                        icon: Icons.person_add,
+                        label: 'auth_signup'.tr(),
+                        onTap: () async {
+                          Navigator.of(context).pop();
+                          await Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (context) => const AuthScreen(
+                                startWithRegistration: true,
+                              ),
+                            ),
+                          );
+                        },
+                        isSecondary: true,
                       ),
                     ],
                   ],
                 ),
               ),
+
+              // Bottom padding
+              SizedBox(height: MediaQuery.of(context).padding.bottom + 16),
             ],
           ),
         ),
@@ -456,11 +537,47 @@ class _HomeScreenNewState extends ConsumerState<HomeScreenNew> {
     required IconData icon,
     required String label,
     required VoidCallback onTap,
+    bool isDestructive = false,
+    bool isSecondary = false,
   }) {
-    return ListTile(
-      leading: Icon(icon, color: AppColors.blackIcon),
-      title: Text(label, style: AppTextStyles.body),
-      onTap: onTap,
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+          child: Row(
+            children: [
+              Icon(
+                icon,
+                color: isDestructive
+                    ? Colors.red.shade600
+                    : isSecondary
+                        ? AppColors.grey
+                        : AppColors.primary,
+                size: 22,
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Text(
+                  label,
+                  style: AppTextStyles.body.copyWith(
+                    color: isDestructive
+                        ? Colors.red.shade600
+                        : isSecondary
+                            ? AppColors.grey
+                            : AppColors.blackText,
+                    fontWeight: FontWeight.w500,
+                    fontSize: 15,
+                    letterSpacing: 0.2,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

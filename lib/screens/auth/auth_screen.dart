@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:move_young/services/auth/auth_provider.dart';
-import 'package:move_young/services/system/connectivity_provider.dart';
-import 'package:move_young/services/error_handler_service.dart';
+import 'package:move_young/services/connectivity/connectivity_provider.dart';
+import 'package:move_young/services/error_handler/error_handler_service_instance.dart';
 import 'package:move_young/theme/tokens.dart';
 
 class AuthScreen extends ConsumerStatefulWidget {
@@ -81,7 +82,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
     // Check connectivity before attempting auth
     final hasConnection = ref.read(hasConnectionProvider);
     if (!hasConnection) {
-      ErrorHandlerService.showError(context, 'error_network');
+      ErrorHandlerServiceInstance().showError(context, 'error_network');
       return;
     }
 
@@ -90,6 +91,9 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
       if (_isLogin && ref.read(isSignedInProvider)) {
         await ref.read(authActionsProvider).signOut();
       }
+
+      // SECURITY NOTE: Never log _passwordController.text - use maskPassword() if needed
+      // The password is passed directly to Firebase Auth which handles it securely
 
       if (_isLogin) {
         await ref.read(authActionsProvider).signInWithEmailAndPassword(
@@ -109,9 +113,11 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
         Navigator.of(context).pop(true);
       }
     } catch (e, stack) {
-      ErrorHandlerService.logError(e, stack);
+      // SECURITY: Ensure password is never logged with errors
+      // ErrorHandlerServiceInstance will handle logging safely
+      ErrorHandlerServiceInstance().logError(e, stack);
       if (mounted) {
-        ErrorHandlerService.showError(context, e);
+        ErrorHandlerServiceInstance().showError(context, e);
       }
     }
   }
@@ -168,6 +174,10 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                 if (!_isLogin) ...[
                   TextFormField(
                     controller: _nameController,
+                    maxLength: 24,
+                    inputFormatters: [
+                      LengthLimitingTextInputFormatter(24),
+                    ],
                     decoration: InputDecoration(
                       labelText: 'auth_first_name'.tr(),
                       border: OutlineInputBorder(
@@ -209,6 +219,10 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                 TextFormField(
                   controller: _emailController,
                   keyboardType: TextInputType.emailAddress,
+                  maxLength: 254,
+                  inputFormatters: [
+                    LengthLimitingTextInputFormatter(254),
+                  ],
                   decoration: InputDecoration(
                     labelText: 'auth_email'.tr(),
                     border: OutlineInputBorder(
@@ -231,6 +245,10 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                 TextFormField(
                   controller: _passwordController,
                   obscureText: _obscurePassword,
+                  maxLength: 128,
+                  inputFormatters: [
+                    LengthLimitingTextInputFormatter(128),
+                  ],
                   decoration: InputDecoration(
                     labelText: 'auth_password'.tr(),
                     border: OutlineInputBorder(

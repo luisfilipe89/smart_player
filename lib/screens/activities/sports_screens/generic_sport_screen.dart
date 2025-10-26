@@ -14,7 +14,7 @@ import 'package:move_young/widgets/sports/sport_field_card.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:move_young/config/_config.dart';
 import 'package:move_young/theme/_theme.dart';
-import 'package:move_young/services/system/location_service.dart';
+import 'package:move_young/services/system/location_service_instance.dart';
 
 // Top-level function for isolate processing (distance calculations)
 List<Map<String, dynamic>> _processLocationsIsolate(
@@ -123,7 +123,7 @@ class _GenericSportScreenState extends ConsumerState<GenericSportScreen>
 
   Future<void> _loadData({bool bypassCache = false}) async {
     try {
-      final pos = await const LocationService()
+      final pos = await LocationServiceInstance()
           .getCurrentPosition(accuracy: LocationAccuracy.best);
       _userPosition = pos;
 
@@ -164,7 +164,7 @@ class _GenericSportScreenState extends ConsumerState<GenericSportScreen>
       });
     } catch (e) {
       setState(() {
-        _error = const LocationService().mapError(e);
+        _error = LocationServiceInstance().mapError(e);
         _isLoading = false;
       });
       debugPrint('Error in _loadData: $e');

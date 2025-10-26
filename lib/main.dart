@@ -1,20 +1,18 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'dart:async';
-// import 'dart:convert'; // Unused import
 import 'package:move_young/screens/welcome/welcome_screen.dart';
 import 'package:move_young/theme/_theme.dart';
-// import 'package:move_young/services/haptics_service.dart';
 import 'package:move_young/services/system/accessibility_provider.dart';
 import 'package:move_young/providers/infrastructure/shared_preferences_provider.dart';
 import 'package:move_young/widgets/common/sync_status_indicator.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-// import 'package:move_young/screens/main_scaffold.dart'; // Unused import
 import 'firebase_options.dart';
 import 'package:move_young/utils/logger.dart';
 
@@ -23,20 +21,14 @@ import 'package:move_young/utils/logger.dart';
 // as they don't have access to the provider context
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
-// Global timer reference for cache cleanup to prevent memory leaks
-Timer? _cacheCleanupTimer;
-
 void main() async {
   // Handle errors in async Zone
   runZonedGuarded(() async {
     WidgetsFlutterBinding.ensureInitialized();
     NumberedLogger.install();
 
-    // Prevent early platform channel calls for SharedPreferences
-    // by using an in-memory store until real prefs are initialized later.
-    try {
-      SharedPreferences.setMockInitialValues(const {});
-    } catch (_) {}
+    // SharedPreferences will be initialized after first frame
+    // to avoid platform channel errors during app startup
 
     // Handle errors gracefully
     FlutterError.onError = (FlutterErrorDetails details) {
@@ -58,15 +50,6 @@ void main() async {
     // This ensures proper dependency injection and testability
     // Haptics and Accessibility will be initialized when first accessed
     // to avoid SharedPreferences channel errors during app startup
-
-    // Schedule periodic cache cleanup every 6 hours
-    _cacheCleanupTimer =
-        Timer.periodic(const Duration(hours: 6), (timer) async {
-      try {
-        // Cache cleanup will be handled through providers
-        // await CacheService.clearExpiredCache();
-      } catch (_) {}
-    });
 
     // Status bar styling only; avoid forcing Android nav bar appearance
     SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
@@ -100,10 +83,22 @@ void main() async {
 
       try {
         await FirebaseAppCheck.instance.activate(
-          androidProvider: AndroidProvider.debug,
-          appleProvider: AppleProvider.debug,
+          androidProvider: kDebugMode
+              ? AndroidProvider.debug
+              : AndroidProvider.playIntegrity,
+          appleProvider:
+              kDebugMode ? AppleProvider.debug : AppleProvider.deviceCheck,
           webProvider: ReCaptchaV3Provider('auto'),
         );
+      } catch (_) {}
+
+      // Initialize Crashlytics
+      try {
+        await FirebaseCrashlytics.instance
+            .setCrashlyticsCollectionEnabled(true);
+        FlutterError.onError = (errorDetails) {
+          FirebaseCrashlytics.instance.recordFlutterFatalError(errorDetails);
+        };
       } catch (_) {}
 
       // Register background message handler
@@ -159,19 +154,10 @@ class _MoveYoungAppState extends ConsumerState<MoveYoungApp>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    // Cancel the global cache cleanup timer to prevent memory leaks
-    _cacheCleanupTimer?.cancel();
     super.dispose();
   }
 
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    super.didChangeAppLifecycleState(state);
-    if (state == AppLifecycleState.detached) {
-      // Cancel timer when app is being closed
-      _cacheCleanupTimer?.cancel();
-    }
-  }
+  // didChangeAppLifecycleState removed - not needed currently
 
   @override
   Widget build(BuildContext context) {

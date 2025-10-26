@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:developer' as developer;
 import 'package:flutter/services.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:move_young/models/external/event_model.dart';
@@ -11,7 +12,7 @@ Future<List<Event>> loadEventsFromJson() async {
     final snapshot = await db.get().timeout(
       const Duration(seconds: 5),
       onTimeout: () {
-        print('Firebase connection timeout after 5 seconds');
+        developer.log('Firebase connection timeout after 5 seconds');
         throw TimeoutException('Firebase connection timeout');
       },
     );
@@ -28,8 +29,8 @@ Future<List<Event>> loadEventsFromJson() async {
       }
     }
   } catch (e, stackTrace) {
-    print('Error loading from Firebase: $e');
-    print('Stack trace: $stackTrace');
+    developer.log('Error loading from Firebase: $e',
+        name: 'loadEventsFromJson', error: e, stackTrace: stackTrace);
     // Continue to fallback to local file
   }
 

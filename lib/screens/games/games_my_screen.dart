@@ -13,6 +13,8 @@ import 'package:share_plus/share_plus.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:move_young/services/friends/friends_provider.dart';
 import 'package:move_young/services/external/weather_provider.dart';
+import 'package:move_young/utils/error_extensions.dart';
+import 'package:move_young/widgets/common/error_retry_widget.dart';
 
 class GamesMyScreen extends ConsumerStatefulWidget {
   final String? highlightGameId;
@@ -33,6 +35,10 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
   final Set<String> _weatherLoading = <String>{};
   String? _highlightId;
 
+  // Memoized lists to avoid recomputing on every build
+  List<Game> _joinedGames = [];
+  List<Game> _createdGames = [];
+
   @override
   void initState() {
     super.initState();
@@ -50,6 +56,21 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
     // Schedule scroll to highlighted game after first frame
     WidgetsBinding.instance
         .addPostFrameCallback((_) => _scrollToHighlightedGame());
+
+    // Listen to provider changes and update cached lists
+    ref.listen<AsyncValue<List<Game>>>(myGamesProvider, (previous, next) {
+      if (!mounted) return;
+
+      next.whenData((games) {
+        final currentUserId = ref.read(currentUserIdProvider);
+        setState(() {
+          _joinedGames =
+              games.where((g) => currentUserId != g.organizerId).toList();
+          _createdGames =
+              games.where((g) => currentUserId == g.organizerId).toList();
+        });
+      });
+    });
   }
 
   @override
@@ -488,22 +509,10 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
   Widget build(BuildContext context) {
     // Watch providers for reactive data
     final myGamesAsync = ref.watch(myGamesProvider);
-    final currentUserId = ref.watch(currentUserIdProvider);
 
-    // Separate joined and created games
-    final joinedGames = myGamesAsync.when(
-      data: (games) =>
-          games.where((g) => currentUserId != g.organizerId).toList(),
-      loading: () => <Game>[],
-      error: (_, __) => <Game>[],
-    );
-
-    final createdGames = myGamesAsync.when(
-      data: (games) =>
-          games.where((g) => currentUserId == g.organizerId).toList(),
-      loading: () => <Game>[],
-      error: (_, __) => <Game>[],
-    );
+    // Use memoized lists (updated via listener in initState)
+    final joinedGames = _joinedGames;
+    final createdGames = _createdGames;
 
     return Scaffold(
       appBar: AppBar(
@@ -528,17 +537,9 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
           padding: AppPaddings.symmHorizontalReg,
           child: myGamesAsync.when(
             loading: () => const Center(child: CircularProgressIndicator()),
-            error: (error, stack) => Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text('Error loading games: $error'),
-                  ElevatedButton(
-                    onPressed: _refreshData,
-                    child: Text('Retry'),
-                  ),
-                ],
-              ),
+            error: (error, stack) => ErrorRetryWidget(
+              message: myGamesAsync.errorMessage ?? 'Failed to load games',
+              onRetry: _refreshData,
             ),
             data: (games) => Container(
               decoration: BoxDecoration(
@@ -866,8 +867,9 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
                                     final forecasts = _weatherByGameId[game.id];
                                     final weatherActions =
                                         ref.read(weatherActionsProvider);
-                                    if (weatherActions == null)
+                                    if (weatherActions == null) {
                                       return const SizedBox.shrink();
+                                    }
                                     final String cond = forecasts?[time] ??
                                         weatherActions
                                             .getWeatherCondition(time);

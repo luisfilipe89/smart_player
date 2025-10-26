@@ -1,6 +1,7 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_database/firebase_database.dart';
+import 'dart:developer' as developer;
 
 /// Helper class for Firebase emulator testing
 class FirebaseTestHelpers {
@@ -33,8 +34,8 @@ class FirebaseTestHelpers {
       _isInitialized = true;
     } catch (e, stackTrace) {
       // Log the error for debugging
-      print('Firebase initialization error: $e');
-      print('Stack trace: $stackTrace');
+      developer.log('Firebase initialization error: $e',
+          error: e, stackTrace: stackTrace);
 
       // If already initialized, that's okay
       if (!e.toString().contains('already initialized') &&

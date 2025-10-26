@@ -1,3 +1,4 @@
+import 'dart:developer' as developer;
 import 'package:integration_test/integration_test.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -18,7 +19,7 @@ void main() {
           options: DefaultFirebaseOptions.currentPlatform,
         );
       } catch (e) {
-        print('Firebase initialization: $e');
+        developer.log('Firebase initialization: $e');
       }
     });
 
@@ -57,7 +58,7 @@ void main() {
 
         await gameRef.remove();
       } catch (e) {
-        print('Game invitation notification test failed: $e');
+        developer.log('Game invitation notification test failed: $e');
       }
     });
 
@@ -81,7 +82,7 @@ void main() {
             .get();
         expect(snapshot.exists, isTrue);
       } catch (e) {
-        print('Friend request notification test failed: $e');
+        developer.log('Friend request notification test failed: $e');
       }
     });
 
@@ -105,7 +106,7 @@ void main() {
         final snapshot = await requestRef.get();
         expect((snapshot.value as Map)['status'], 'accepted');
       } catch (e) {
-        print('Notification status update test failed: $e');
+        developer.log('Notification status update test failed: $e');
       }
     });
 

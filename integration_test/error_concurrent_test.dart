@@ -1,3 +1,4 @@
+import 'dart:developer' as developer;
 import 'package:integration_test/integration_test.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -19,7 +20,7 @@ void main() {
           options: DefaultFirebaseOptions.currentPlatform,
         );
       } catch (e) {
-        print('Firebase initialization: $e');
+        developer.log('Firebase initialization: $e');
       }
     });
 
@@ -78,7 +79,7 @@ void main() {
         await playersRef.child('user-2').remove();
         await playersRef.child('user-3').remove();
       } catch (e) {
-        print('Simultaneous join test failed: $e');
+        developer.log('Simultaneous join test failed: $e');
       }
     });
 
@@ -94,13 +95,13 @@ void main() {
         try {
           await Future.wait([update1, update2]);
         } catch (e) {
-          print('Concurrent update conflict resolved: $e');
+          developer.log('Concurrent update conflict resolved: $e');
         }
 
         final snapshot = await db.ref(DbPaths.game(testGameId)).get();
         expect(snapshot.exists, isTrue);
       } catch (e) {
-        print('Conflict resolution test failed: $e');
+        developer.log('Conflict resolution test failed: $e');
       }
     });
 
@@ -122,7 +123,7 @@ void main() {
 
         expect(finalPlayers, greaterThan(initialPlayers));
       } catch (e) {
-        print('Optimistic updates test failed: $e');
+        developer.log('Optimistic updates test failed: $e');
       }
     });
 
@@ -156,7 +157,7 @@ void main() {
         await request1.remove();
         await request2.remove();
       } catch (e) {
-        print('Concurrent friend requests test failed: $e');
+        developer.log('Concurrent friend requests test failed: $e');
       }
     });
 

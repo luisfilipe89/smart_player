@@ -9,13 +9,13 @@ final connectivityServiceProvider =
 });
 
 /// Connectivity status provider (reactive stream)
-final connectivityStatusProvider = StreamProvider<bool>((ref) {
+final connectivityStatusProvider = StreamProvider.autoDispose<bool>((ref) {
   final connectivityService = ref.watch(connectivityServiceProvider);
   return connectivityService.isConnected;
 });
 
 /// Current connection status provider
-final hasConnectionProvider = Provider<bool>((ref) {
+final hasConnectionProvider = Provider.autoDispose<bool>((ref) {
   final connectivityAsync = ref.watch(connectivityStatusProvider);
   return connectivityAsync.when(
     data: (isConnected) => isConnected,

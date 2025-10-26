@@ -9,9 +9,10 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:move_young/models/core/game.dart';
 import 'package:timezone/data/latest_all.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
+import 'notification_interface.dart';
 
 /// Instance-based NotificationService for use with Riverpod dependency injection
-class NotificationServiceInstance {
+class NotificationServiceInstance implements INotificationService {
   final FirebaseMessaging _messaging;
   final FirebaseDatabase _db;
   final FlutterLocalNotificationsPlugin _local;
@@ -295,13 +296,13 @@ class NotificationServiceInstance {
       body,
       tz.TZDateTime.from(scheduledTime, tz.local),
       platformChannelSpecifics,
+      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
       payload: payload,
-      uiLocalNotificationDateInterpretation:
-          UILocalNotificationDateInterpretation.absoluteTime,
       matchDateTimeComponents: DateTimeComponents.time,
     );
   }
 
+  @override
   Future<void> sendFriendRequestNotification(
       String toUid, String fromUid) async {
     try {
@@ -320,6 +321,7 @@ class NotificationServiceInstance {
     }
   }
 
+  @override
   Future<void> sendGameInviteNotification(String toUid, String gameId) async {
     try {
       // Get friend's FCM token
@@ -337,6 +339,7 @@ class NotificationServiceInstance {
     }
   }
 
+  @override
   Future<void> sendGameReminderNotification(
       String gameId, DateTime gameTime) async {
     try {

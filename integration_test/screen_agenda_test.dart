@@ -1,3 +1,4 @@
+import 'dart:developer' as developer;
 import 'package:integration_test/integration_test.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -18,7 +19,7 @@ void main() {
           options: DefaultFirebaseOptions.currentPlatform,
         );
       } catch (e) {
-        print('Firebase initialization: $e');
+        developer.log('Firebase initialization: $e');
       }
     });
 
@@ -57,7 +58,7 @@ void main() {
 
         await gameRef.remove();
       } catch (e) {
-        print('View games for date test failed: $e');
+        developer.log('View games for date test failed: $e');
       }
     });
 
@@ -95,7 +96,7 @@ void main() {
         await game1Ref.remove();
         await game2Ref.remove();
       } catch (e) {
-        print('Multiple games same date test failed: $e');
+        developer.log('Multiple games same date test failed: $e');
       }
     });
 
@@ -123,7 +124,7 @@ void main() {
 
         await futureGameRef.remove();
       } catch (e) {
-        print('Upcoming games test failed: $e');
+        developer.log('Upcoming games test failed: $e');
       }
     });
 

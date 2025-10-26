@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:golden_toolkit/golden_toolkit.dart';
-import '../helpers/golden_test_helper.dart';
+import 'package:alchemist/alchemist.dart';
 
 /// Simplified games screen widget for golden tests
 class TestGamesScreen extends StatelessWidget {
@@ -119,7 +118,7 @@ class TestGamesScreen extends StatelessWidget {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
-                    color: color.withOpacity(0.1),
+                    color: color.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
@@ -152,24 +151,16 @@ class TestGamesScreen extends StatelessWidget {
 
 void main() {
   group('Games Screen Golden Tests', () {
-    testGoldens('Games screen with games list', (tester) async {
-      await tester.pumpWidgetBuilder(
-        const TestGamesScreen(isEmpty: false),
-        surfaceSize: goldenSurfaceSize(),
-        wrapper: (child) => MaterialApp(home: child),
-      );
+    goldenTest(
+      'Games screen with games list',
+      fileName: 'games_screen_with_list',
+      builder: () => MaterialApp(home: const TestGamesScreen(isEmpty: false)),
+    );
 
-      await screenMatchesGolden(tester, 'games_screen_with_list');
-    });
-
-    testGoldens('Games screen empty state', (tester) async {
-      await tester.pumpWidgetBuilder(
-        const TestGamesScreen(isEmpty: true),
-        surfaceSize: goldenSurfaceSize(),
-        wrapper: (child) => MaterialApp(home: child),
-      );
-
-      await screenMatchesGolden(tester, 'games_screen_empty');
-    });
+    goldenTest(
+      'Games screen empty state',
+      fileName: 'games_screen_empty',
+      builder: () => MaterialApp(home: const TestGamesScreen(isEmpty: true)),
+    );
   });
 }

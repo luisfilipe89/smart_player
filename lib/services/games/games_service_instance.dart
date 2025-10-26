@@ -5,6 +5,7 @@ import 'package:path/path.dart';
 import 'package:move_young/models/core/game.dart';
 import '../auth/auth_service_instance.dart';
 import 'cloud_games_service_instance.dart';
+import '../../utils/service_error.dart';
 
 /// Instance-based GamesService for use with Riverpod dependency injection
 class GamesServiceInstance {
@@ -33,7 +34,7 @@ class GamesServiceInstance {
       // Try to create the database
       final db = await openDatabase(
         path,
-        version: 5,
+        version: 6, // Incremented for index addition
         onCreate: _onCreate,
         onUpgrade: _onUpgrade,
       );
@@ -45,7 +46,7 @@ class GamesServiceInstance {
         final altPath = 'games.db';
         final altDb = await openDatabase(
           altPath,
-          version: 5,
+          version: 6, // Incremented for index addition
           onCreate: _onCreate,
           onUpgrade: _onUpgrade,
         );
@@ -83,6 +84,16 @@ class GamesServiceInstance {
         isPublic INTEGER NOT NULL DEFAULT 1
       )
     ''');
+
+    // Create indexes for frequently queried columns
+    await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_organizer ON $_tableName (organizerId)');
+    await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_active ON $_tableName (isActive)');
+    await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_datetime ON $_tableName (dateTime DESC)');
+    await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_compound ON $_tableName (isActive, isPublic, dateTime)');
   }
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
@@ -104,6 +115,17 @@ class GamesServiceInstance {
     if (oldVersion < 5) {
       await db.execute('ALTER TABLE $_tableName ADD COLUMN imageUrl TEXT');
       await db.execute('ALTER TABLE $_tableName ADD COLUMN players TEXT');
+    }
+    if (oldVersion < 6) {
+      // Add indexes for performance
+      await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_organizer ON $_tableName (organizerId)');
+      await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_active ON $_tableName (isActive)');
+      await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_datetime ON $_tableName (dateTime DESC)');
+      await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_compound ON $_tableName (isActive, isPublic, dateTime)');
     }
   }
 
@@ -367,12 +389,29 @@ class GamesServiceInstance {
     };
   }
 
+  // Safe DateTime parsing helper
+  DateTime _parseDateTime(dynamic value) {
+    try {
+      if (value is String) {
+        return DateTime.parse(value);
+      } else if (value is int) {
+        return DateTime.fromMillisecondsSinceEpoch(value);
+      } else {
+        throw ValidationException('Invalid dateTime format: $value');
+      }
+    } catch (e) {
+      debugPrint('Error parsing DateTime: $e for value: $value');
+      throw ServiceException('Invalid dateTime format: $value',
+          originalError: e);
+    }
+  }
+
   // Convert Map from database to Game
   Game _mapToGame(Map<String, dynamic> map) {
     return Game(
       id: map['id'],
       sport: map['sport'],
-      dateTime: DateTime.parse(map['dateTime']),
+      dateTime: _parseDateTime(map['dateTime']),
       location: map['location'],
       fieldId: map['fieldId'],
       maxPlayers: map['maxPlayers'],
@@ -380,7 +419,7 @@ class GamesServiceInstance {
       description: map['description'] ?? '',
       organizerId: map['organizerId'],
       organizerName: map['organizerName'],
-      createdAt: DateTime.parse(map['createdAt']),
+      createdAt: _parseDateTime(map['createdAt']),
       address: map['address'],
       latitude: map['latitude'],
       longitude: map['longitude'],

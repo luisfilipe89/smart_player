@@ -1,3 +1,4 @@
+import 'dart:developer' as developer;
 import 'package:integration_test/integration_test.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -19,7 +20,7 @@ void main() {
           options: DefaultFirebaseOptions.currentPlatform,
         );
       } catch (e) {
-        print('Firebase initialization: $e');
+        developer.log('Firebase initialization: $e');
       }
     });
 
@@ -66,7 +67,7 @@ void main() {
         // Cleanup
         await gameRef.remove();
       } catch (e) {
-        print('Game creation test failed: $e');
+        developer.log('Game creation test failed: $e');
       }
     });
 
@@ -104,7 +105,7 @@ void main() {
         // Cleanup
         await gameRef.remove();
       } catch (e) {
-        print('Friend invitation test failed: $e');
+        developer.log('Friend invitation test failed: $e');
       }
     });
 
@@ -139,7 +140,7 @@ void main() {
         // Cleanup
         await gameRef.remove();
       } catch (e) {
-        print('Game update test failed: $e');
+        developer.log('Game update test failed: $e');
       }
     });
 

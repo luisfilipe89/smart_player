@@ -1,3 +1,4 @@
+import 'dart:developer' as developer;
 import 'package:integration_test/integration_test.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -18,7 +19,7 @@ void main() {
           options: DefaultFirebaseOptions.currentPlatform,
         );
       } catch (e) {
-        print('Firebase initialization: $e');
+        developer.log('Firebase initialization: $e');
       }
     });
 
@@ -62,7 +63,7 @@ void main() {
         // Cleanup
         await gameRef.remove();
       } catch (e) {
-        print('Upcoming games test failed: $e');
+        developer.log('Upcoming games test failed: $e');
       }
     });
 
@@ -96,7 +97,7 @@ void main() {
         // Cleanup
         await gameRef.remove();
       } catch (e) {
-        print('Past games test failed: $e');
+        developer.log('Past games test failed: $e');
       }
     });
 
@@ -126,7 +127,7 @@ void main() {
         final snapshot = await db.ref(DbPaths.game(gameId)).get();
         expect(snapshot.exists, isFalse);
       } catch (e) {
-        print('Cancel game test failed: $e');
+        developer.log('Cancel game test failed: $e');
       }
     });
 
@@ -170,7 +171,7 @@ void main() {
         await game1Ref.remove();
         await game2Ref.remove();
       } catch (e) {
-        print('Organized games test failed: $e');
+        developer.log('Organized games test failed: $e');
       }
     });
 
