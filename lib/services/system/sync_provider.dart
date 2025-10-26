@@ -1,41 +1,57 @@
 // lib/providers/services/sync_provider.dart
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'sync_service_instance.dart';
 import '../games/cloud_games_provider.dart';
 import '../friends/friends_provider.dart';
+import '../../providers/infrastructure/shared_preferences_provider.dart';
 
 // SyncService provider with dependency injection
-final syncServiceProvider = Provider<SyncServiceInstance>((ref) {
+final syncServiceProvider = Provider<SyncServiceInstance?>((ref) {
   final cloudGamesService = ref.watch(cloudGamesServiceProvider);
   final friendsService = ref.watch(friendsServiceProvider);
+  final prefs = ref.watch(sharedPreferencesProvider);
 
   return SyncServiceInstance(
     cloudGamesService,
     friendsService,
+    prefs,
   );
 });
 
 // Sync status provider (reactive stream)
 final syncStatusProvider = StreamProvider<SyncStatus>((ref) {
   final syncService = ref.watch(syncServiceProvider);
+  if (syncService == null) {
+    return Stream.value(SyncStatus.synced);
+  }
   return syncService.statusStream;
 });
 
 // Sync queue provider (reactive)
 final syncQueueProvider = Provider<List<SyncOperation>>((ref) {
   final syncService = ref.watch(syncServiceProvider);
+  if (syncService == null) {
+    return <SyncOperation>[];
+  }
   return syncService.syncQueue;
 });
 
 // Failed operations count provider (reactive)
 final failedOperationsCountProvider = Provider<int>((ref) {
   final syncService = ref.watch(syncServiceProvider);
+  if (syncService == null) {
+    return 0;
+  }
   return syncService.failedOperationsCount;
 });
 
 // Sync actions provider (for sync operations)
-final syncActionsProvider = Provider<SyncActions>((ref) {
+final syncActionsProvider = Provider<SyncActions?>((ref) {
   final syncService = ref.watch(syncServiceProvider);
+  if (syncService == null) {
+    return null;
+  }
   return SyncActions(syncService);
 });
 

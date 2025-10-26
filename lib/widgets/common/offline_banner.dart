@@ -50,7 +50,7 @@ class _OfflineBannerState extends ConsumerState<OfflineBanner>
   }
 
   void _listenToConnectivity() {
-    ref.listen(connectivityStatusProvider, (previous, next) {
+    ref.listenManual(connectivityStatusProvider, (previous, next) {
       next.whenData((isConnected) {
         if (mounted) {
           setState(() {

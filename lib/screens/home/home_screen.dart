@@ -1,4 +1,3 @@
-// lib/screens/home/home_screen_migrated.dart
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -6,16 +5,17 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:move_young/models/external/event_model.dart';
 import 'package:move_young/services/load_events_from_json.dart';
 import 'package:move_young/services/auth/auth_provider.dart';
-import 'package:move_young/services/games/cloud_games_provider.dart' as cloud;
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:move_young/screens/welcome/welcome_screen.dart';
 import 'package:move_young/theme/tokens.dart';
+import 'package:move_young/screens/main_scaffold.dart';
+import 'package:move_young/screens/settings/settings_screen.dart';
+import 'package:move_young/screens/help/help_screen.dart';
 import 'package:move_young/screens/profile/profile_screen.dart';
 import 'package:move_young/screens/friends/friends_screen.dart';
-import 'package:move_young/services/error_handler_service.dart';
-import 'package:move_young/services/cache/image_cache_provider.dart';
-import 'package:move_young/widgets/common/retry_error_view.dart';
-import 'package:move_young/screens/main_scaffold.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:move_young/services/games/cloud_games_provider.dart';
+import 'package:move_young/services/system/haptics_provider.dart';
+import 'dart:async';
 
 // Loading state for events
 enum _LoadState { idle, loading, success, error }
@@ -30,17 +30,28 @@ class HomeScreenNew extends ConsumerStatefulWidget {
 class _HomeScreenNewState extends ConsumerState<HomeScreenNew> {
   List<Event> events = [];
   _LoadState _state = _LoadState.idle;
+  int _pendingInvites = 0;
+  StreamSubscription<int>? _invitesSub;
 
   @override
   void initState() {
     super.initState();
     _fetch();
-    // Preload images
+    _refreshInvites();
+    // Watch real-time pending invites count
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref
-          .read(imageCacheServiceProvider)
-          .preloadImages(context, ['assets/images/general_public.jpg']);
+      _watchPendingInvites();
     });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      precacheImage(
+          const AssetImage('assets/images/general_public.jpg'), context);
+    });
+  }
+
+  @override
+  void dispose() {
+    _invitesSub?.cancel();
+    super.dispose();
   }
 
   Future<void> _fetch() async {
@@ -53,26 +64,55 @@ class _HomeScreenNewState extends ConsumerState<HomeScreenNew> {
         _state = _LoadState.success;
       });
     } catch (e, st) {
-      ErrorHandlerService.logError(e, st);
+      assert(() {
+        debugPrint('Events load failed: $e\n$st');
+        return true;
+      }());
       if (!mounted) return;
       setState(() => _state = _LoadState.error);
-      ErrorHandlerService.showError(context, e, onRetry: _fetch);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('events_load_failed'.tr())),
+      );
     }
+  }
+
+  Future<void> _refreshInvites() async {
+    try {
+      final cloudGamesService = ref.read(cloudGamesServiceProvider);
+      final invited = await cloudGamesService.getInvitedGamesForCurrentUser();
+      if (!mounted) return;
+      setState(() => _pendingInvites = invited.length);
+    } catch (_) {}
+  }
+
+  void _watchPendingInvites() {
+    _invitesSub?.cancel();
+    try {
+      final cloudGamesService = ref.read(cloudGamesServiceProvider);
+      _invitesSub = cloudGamesService.watchPendingInvitesCount().listen((n) {
+        if (!mounted) return;
+        setState(() => _pendingInvites = n);
+      });
+    } catch (_) {}
   }
 
   @override
   Widget build(BuildContext context) {
-    // Watch auth state reactively
+    // Watch auth state using Riverpod
     final authAsync = ref.watch(currentUserProvider);
 
-    return Scaffold(
-      body: authAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, stack) => Center(
+    return authAsync.when(
+      loading: () => const Scaffold(
+        backgroundColor: AppColors.white,
+        body: Center(child: CircularProgressIndicator()),
+      ),
+      error: (error, stack) => Scaffold(
+        backgroundColor: AppColors.white,
+        body: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Text('Authentication Error: $error'),
+              Text('Auth Error: $error'),
               ElevatedButton(
                 onPressed: () => ref.invalidate(currentUserProvider),
                 child: const Text('Retry'),
@@ -80,179 +120,127 @@ class _HomeScreenNewState extends ConsumerState<HomeScreenNew> {
             ],
           ),
         ),
-        data: (user) {
-          if (user == null) {
-            return const WelcomeScreen();
-          }
-
-          return _buildAuthenticatedContent(user);
-        },
       ),
+      data: (user) {
+        if (user == null) {
+          return const WelcomeScreen();
+        }
+        return _buildAuthenticatedHome(user);
+      },
     );
   }
 
-  Widget _buildAuthenticatedContent(User user) {
+  Widget _buildAuthenticatedHome(User user) {
+    final isSignedIn = ref.watch(isSignedInProvider);
+
     return Scaffold(
-      body: _buildBody(user),
-      bottomNavigationBar: _buildBottomNavigationBar(user),
-    );
-  }
-
-  Widget _buildBody(User user) {
-    switch (_state) {
-      case _LoadState.loading:
-        return const Center(child: CircularProgressIndicator());
-      case _LoadState.error:
-        return RetryErrorView(onRetry: _fetch);
-      case _LoadState.success:
-        return _buildEventsList(user);
-      case _LoadState.idle:
-        return const Center(child: CircularProgressIndicator());
-    }
-  }
-
-  Widget _buildEventsList(User user) {
-    return RefreshIndicator(
-      onRefresh: _fetch,
-      child: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          _buildWelcomeSection(user),
-          const SizedBox(height: 24),
-          _buildQuickActions(user),
-          const SizedBox(height: 24),
-          _buildEventsSection(),
-          const SizedBox(height: 24),
-          _buildPendingInvitesSection(),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildWelcomeSection(User user) {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [AppColors.primary, AppColors.primary.withValues(alpha: 0.8)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
+      backgroundColor: AppColors.white,
+      appBar: AppBar(
+        backgroundColor: AppColors.white,
+        elevation: 0,
+        leading: IconButton(
+          icon: Icon(
+            Icons.account_circle_outlined,
+            color: AppColors.blackIcon,
+          ),
+          onPressed: () => _showUserMenu(context),
         ),
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'welcome_back'.tr(),
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
+        title: const Text('SMARTPLAYER'),
+        centerTitle: true,
+        actions: [
+          TextButton.icon(
+            icon: const Icon(Icons.language),
+            label: Text(
+              context.locale.languageCode == 'nl' ? 'EN' : 'NL',
+              style: AppTextStyles.body,
             ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            user.displayName ?? user.email ?? 'User',
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 18,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          const SizedBox(height: 12),
-          Text(
-            'home_subtitle'.tr(),
-            style: const TextStyle(
-              color: Colors.white70,
-              fontSize: 14,
-            ),
+            onPressed: () {
+              final haptics = ref.read(hapticsServiceProvider);
+              haptics?.lightImpact();
+              final curr = context.locale;
+              context.setLocale(
+                curr.languageCode == 'nl'
+                    ? const Locale('en')
+                    : const Locale('nl'),
+              );
+            },
+            style: TextButton.styleFrom(foregroundColor: AppColors.blackIcon),
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildQuickActions(User user) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'quick_actions'.tr(),
-          style: const TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: _buildActionCard(
-                icon: Icons.sports_soccer,
-                title: 'join_game'.tr(),
-                subtitle: 'find_nearby_games'.tr(),
-                onTap: () {
-                  HapticFeedback.lightImpact();
-                  // Navigate to games tab
-                  final mainScaffold = MainScaffold.maybeOf(context);
-                  mainScaffold?.switchToTab(2); // kTabJoin
-                },
+      floatingActionButton: !isSignedIn
+          ? FloatingActionButton(
+              onPressed: () => _showUserBottomSheet(context),
+              backgroundColor: AppColors.primary,
+              child: const Icon(
+                Icons.person_add,
+                color: Colors.white,
               ),
+            )
+          : null,
+      body: SafeArea(
+        top: false, // AppBar covers the top inset already
+        child: RefreshIndicator(
+          onRefresh: _fetch,
+          child: ListView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: AppPaddings.symmHorizontalReg.copyWith(
+              bottom: kBottomNavigationBarHeight +
+                  MediaQuery.of(context).padding.bottom +
+                  16,
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _buildActionCard(
-                icon: Icons.add_circle_outline,
-                title: 'organize_game'.tr(),
-                subtitle: 'create_new_game'.tr(),
-                onTap: () {
-                  HapticFeedback.lightImpact();
-                  Navigator.pushNamed(context, '/organize-game');
-                },
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _buildActionCard({
-    required IconData icon,
-    required String title,
-    required String subtitle,
-    required VoidCallback onTap,
-  }) {
-    return Card(
-      elevation: 2,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(
-                icon,
-                size: 32,
-                color: AppColors.primary,
-              ),
-              const SizedBox(height: 8),
-              Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
+              // Outer white container with rounded corners & shadow
+              Container(
+                decoration: BoxDecoration(
+                  color: AppColors.white,
+                  borderRadius: BorderRadius.circular(AppRadius.container),
+                  boxShadow: AppShadows.md,
                 ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                subtitle,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey[600],
+                padding: AppPaddings.allBig.copyWith(top: 10),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _HomeGreeting(ref),
+                    const SizedBox(height: AppHeights.small),
+                    const _ActivitiesCard(),
+                    const SizedBox(height: AppHeights.huge),
+                    _QuickTilesRow(
+                      pendingInvites: _pendingInvites,
+                      ref: ref,
+                      onTapOrganize: () {
+                        final haptics = ref.read(hapticsServiceProvider);
+                        haptics?.lightImpact();
+                        if (!isSignedIn) {
+                          _showUserBottomSheet(context, showSignInPrompt: true);
+                          return;
+                        }
+                        Navigator.of(context).pushNamed('/organize-game');
+                      },
+                      onTapJoin: () async {
+                        HapticFeedback.lightImpact();
+                        await Navigator.of(context)
+                            .pushNamed('/discover-games');
+                        if (mounted) {
+                          await _refreshInvites();
+                        }
+                      },
+                    ),
+                    const SizedBox(height: AppHeights.huge),
+                    _UpcomingEventsCard(
+                      state: _state,
+                      events: events,
+                      ref: ref,
+                      onRetry: _fetch,
+                      onSeeAll: () {
+                        final haptics = ref.read(hapticsServiceProvider);
+                        haptics?.selectionClick();
+                        MainScaffold.maybeOf(context)
+                            ?.switchToTab(kTabAgenda, popToRoot: true);
+                      },
+                    ),
+                    const SizedBox(height: AppHeights.huge),
+                  ],
                 ),
               ),
             ],
@@ -262,175 +250,697 @@ class _HomeScreenNewState extends ConsumerState<HomeScreenNew> {
     );
   }
 
-  Widget _buildEventsSection() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'upcoming_events'.tr(),
-          style: const TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        const SizedBox(height: 12),
-        ...events.take(3).map((event) => _buildEventCard(event)),
-        if (events.length > 3)
-          Padding(
-            padding: const EdgeInsets.only(top: 12),
-            child: Center(
-              child: TextButton(
-                onPressed: () {
-                  // Navigate to agenda tab
-                  final mainScaffold = MainScaffold.maybeOf(context);
-                  mainScaffold?.switchToTab(3); // kTabAgenda
-                },
-                child: Text('view_all_events'.tr()),
-              ),
-            ),
-          ),
-      ],
-    );
+  void _showUserMenu(BuildContext context) {
+    // Always use bottom sheet for consistency and better UX
+    _showUserBottomSheet(context);
   }
 
-  Widget _buildEventCard(Event event) {
-    // Parse the date from the event's dateTime string
-    String dayText = '?';
-    try {
-      // Try to extract day from dateTime string
-      final dateTimeParts = event.dateTime.split(' ');
-      if (dateTimeParts.isNotEmpty) {
-        final datePart = dateTimeParts[0];
-        final dayMatch = RegExp(r'\d{1,2}').firstMatch(datePart);
-        if (dayMatch != null) {
-          dayText = dayMatch.group(0)!;
-        }
-      }
-    } catch (e) {
-      // Fallback to '?' if parsing fails
-    }
+  void _showUserBottomSheet(BuildContext context,
+      {bool showSignInPrompt = false}) {
+    final isSignedIn = ref.read(isSignedInProvider);
 
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      child: ListTile(
-        leading: CircleAvatar(
-          backgroundColor: AppColors.primary,
-          child: Text(
-            dayText,
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.bold,
-            ),
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        decoration: const BoxDecoration(
+          color: AppColors.white,
+          borderRadius: BorderRadius.only(
+            topLeft: Radius.circular(20),
+            topRight: Radius.circular(20),
           ),
         ),
-        title: Text(event.title),
-        subtitle: Text(
-          event.location.isNotEmpty
-              ? event.location
-              : event.targetGroup.isNotEmpty
-                  ? event.targetGroup
-                  : 'event_no_description'.tr(),
+        child: SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Handle bar
+              Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.symmetric(vertical: 12),
+                decoration: BoxDecoration(
+                  color: AppColors.grey.withValues(alpha: 0.3),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+
+              // Optional prompt (shown above header)
+              if (showSignInPrompt)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8, left: 24, right: 24),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.info_outline, color: AppColors.red),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'sign_in_to_organize'.tr(),
+                          style: AppTextStyles.body,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+              // User Header
+              if (showSignInPrompt && !isSignedIn) ...[
+                Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                  child: Row(
+                    children: [
+                      CircleAvatar(
+                        backgroundColor: AppColors.grey,
+                        child: const Icon(
+                          Icons.person_outline,
+                          color: Colors.white,
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'guest_user'.tr(),
+                              style: AppTextStyles.h3.copyWith(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.blackText,
+                              ),
+                            ),
+                            Text(
+                              'guest_prompt'.tr(),
+                              style: AppTextStyles.body.copyWith(
+                                color: AppColors.grey,
+                                fontSize: 14,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const Divider(height: 1, color: AppColors.lightgrey),
+              ],
+
+              // Menu Items
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Column(
+                  children: [
+                    if (isSignedIn) ...[
+                      // Authenticated user menu
+                      _buildBottomSheetButton(
+                        icon: Icons.person_2_outlined,
+                        label: 'profile'.tr(),
+                        onTap: () {
+                          Navigator.of(context).pop();
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => const ProfileScreen(),
+                            ),
+                          );
+                        },
+                      ),
+                      _buildBottomSheetButton(
+                        icon: Icons.people_outline,
+                        label: 'friends'.tr(),
+                        onTap: () {
+                          Navigator.of(context).pop();
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => const FriendsScreen(),
+                            ),
+                          );
+                        },
+                      ),
+                      _buildBottomSheetButton(
+                        icon: Icons.settings_outlined,
+                        label: 'settings'.tr(),
+                        onTap: () {
+                          Navigator.of(context).pop();
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => const SettingsScreen(),
+                            ),
+                          );
+                        },
+                      ),
+                      _buildBottomSheetButton(
+                        icon: Icons.help_outline,
+                        label: 'help'.tr(),
+                        onTap: () {
+                          Navigator.of(context).pop();
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => const HelpScreen(),
+                            ),
+                          );
+                        },
+                      ),
+                      const Divider(),
+                      _buildBottomSheetButton(
+                        icon: Icons.logout,
+                        label: 'sign_out'.tr(),
+                        onTap: () async {
+                          Navigator.of(context).pop();
+                          try {
+                            await ref.read(authActionsProvider).signOut();
+                          } catch (e) {
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('sign_out_failed'.tr())),
+                              );
+                            }
+                          }
+                        },
+                      ),
+                    ] else ...[
+                      // Anonymous user menu
+                      _buildBottomSheetButton(
+                        icon: Icons.login,
+                        label: 'sign_in'.tr(),
+                        onTap: () {
+                          Navigator.of(context).pop();
+                          Navigator.of(context).pushNamed('/auth');
+                        },
+                      ),
+                      _buildBottomSheetButton(
+                        icon: Icons.help_outline,
+                        label: 'help'.tr(),
+                        onTap: () {
+                          Navigator.of(context).pop();
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => const HelpScreen(),
+                            ),
+                          );
+                        },
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
-        trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-        onTap: () {
-          // Navigate to event details
-        },
       ),
     );
   }
 
-  Widget _buildPendingInvitesSection() {
-    // Watch pending invites count reactively
-    final pendingInvitesAsync = ref.watch(cloud.pendingInvitesCountProvider);
+  Widget _buildBottomSheetButton({
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+  }) {
+    return ListTile(
+      leading: Icon(icon, color: AppColors.blackIcon),
+      title: Text(label, style: AppTextStyles.body),
+      onTap: onTap,
+    );
+  }
+}
 
-    return pendingInvitesAsync.when(
-      loading: () => const SizedBox.shrink(),
-      error: (_, __) => const SizedBox.shrink(),
-      data: (pendingInvites) {
-        if (pendingInvites == 0) return const SizedBox.shrink();
+// --- Extracted small widgets for better composition ---
 
-        return Card(
-          color: AppColors.primary.withValues(alpha: 0.1),
-          child: ListTile(
-            leading: CircleAvatar(
-              backgroundColor: AppColors.primary,
-              child: Text(
-                pendingInvites.toString(),
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-            title: Text('pending_invites'.tr()),
-            subtitle: Text('you_have_invites'.tr()),
-            trailing: const Icon(Icons.arrow_forward_ios),
-            onTap: () {
-              // Navigate to games tab
-              final mainScaffold = MainScaffold.maybeOf(context);
-              mainScaffold?.switchToTab(2); // kTabJoin
-            },
-          ),
+class _HomeGreeting extends ConsumerWidget {
+  const _HomeGreeting(this.ref);
+  final WidgetRef ref;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    // Use Riverpod for auth state
+    final userAsync = ref.watch(currentUserProvider);
+
+    return userAsync.when(
+      loading: () => const Text('...', style: AppTextStyles.title),
+      error: (_, __) => Text('hello_generic'.tr(), style: AppTextStyles.title),
+      data: (user) {
+        if (user == null) {
+          return Text('hello_generic'.tr(), style: AppTextStyles.title);
+        }
+        final name = user.displayName ?? user.email ?? 'User';
+        return Text(
+          'hello_name'.tr(namedArgs: {'name': name}),
+          style: AppTextStyles.title,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
         );
       },
     );
   }
+}
 
-  Widget _buildBottomNavigationBar(User user) {
-    return BottomNavigationBar(
-      type: BottomNavigationBarType.fixed,
-      currentIndex: 0, // Home tab is active
-      onTap: (index) {
-        switch (index) {
-          case 0:
-            // Home - already here
-            break;
-          case 1:
-            // Navigate to games tab
-            final mainScaffold = MainScaffold.maybeOf(context);
-            mainScaffold?.switchToTab(2); // kTabJoin
-            break;
-          case 2:
-            // Navigate to agenda tab
-            final mainScaffold = MainScaffold.maybeOf(context);
-            mainScaffold?.switchToTab(3); // kTabAgenda
-            break;
-          case 3:
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => const FriendsScreen()),
-            );
-            break;
-          case 4:
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => const ProfileScreen()),
-            );
-            break;
-        }
-      },
-      items: [
-        BottomNavigationBarItem(
-          icon: const Icon(Icons.home),
-          label: 'home'.tr(),
+class _ActivitiesCard extends StatelessWidget {
+  const _ActivitiesCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.white,
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        boxShadow: AppShadows.md,
+      ),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        clipBehavior: Clip.antiAlias,
+        elevation: 4,
+        shadowColor: AppColors.blackShadow,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(AppRadius.card),
+          onTap: () {
+            // Note: We would need to refactor haptics here too
+            Navigator.of(context).pushNamed('/activities');
+          },
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Ink.image(
+                image: const AssetImage('assets/images/running6.png'),
+                height: 100,
+                width: double.infinity,
+                fit: BoxFit.cover,
+              ),
+              Padding(
+                padding: AppPaddings.allSmall,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('check_for_fields'.tr(),
+                        style: AppTextStyles.smallCardTitle),
+                    const SizedBox(height: 1),
+                    Text('look_for_fields'.tr(), style: AppTextStyles.small),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
-        BottomNavigationBarItem(
-          icon: const Icon(Icons.sports_soccer),
-          label: 'games'.tr(),
+      ),
+    );
+  }
+}
+
+class _QuickTilesRow extends ConsumerWidget {
+  final int pendingInvites;
+  final VoidCallback onTapOrganize;
+  final VoidCallback onTapJoin;
+  final WidgetRef ref;
+
+  const _QuickTilesRow({
+    required this.pendingInvites,
+    required this.onTapOrganize,
+    required this.onTapJoin,
+    required this.ref,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef widgetRef) {
+    return Row(
+      children: [
+        Expanded(
+          child: SizedBox(
+            height: 168,
+            child: _HomeImageTile(
+              image: const AssetImage('assets/images/games2.jpg'),
+              title: 'organize_a_game'.tr(),
+              subtitle: 'start_a_game'.tr(),
+              onTap: onTapOrganize,
+            ),
+          ),
         ),
-        BottomNavigationBarItem(
-          icon: const Icon(Icons.calendar_today),
-          label: 'agenda'.tr(),
-        ),
-        BottomNavigationBarItem(
-          icon: const Icon(Icons.people),
-          label: 'friends'.tr(),
-        ),
-        BottomNavigationBarItem(
-          icon: const Icon(Icons.person),
-          label: 'profile'.tr(),
+        const SizedBox(width: AppWidths.regular),
+        Expanded(
+          child: SizedBox(
+            height: 168,
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                _HomeImageTile(
+                  image: const AssetImage('assets/images/games3.jpg'),
+                  title: 'join_a_game'.tr(),
+                  subtitle: 'choose_a_game'.tr(),
+                  onTap: onTapJoin,
+                ),
+                if (pendingInvites > 0)
+                  Positioned(
+                    right: -6,
+                    top: -6,
+                    child: _InvitesBadge(count: pendingInvites),
+                  ),
+              ],
+            ),
+          ),
         ),
       ],
+    );
+  }
+}
+
+class _InvitesBadge extends StatelessWidget {
+  final int count;
+  const _InvitesBadge({required this.count});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 22,
+      padding: EdgeInsets.symmetric(horizontal: count < 10 ? 0 : 6),
+      constraints: const BoxConstraints(minWidth: 22),
+      decoration: BoxDecoration(
+        color: Colors.red,
+        borderRadius: BorderRadius.circular(11),
+        border: Border.all(color: Colors.white, width: 2),
+        boxShadow: const [
+          BoxShadow(color: Colors.black26, blurRadius: 4, offset: Offset(0, 1)),
+        ],
+      ),
+      alignment: Alignment.center,
+      child: Text(
+        count > 99 ? '99+' : '$count',
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+        ),
+        textAlign: TextAlign.center,
+      ),
+    );
+  }
+}
+
+class _UpcomingEventsCard extends ConsumerWidget {
+  final _LoadState state;
+  final List<Event> events;
+  final VoidCallback onRetry;
+  final VoidCallback onSeeAll;
+  final WidgetRef ref;
+
+  const _UpcomingEventsCard({
+    required this.state,
+    required this.events,
+    required this.onRetry,
+    required this.onSeeAll,
+    required this.ref,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef widgetRef) {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.white,
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        boxShadow: AppShadows.md,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: AppPaddings.allSmall,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('upcoming_events'.tr(),
+                        style: AppTextStyles.smallCardTitle),
+                    const SizedBox(height: AppHeights.superSmall),
+                    Text('join_sports_event'.tr(), style: AppTextStyles.small),
+                  ],
+                ),
+                if (state == _LoadState.success && events.isNotEmpty)
+                  TextButton(
+                    style: TextButton.styleFrom(
+                        padding: AppPaddings.symmHorizontalSmall),
+                    onPressed: onSeeAll,
+                    child: Text('see_all'.tr(), style: AppTextStyles.small),
+                  ),
+              ],
+            ),
+          ),
+          const Divider(height: 1, color: AppColors.lightgrey),
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 200),
+            switchInCurve: Curves.easeOut,
+            switchOutCurve: Curves.easeIn,
+            child: _buildStatefulContent(context),
+          ),
+          const SizedBox(height: AppHeights.superHuge),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatefulContent(BuildContext context) {
+    switch (state) {
+      case _LoadState.loading:
+        return const Padding(
+          padding: AppPaddings.allMedium,
+          child: _EventsSkeleton(),
+        );
+      case _LoadState.error:
+        return Padding(
+          padding: AppPaddings.allMedium,
+          child: Row(
+            children: [
+              const Icon(Icons.error_outline, color: AppColors.grey),
+              const SizedBox(width: AppWidths.small),
+              Expanded(
+                child: Text('events_load_failed'.tr(),
+                    style: AppTextStyles.bodyMuted),
+              ),
+              TextButton(onPressed: onRetry, child: Text('retry'.tr())),
+            ],
+          ),
+        );
+      case _LoadState.success:
+      case _LoadState.idle:
+        if (events.isEmpty) {
+          return Padding(
+            padding: AppPaddings.allMedium,
+            child: Row(
+              children: [
+                const Icon(Icons.inbox, color: AppColors.grey),
+                const SizedBox(width: AppWidths.small),
+                Expanded(
+                  child: Text('no_upcoming_events'.tr(),
+                      style: AppTextStyles.bodyMuted),
+                ),
+              ],
+            ),
+          );
+        }
+        return SizedBox(
+          height: 220,
+          child: ListView.separated(
+            primary: false,
+            physics: const BouncingScrollPhysics(),
+            padding: AppPaddings.bottomMedium,
+            itemCount: events.length,
+            separatorBuilder: (_, __) => const Padding(
+              padding: AppPaddings.symmHorizontalMedium,
+              child: Divider(height: 1, color: AppColors.grey),
+            ),
+            itemBuilder: (context, index) {
+              final e = events[index];
+              return ListTile(
+                contentPadding: AppPaddings.symmHorizontalMedium,
+                leading: const Icon(Icons.event),
+                title: Text(e.title,
+                    style: AppTextStyles.cardTitle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis),
+                subtitle: Padding(
+                  padding: AppPaddings.topSuperSmall,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(children: [
+                        const Icon(Icons.access_time,
+                            size: 14, color: AppColors.grey),
+                        const SizedBox(width: AppWidths.small),
+                        Expanded(
+                          child: Text(e.dateTime,
+                              style: AppTextStyles.small,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis),
+                        ),
+                      ]),
+                      Row(children: [
+                        const Icon(Icons.group,
+                            size: 14, color: AppColors.grey),
+                        const SizedBox(width: AppWidths.small),
+                        Expanded(
+                          child: Text(e.targetGroup,
+                              style: AppTextStyles.small,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis),
+                        ),
+                      ]),
+                      Row(children: [
+                        const Icon(Icons.location_on,
+                            size: 14, color: AppColors.grey),
+                        const SizedBox(width: AppWidths.small),
+                        Expanded(
+                          child: Text(e.location,
+                              style: AppTextStyles.small,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis),
+                        ),
+                      ]),
+                      Row(children: [
+                        const Icon(Icons.euro, size: 14, color: AppColors.grey),
+                        const SizedBox(width: AppWidths.small),
+                        Expanded(
+                          child: Text(e.cost,
+                              style: AppTextStyles.smallMuted,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis),
+                        ),
+                      ]),
+                    ],
+                  ),
+                ),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => HapticFeedback.selectionClick(),
+              );
+            },
+          ),
+        );
+    }
+  }
+}
+
+class _EventsSkeleton extends StatelessWidget {
+  const _EventsSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        _buildSkeletonItem(),
+        _buildSkeletonItem(),
+      ],
+    );
+  }
+
+  Widget _buildSkeletonItem() {
+    return ListTile(
+      leading: Container(
+        width: 40,
+        height: 40,
+        decoration: BoxDecoration(
+          color: AppColors.lightgrey,
+          borderRadius: BorderRadius.circular(8),
+        ),
+      ),
+      title: Container(
+        height: 16,
+        margin: const EdgeInsets.only(bottom: 4),
+        decoration: BoxDecoration(
+          color: AppColors.lightgrey,
+          borderRadius: BorderRadius.circular(4),
+        ),
+      ),
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            height: 12,
+            width: double.infinity * 0.6,
+            margin: const EdgeInsets.only(bottom: 4),
+            decoration: BoxDecoration(
+              color: AppColors.lightgrey,
+              borderRadius: BorderRadius.circular(4),
+            ),
+          ),
+          Container(
+            height: 12,
+            width: double.infinity * 0.5,
+            decoration: BoxDecoration(
+              color: AppColors.lightgrey,
+              borderRadius: BorderRadius.circular(4),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _HomeImageTile extends StatelessWidget {
+  final ImageProvider image;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  const _HomeImageTile({
+    required this.image,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.white,
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        boxShadow: AppShadows.md,
+      ),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        clipBehavior: Clip.antiAlias,
+        elevation: 4,
+        shadowColor: AppColors.blackShadow,
+        child: InkWell(
+          onTap: onTap,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Flexible(
+                flex: 2,
+                child: Ink.image(
+                  image: image,
+                  width: double.infinity,
+                  fit: BoxFit.cover,
+                ),
+              ),
+              Flexible(
+                flex: 1,
+                child: Padding(
+                  padding: AppPaddings.symmMedium,
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(title,
+                          style: AppTextStyles.smallCardTitle,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis),
+                      //const SizedBox(height: 1),
+                      Text(subtitle,
+                          style: AppTextStyles.superSmall,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

@@ -10,6 +10,7 @@ import '../friends/friends_service_instance.dart';
 class SyncServiceInstance {
   final CloudGamesServiceInstance _cloudGamesService;
   final FriendsServiceInstance _friendsService;
+  final SharedPreferences? _prefs;
 
   static const String _syncQueueKey = 'sync_queue';
 
@@ -31,6 +32,7 @@ class SyncServiceInstance {
   SyncServiceInstance(
     this._cloudGamesService,
     this._friendsService,
+    this._prefs,
   );
 
   /// Stream of sync status changes
@@ -169,8 +171,14 @@ class SyncServiceInstance {
   /// Load sync queue from storage
   Future<void> _loadSyncQueue() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final queueJson = prefs.getString(_syncQueueKey);
+      if (_prefs == null) {
+        debugPrint(
+            'SharedPreferences not available, starting with empty queue');
+        _syncQueue.clear();
+        return;
+      }
+
+      final queueJson = _prefs!.getString(_syncQueueKey);
 
       if (queueJson != null) {
         final List<dynamic> queueList = jsonDecode(queueJson);
@@ -184,18 +192,25 @@ class SyncServiceInstance {
       }
     } catch (e) {
       debugPrint('Failed to load sync queue: $e');
+      // If SharedPreferences is not ready, just start with empty queue
+      _syncQueue.clear();
     }
   }
 
   /// Save sync queue to storage
   Future<void> _saveSyncQueue() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
+      if (_prefs == null) {
+        debugPrint('SharedPreferences not available, cannot save queue');
+        return;
+      }
+
       final queueJson =
           jsonEncode(_syncQueue.map((op) => op.toJson()).toList());
-      await prefs.setString(_syncQueueKey, queueJson);
+      await _prefs!.setString(_syncQueueKey, queueJson);
     } catch (e) {
       debugPrint('Failed to save sync queue: $e');
+      // If SharedPreferences fails, operations will be lost but app continues
     }
   }
 

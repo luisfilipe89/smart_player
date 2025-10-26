@@ -196,3 +196,4 @@ This is an **optimal** infrastructure setup for a Flutter application with Fireb
 
 *Mission Accomplished!* 🎉
 
+

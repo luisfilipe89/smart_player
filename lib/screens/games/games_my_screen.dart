@@ -294,6 +294,7 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
     _weatherLoading.add(key);
     try {
       final weatherActions = ref.read(weatherActionsProvider);
+      if (weatherActions == null) return null;
       final map = await weatherActions.fetchWeatherForDate(
         date: game.dateTime,
         latitude: game.latitude!,
@@ -865,6 +866,8 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
                                     final forecasts = _weatherByGameId[game.id];
                                     final weatherActions =
                                         ref.read(weatherActionsProvider);
+                                    if (weatherActions == null)
+                                      return const SizedBox.shrink();
                                     final String cond = forecasts?[time] ??
                                         weatherActions
                                             .getWeatherCondition(time);

@@ -5,7 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:move_young/services/system/haptics_provider.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:move_young/services/cache/favorites_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:move_young/services/external/overpass_provider.dart';
 import 'package:move_young/screens/maps/gmaps_screen.dart';
@@ -87,22 +87,19 @@ class _GenericSportScreenState extends ConsumerState<GenericSportScreen>
   }
 
   Future<void> _loadFavorites() async {
-    final prefs = await SharedPreferences.getInstance();
+    final favorites = await ref.read(favoritesActionsProvider)?.getFavorites();
+    if (!mounted) return;
     setState(() {
-      _favoriteIds =
-          prefs.getStringList('favoriteSportLocations')?.toSet() ?? {};
+      _favoriteIds = favorites ?? {};
     });
   }
 
   Future<void> _toggleFavorite(String id) async {
-    final prefs = await SharedPreferences.getInstance();
+    await ref.read(favoritesActionsProvider)?.toggleFavorite(id);
+    if (!mounted) return;
+    final updated = await ref.read(favoritesActionsProvider)?.getFavorites();
     setState(() {
-      if (_favoriteIds.contains(id)) {
-        _favoriteIds.remove(id);
-      } else {
-        _favoriteIds.add(id);
-      }
-      prefs.setStringList('favoriteSportLocations', _favoriteIds.toList());
+      _favoriteIds = updated ?? _favoriteIds;
     });
   }
 
@@ -131,6 +128,7 @@ class _GenericSportScreenState extends ConsumerState<GenericSportScreen>
       _userPosition = pos;
 
       final overpassActions = ref.read(overpassActionsProvider);
+      if (overpassActions == null) return;
       final locations = await overpassActions.fetchFields(
         areaName: "'s-Hertogenbosch",
         sportType: widget.sportType,
@@ -737,7 +735,7 @@ class _FieldsSliverList extends StatelessWidget {
   final Future<void> Function(String id) onToggleFavorite;
   final void Function(String lat, String lon) onDirections;
   final Future<void> Function(String name, String lat, String lon) onShare;
-  final HapticsActions hapticsActions;
+  final HapticsActions? hapticsActions;
 
   const _FieldsSliverList({
     required this.filteredLocations,
@@ -786,7 +784,7 @@ class _FieldsSliverList extends StatelessWidget {
             onToggleFavorite: () async {
               final id = '$lat,$lon';
               await onToggleFavorite(id);
-              await hapticsActions.selectionClick();
+              await hapticsActions?.selectionClick();
             },
             onShare: () async {
               final name = await getDisplayName(field);

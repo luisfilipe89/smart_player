@@ -1,16 +1,20 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'overpass_service_instance.dart';
 import 'package:move_young/providers/infrastructure/shared_preferences_provider.dart';
 
 // Overpass service provider
-final overpassServiceProvider = Provider<OverpassServiceInstance>((ref) {
+final overpassServiceProvider = Provider<OverpassServiceInstance?>((ref) {
   final prefs = ref.watch(sharedPreferencesProvider);
-  return OverpassServiceInstance(prefs);
+  return prefs != null ? OverpassServiceInstance(prefs) : null;
 });
 
 // Overpass actions provider
-final overpassActionsProvider = Provider<OverpassActions>((ref) {
+final overpassActionsProvider = Provider<OverpassActions?>((ref) {
   final overpassService = ref.watch(overpassServiceProvider);
+  if (overpassService == null) {
+    return null;
+  }
   return OverpassActions(overpassService);
 });
 

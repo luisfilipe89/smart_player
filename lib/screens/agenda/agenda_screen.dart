@@ -132,6 +132,7 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
 
   Future<void> _loadFavorites() async {
     final favoritesService = ref.read(favoritesServiceProvider);
+    if (favoritesService == null) return;
     final favorites = await favoritesService.getFavorites();
     setState(() {
       _favoriteTitles = favorites;
@@ -140,6 +141,7 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
 
   Future<void> _toggleFavorite(String title) async {
     final favoritesService = ref.read(favoritesServiceProvider);
+    if (favoritesService == null) return;
     await favoritesService.toggleFavorite(title);
     setState(() {
       if (_favoriteTitles.contains(title)) {

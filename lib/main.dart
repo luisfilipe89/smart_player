@@ -12,8 +12,8 @@ import 'package:move_young/theme/_theme.dart';
 // import 'package:move_young/services/haptics_service.dart';
 import 'package:move_young/services/system/accessibility_provider.dart';
 import 'package:move_young/providers/infrastructure/shared_preferences_provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:move_young/widgets/common/sync_status_indicator.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 // import 'package:move_young/screens/main_scaffold.dart'; // Unused import
 import 'firebase_options.dart';
 import 'package:move_young/utils/logger.dart';
@@ -27,86 +27,133 @@ final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 Timer? _cacheCleanupTimer;
 
 void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  NumberedLogger.install();
-  await EasyLocalization.ensureInitialized();
+  // Handle errors in async Zone
+  runZonedGuarded(() async {
+    WidgetsFlutterBinding.ensureInitialized();
+    NumberedLogger.install();
 
-  // Initialize Firebase
-  try {
-    await Firebase.initializeApp(
-      options: DefaultFirebaseOptions.currentPlatform,
-    );
-    // Firebase initialized successfully
-  } catch (e) {
-    // Firebase initialization failed
-    // Firebase init failed: $e
-  }
-
-  // Initialize Firebase App Check (optional for development)
-  try {
-    await FirebaseAppCheck.instance.activate(
-      androidProvider: AndroidProvider.debug,
-      appleProvider: AppleProvider.debug,
-      webProvider: ReCaptchaV3Provider('auto'),
-    );
-  } catch (e) {
-    // App Check initialization failed; safe to proceed in dev
-  }
-
-  // Register background message handler
-  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
-
-  // Services are now initialized through Riverpod providers
-  // This ensures proper dependency injection and testability
-  // Haptics and Accessibility will be initialized when first accessed
-  // to avoid SharedPreferences channel errors during app startup
-
-  // Schedule periodic cache cleanup every 6 hours
-  _cacheCleanupTimer = Timer.periodic(const Duration(hours: 6), (timer) async {
+    // Prevent early platform channel calls for SharedPreferences
+    // by using an in-memory store until real prefs are initialized later.
     try {
-      // Cache cleanup will be handled through providers
-      // await CacheService.clearExpiredCache();
+      SharedPreferences.setMockInitialValues(const {});
     } catch (_) {}
-  });
 
-  // Status bar styling only; avoid forcing Android nav bar appearance
-  SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
-    statusBarColor: Colors.transparent,
-    statusBarIconBrightness: Brightness.dark,
-    statusBarBrightness: Brightness.light,
-  ));
+    // Handle errors gracefully
+    FlutterError.onError = (FlutterErrorDetails details) {
+      // Log platform channel errors but don't crash the app
+      if (details.exception is PlatformException) {
+        final error = details.exception as PlatformException;
+        if (error.code == 'channel-error') {
+          debugPrint('Platform channel error (ignored): ${error.message}');
+          return;
+        }
+      }
+      // Let other errors be handled normally
+      FlutterError.presentError(details);
+    };
 
-  runApp(
-    ProviderScope(
-      overrides: [
-        sharedPreferencesProvider.overrideWithValue(
-          await SharedPreferences.getInstance(),
+    // Defer EasyLocalization initialization; the widget will handle loading
+
+    // Services are now initialized through Riverpod providers
+    // This ensures proper dependency injection and testability
+    // Haptics and Accessibility will be initialized when first accessed
+    // to avoid SharedPreferences channel errors during app startup
+
+    // Schedule periodic cache cleanup every 6 hours
+    _cacheCleanupTimer =
+        Timer.periodic(const Duration(hours: 6), (timer) async {
+      try {
+        // Cache cleanup will be handled through providers
+        // await CacheService.clearExpiredCache();
+      } catch (_) {}
+    });
+
+    // Status bar styling only; avoid forcing Android nav bar appearance
+    SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: Brightness.dark,
+      statusBarBrightness: Brightness.light,
+    ));
+
+    // Render the first frame ASAP
+    runApp(
+      ProviderScope(
+        child: EasyLocalization(
+          supportedLocales: const [Locale('en'), Locale('nl')],
+          path: 'assets/translations',
+          fallbackLocale: const Locale('nl'),
+          startLocale: const Locale('nl'),
+          saveLocale: false,
+          child: const MoveYoungApp(),
         ),
-      ],
-      child: EasyLocalization(
-        supportedLocales: const [Locale('en'), Locale('nl')],
-        path: 'assets/translations',
-        fallbackLocale: const Locale('nl'),
-        startLocale: const Locale('nl'),
-        child: const MoveYoungApp(),
       ),
-    ),
-  );
+    );
+
+    // Kick off heavy init work asynchronously (do not block first frame)
+    // Firebase init
+    unawaited(Future(() async {
+      try {
+        await Firebase.initializeApp(
+          options: DefaultFirebaseOptions.currentPlatform,
+        );
+      } catch (_) {}
+
+      try {
+        await FirebaseAppCheck.instance.activate(
+          androidProvider: AndroidProvider.debug,
+          appleProvider: AppleProvider.debug,
+          webProvider: ReCaptchaV3Provider('auto'),
+        );
+      } catch (_) {}
+
+      // Register background message handler
+      FirebaseMessaging.onBackgroundMessage(
+        _firebaseMessagingBackgroundHandler,
+      );
+    }));
+  }, (error, stack) {
+    // Handle uncaught errors gracefully
+    debugPrint('Uncaught error in main: $error');
+    if (error is PlatformException && error.code == 'channel-error') {
+      debugPrint('Ignoring platform channel error during startup');
+      return;
+    }
+    // Re-throw other errors
+    throw error;
+  });
 }
 
-class MoveYoungApp extends StatefulWidget {
+class MoveYoungApp extends ConsumerStatefulWidget {
   const MoveYoungApp({super.key});
 
   @override
-  State<MoveYoungApp> createState() => _MoveYoungAppState();
+  ConsumerState<MoveYoungApp> createState() => _MoveYoungAppState();
 }
 
-class _MoveYoungAppState extends State<MoveYoungApp>
+class _MoveYoungAppState extends ConsumerState<MoveYoungApp>
     with WidgetsBindingObserver {
+  bool _isInitialized = false;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    // Wait a full frame cycle before initializing
+    // This ensures platform channels are completely ready
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      // Initialize SharedPreferences after first frame
+      if (mounted) {
+        await initializeSharedPreferences(ref);
+      }
+      // Wait another frame to be extra safe
+      Future.delayed(const Duration(milliseconds: 100), () {
+        if (mounted) {
+          setState(() {
+            _isInitialized = true;
+          });
+        }
+      });
+    });
   }
 
   @override
@@ -128,9 +175,26 @@ class _MoveYoungAppState extends State<MoveYoungApp>
 
   @override
   Widget build(BuildContext context) {
+    // First build: show provider-free MaterialApp
+    if (!_isInitialized) {
+      debugPrint('[Bootstrap] Rendering first frame Splash');
+      return const MaterialApp(
+        debugShowCheckedModeBanner: false,
+        home: SplashScreen(),
+      );
+    }
+
+    // Second build: use providers
     return Consumer(
       builder: (context, ref, child) {
-        final isHighContrast = ref.watch(isHighContrastEnabledProvider);
+        // Try to get high contrast mode, but don't block on it
+        bool isHighContrast = false;
+        try {
+          isHighContrast = ref.watch(isHighContrastEnabledProvider);
+        } catch (e) {
+          debugPrint('Error reading high contrast mode: $e');
+          isHighContrast = false;
+        }
 
         return MaterialApp(
           navigatorKey: navigatorKey,
@@ -156,11 +220,59 @@ class _MoveYoungAppState extends State<MoveYoungApp>
           supportedLocales: context.supportedLocales,
           locale: context.locale,
           scrollBehavior: AppScrollBehavior(),
-          home: GlobalSyncStatusBanner(
-            child: const WelcomeScreen(),
-          ),
+          home: const WelcomeScreenWrapper(),
         );
       },
+    );
+  }
+}
+
+/// Simple splash screen that doesn't use any providers
+class SplashScreen extends StatelessWidget {
+  const SplashScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return const Scaffold(
+      body: Center(
+        child: CircularProgressIndicator(),
+      ),
+    );
+  }
+}
+
+/// Wrapper widget for WelcomeScreen that includes GlobalSyncStatusBanner
+/// This wrapper defers GlobalSyncStatusBanner initialization to avoid platform channel errors
+class WelcomeScreenWrapper extends StatefulWidget {
+  const WelcomeScreenWrapper({super.key});
+
+  @override
+  State<WelcomeScreenWrapper> createState() => _WelcomeScreenWrapperState();
+}
+
+class _WelcomeScreenWrapperState extends State<WelcomeScreenWrapper> {
+  bool _ready = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Defer GlobalSyncStatusBanner initialization
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        setState(() {
+          _ready = true;
+        });
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_ready) {
+      return const WelcomeScreen();
+    }
+    return GlobalSyncStatusBanner(
+      child: const WelcomeScreen(),
     );
   }
 }

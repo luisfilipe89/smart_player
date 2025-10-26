@@ -138,3 +138,4 @@ testWidgets('test name', (tester) async {
 
 *Golden tests replaced with practical visual validation* ✨
 
+

@@ -1,4 +1,5 @@
 // lib/services/accessibility_service_instance.dart
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:async';
 
@@ -39,10 +40,15 @@ class AccessibilityServiceInstance {
   Future<void> initialize() async {
     try {
       final currentValue = await isHighContrastEnabled();
-      _highContrastController.add(currentValue);
+      if (!_highContrastController.isClosed) {
+        _highContrastController.add(currentValue);
+      }
     } catch (e) {
       // If initialization fails, use default value
-      _highContrastController.add(false);
+      debugPrint('AccessibilityService initialize error: $e');
+      if (!_highContrastController.isClosed) {
+        _highContrastController.add(false);
+      }
     }
   }
 

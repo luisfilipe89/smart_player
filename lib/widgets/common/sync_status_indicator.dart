@@ -29,21 +29,26 @@ class _SyncStatusIndicatorState extends ConsumerState<SyncStatusIndicator> {
   void initState() {
     super.initState();
     _updateStatus();
-    ref.read(syncServiceProvider).statusStream.listen((status) {
+    final syncService = ref.read(syncServiceProvider);
+    syncService?.statusStream.listen((status) {
       if (mounted) {
         setState(() {
           _currentStatus = status;
-          _failedCount = ref.read(syncServiceProvider).failedOperationsCount;
+          _failedCount =
+              ref.read(syncServiceProvider)?.failedOperationsCount ?? 0;
         });
       }
     });
   }
 
   void _updateStatus() {
-    setState(() {
-      _currentStatus = ref.read(syncServiceProvider).currentStatus;
-      _failedCount = ref.read(syncServiceProvider).failedOperationsCount;
-    });
+    final syncService = ref.read(syncServiceProvider);
+    if (syncService != null) {
+      setState(() {
+        _currentStatus = syncService.currentStatus;
+        _failedCount = syncService.failedOperationsCount;
+      });
+    }
   }
 
   @override
@@ -78,7 +83,12 @@ class _SyncStatusIndicatorState extends ConsumerState<SyncStatusIndicator> {
         );
       case SyncStatus.failed:
         return GestureDetector(
-          onTap: () => _showRetryDialog(context, ref.read(syncServiceProvider)),
+          onTap: () {
+            final syncService = ref.read(syncServiceProvider);
+            if (syncService != null) {
+              _showRetryDialog(context, syncService);
+            }
+          },
           child: Container(
             padding: const EdgeInsets.all(4),
             decoration: BoxDecoration(
@@ -143,22 +153,49 @@ class _GlobalSyncStatusBannerState
   @override
   void initState() {
     super.initState();
-    _updateStatus();
-    ref.read(syncServiceProvider).statusStream.listen((status) {
+    // Defer initialization until after the first frame to ensure platform channels are ready
+    WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
-        setState(() {
-          _currentStatus = status;
-          _failedCount = ref.read(syncServiceProvider).failedOperationsCount;
-        });
+        _initializeSyncListener();
       }
     });
   }
 
+  void _initializeSyncListener() {
+    try {
+      final syncService = ref.read(syncServiceProvider);
+      if (syncService == null) {
+        debugPrint('Sync service not available yet');
+        return;
+      }
+
+      _updateStatus();
+      syncService.statusStream.listen((status) {
+        if (mounted) {
+          setState(() {
+            _currentStatus = status;
+            _failedCount =
+                ref.read(syncServiceProvider)?.failedOperationsCount ?? 0;
+          });
+        }
+      });
+    } catch (e) {
+      debugPrint('Failed to initialize sync listener: $e');
+    }
+  }
+
   void _updateStatus() {
-    setState(() {
-      _currentStatus = ref.read(syncServiceProvider).currentStatus;
-      _failedCount = ref.read(syncServiceProvider).failedOperationsCount;
-    });
+    try {
+      final syncService = ref.read(syncServiceProvider);
+      if (syncService != null) {
+        setState(() {
+          _currentStatus = syncService.currentStatus;
+          _failedCount = syncService.failedOperationsCount;
+        });
+      }
+    } catch (e) {
+      debugPrint('Failed to update sync status: $e');
+    }
   }
 
   @override
@@ -195,7 +232,7 @@ class _GlobalSyncStatusBannerState
                     ),
                     TextButton(
                       onPressed: () {
-                        ref.read(syncServiceProvider).retryFailedOperations();
+                        ref.read(syncServiceProvider)?.retryFailedOperations();
                       },
                       child: Text(
                         'sync_retry'.tr(),
@@ -259,7 +296,12 @@ class SyncStatusChip extends ConsumerWidget {
         );
       case SyncStatus.failed:
         return GestureDetector(
-          onTap: () => _showRetryDialog(context, ref.read(syncServiceProvider)),
+          onTap: () {
+            final syncService = ref.read(syncServiceProvider);
+            if (syncService != null) {
+              _showRetryDialog(context, syncService);
+            }
+          },
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
             decoration: BoxDecoration(

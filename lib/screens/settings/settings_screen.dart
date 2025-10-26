@@ -87,7 +87,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     setState(() => _submitting = true);
     try {
       final hapticsActions = ref.read(hapticsActionsProvider);
-      await hapticsActions.setEnabled(_haptics);
+      if (hapticsActions != null) {
+        await hapticsActions.setEnabled(_haptics);
+      }
       final uid = ref.read(currentUserIdProvider);
       if (uid != null && uid.isNotEmpty) {
         final profileSettingsActions = ref.read(profileSettingsActionsProvider);
@@ -314,7 +316,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     onChanged: (v) async {
                       setState(() => _haptics = v);
                       final hapticsActions = ref.read(hapticsActionsProvider);
-                      await hapticsActions.setEnabled(v);
+                      if (hapticsActions != null) {
+                        await hapticsActions.setEnabled(v);
+                      }
                     },
                     title: Text('settings_haptics'.tr()),
                     contentPadding: EdgeInsets.zero,

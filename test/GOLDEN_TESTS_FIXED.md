@@ -136,3 +136,4 @@ flutter test --update-goldens test/golden/
 
 *Golden tests now use practical widget validation instead of pixel comparison*
 
+

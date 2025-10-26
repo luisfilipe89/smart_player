@@ -1,4 +1,3 @@
-// lib/screens/auth/auth_screen_migrated.dart
 import 'package:flutter/material.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -107,51 +106,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
 
       // Success - navigation will be handled by the auth state listener
       if (mounted) {
-        Navigator.of(context).pushReplacementNamed('/home');
-      }
-    } catch (e, stack) {
-      ErrorHandlerService.logError(e, stack);
-      if (mounted) {
-        ErrorHandlerService.showError(context, e);
-      }
-    }
-  }
-
-  Future<void> _handleGoogleSignIn() async {
-    // Check connectivity before attempting auth
-    final hasConnection = ref.read(hasConnectionProvider);
-    if (!hasConnection) {
-      ErrorHandlerService.showError(context, 'error_network');
-      return;
-    }
-
-    try {
-      await ref.read(authActionsProvider).signInWithGoogle();
-      // Success - navigation will be handled by the auth state listener
-      if (mounted) {
-        Navigator.of(context).pushReplacementNamed('/home');
-      }
-    } catch (e, stack) {
-      ErrorHandlerService.logError(e, stack);
-      if (mounted) {
-        ErrorHandlerService.showError(context, e);
-      }
-    }
-  }
-
-  Future<void> _handleAnonymousSignIn() async {
-    // Check connectivity before attempting auth
-    final hasConnection = ref.read(hasConnectionProvider);
-    if (!hasConnection) {
-      ErrorHandlerService.showError(context, 'error_network');
-      return;
-    }
-
-    try {
-      await ref.read(authActionsProvider).signInAnonymously();
-      // Success - navigation will be handled by the auth state listener
-      if (mounted) {
-        Navigator.of(context).pushReplacementNamed('/home');
+        Navigator.of(context).pop(true);
       }
     } catch (e, stack) {
       ErrorHandlerService.logError(e, stack);
@@ -167,249 +122,195 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
     final authAsync = ref.watch(currentUserProvider);
 
     return Scaffold(
-      backgroundColor: AppColors.primary,
+      backgroundColor: AppColors.background,
+      appBar: AppBar(
+        backgroundColor: AppColors.background,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.close, color: AppColors.text),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+      ),
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            children: [
-              Expanded(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    // Logo or app name
-                    Text(
-                      'app_name'.tr(),
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 32,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'app_tagline'.tr(),
-                      style: const TextStyle(
-                        color: Colors.white70,
-                        fontSize: 16,
-                      ),
-                    ),
-                    const SizedBox(height: 48),
-
-                    // Auth form
-                    Container(
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(16),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.1),
-                            blurRadius: 20,
-                            offset: const Offset(0, 10),
-                          ),
-                        ],
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.all(24),
-                        child: Form(
-                          key: _formKey,
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              // Title
-                              Text(
-                                _isLogin ? 'sign_in'.tr() : 'sign_up'.tr(),
-                                style: const TextStyle(
-                                  fontSize: 24,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                                textAlign: TextAlign.center,
-                              ),
-                              const SizedBox(height: 24),
-
-                              // Name field (only for registration)
-                              if (!_isLogin) ...[
-                                TextFormField(
-                                  controller: _nameController,
-                                  decoration: InputDecoration(
-                                    labelText: 'name'.tr(),
-                                    prefixIcon: const Icon(Icons.person),
-                                    border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                  ),
-                                  validator: (value) {
-                                    if (value == null || value.trim().isEmpty) {
-                                      return 'name_required'.tr();
-                                    }
-                                    if (value.trim().length < 2) {
-                                      return 'name_too_short'.tr();
-                                    }
-                                    if (_containsInappropriateContent(
-                                        value.trim())) {
-                                      return 'name_inappropriate'.tr();
-                                    }
-                                    return null;
-                                  },
-                                ),
-                                const SizedBox(height: 16),
-                              ],
-
-                              // Email field
-                              TextFormField(
-                                controller: _emailController,
-                                keyboardType: TextInputType.emailAddress,
-                                decoration: InputDecoration(
-                                  labelText: 'email'.tr(),
-                                  prefixIcon: const Icon(Icons.email),
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                ),
-                                validator: (value) {
-                                  if (value == null || value.trim().isEmpty) {
-                                    return 'email_required'.tr();
-                                  }
-                                  if (!RegExp(
-                                          r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$')
-                                      .hasMatch(value.trim())) {
-                                    return 'email_invalid'.tr();
-                                  }
-                                  return null;
-                                },
-                              ),
-                              const SizedBox(height: 16),
-
-                              // Password field
-                              TextFormField(
-                                controller: _passwordController,
-                                obscureText: _obscurePassword,
-                                decoration: InputDecoration(
-                                  labelText: 'password'.tr(),
-                                  prefixIcon: const Icon(Icons.lock),
-                                  suffixIcon: IconButton(
-                                    icon: Icon(
-                                      _obscurePassword
-                                          ? Icons.visibility
-                                          : Icons.visibility_off,
-                                    ),
-                                    onPressed: () {
-                                      setState(() {
-                                        _obscurePassword = !_obscurePassword;
-                                      });
-                                    },
-                                  ),
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                ),
-                                validator: (value) {
-                                  if (value == null || value.isEmpty) {
-                                    return 'password_required'.tr();
-                                  }
-                                  if (value.length < 6) {
-                                    return 'password_too_short'.tr();
-                                  }
-                                  return null;
-                                },
-                              ),
-                              const SizedBox(height: 24),
-
-                              // Auth button
-                              ElevatedButton(
-                                onPressed:
-                                    authAsync.isLoading ? null : _handleAuth,
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: AppColors.primary,
-                                  foregroundColor: Colors.white,
-                                  padding:
-                                      const EdgeInsets.symmetric(vertical: 16),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                ),
-                                child: authAsync.isLoading
-                                    ? const SizedBox(
-                                        height: 20,
-                                        width: 20,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                          valueColor:
-                                              AlwaysStoppedAnimation<Color>(
-                                                  Colors.white),
-                                        ),
-                                      )
-                                    : Text(
-                                        _isLogin
-                                            ? 'sign_in'.tr()
-                                            : 'sign_up'.tr(),
-                                        style: const TextStyle(
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                              ),
-                              const SizedBox(height: 16),
-
-                              // Google sign in button
-                              OutlinedButton.icon(
-                                onPressed: authAsync.isLoading
-                                    ? null
-                                    : _handleGoogleSignIn,
-                                icon:
-                                    const Icon(Icons.login, color: Colors.red),
-                                label: Text('sign_in_with_google'.tr()),
-                                style: OutlinedButton.styleFrom(
-                                  padding:
-                                      const EdgeInsets.symmetric(vertical: 16),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(height: 16),
-
-                              // Anonymous sign in button
-                              TextButton(
-                                onPressed: authAsync.isLoading
-                                    ? null
-                                    : _handleAnonymousSignIn,
-                                child: Text('continue_anonymously'.tr()),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
+        child: SingleChildScrollView(
+          padding: EdgeInsets.only(
+            left: AppSpacing.lg,
+            right: AppSpacing.lg,
+            top: AppSpacing.lg,
+            bottom: AppSpacing.lg + MediaQuery.of(context).viewInsets.bottom,
+          ),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // Title
+                Text(
+                  _isLogin
+                      ? 'auth_signin_title'.tr()
+                      : 'auth_signup_title'.tr(),
+                  style: AppTextStyles.h2.copyWith(
+                    color: AppColors.text,
+                  ),
+                  textAlign: TextAlign.center,
                 ),
-              ),
-
-              // Toggle between login and registration
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    _isLogin ? 'no_account'.tr() : 'have_account'.tr(),
-                    style: const TextStyle(color: Colors.white70),
+                const SizedBox(height: AppSpacing.sm),
+                Text(
+                  _isLogin ? 'auth_signin_sub'.tr() : 'auth_signup_sub'.tr(),
+                  style: AppTextStyles.body.copyWith(
+                    color: AppColors.grey,
                   ),
-                  TextButton(
-                    onPressed: () {
-                      setState(() {
-                        _isLogin = !_isLogin;
-                      });
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: AppSpacing.xl),
+
+                // Name field (only for signup)
+                if (!_isLogin) ...[
+                  TextFormField(
+                    controller: _nameController,
+                    decoration: InputDecoration(
+                      labelText: 'auth_first_name'.tr(),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(AppRadius.card),
+                      ),
+                    ),
+                    validator: (value) {
+                      if (value == null || value.trim().isEmpty) {
+                        return 'auth_name_required'.tr();
+                      }
+
+                      final name = value.trim();
+
+                      // length limits
+                      if (name.length < 2) {
+                        return 'auth_name_too_short'.tr();
+                      }
+                      if (name.length > 20) {
+                        return 'auth_name_too_long'.tr();
+                      }
+
+                      // allow common letters incl. basic latin accents, spaces, apostrophes and hyphens
+                      final validChars = RegExp(r"^[A-Za-zÀ-ÿ' -]+");
+                      if (!validChars.hasMatch(name)) {
+                        return 'auth_name_invalid'.tr();
+                      }
+
+                      if (_containsInappropriateContent(name)) {
+                        return 'auth_name_inappropriate'.tr();
+                      }
+
+                      return null;
                     },
-                    child: Text(
-                      _isLogin ? 'sign_up'.tr() : 'sign_in'.tr(),
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                ],
+
+                // Email field
+                TextFormField(
+                  controller: _emailController,
+                  keyboardType: TextInputType.emailAddress,
+                  decoration: InputDecoration(
+                    labelText: 'auth_email'.tr(),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(AppRadius.card),
+                    ),
+                  ),
+                  validator: (value) {
+                    if (value == null || value.trim().isEmpty) {
+                      return 'auth_email_required'.tr();
+                    }
+                    if (!value.contains('@')) {
+                      return 'auth_email_invalid'.tr();
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: AppSpacing.md),
+
+                // Password field
+                TextFormField(
+                  controller: _passwordController,
+                  obscureText: _obscurePassword,
+                  decoration: InputDecoration(
+                    labelText: 'auth_password'.tr(),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(AppRadius.card),
+                    ),
+                    suffixIcon: IconButton(
+                      onPressed: () {
+                        setState(() {
+                          _obscurePassword = !_obscurePassword;
+                        });
+                      },
+                      icon: Icon(
+                        _obscurePassword
+                            ? Icons.visibility_off
+                            : Icons.visibility,
+                        color: AppColors.grey,
                       ),
                     ),
                   ),
-                ],
-              ),
-            ],
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'auth_password_required'.tr();
+                    }
+                    if (value.length < 6) {
+                      return 'auth_password_too_short'.tr();
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: AppSpacing.lg),
+
+                // Auth button
+                ElevatedButton(
+                  onPressed: authAsync.isLoading ? null : _handleAuth,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(
+                      vertical: AppSpacing.md,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(AppRadius.card),
+                    ),
+                  ),
+                  child: authAsync.isLoading
+                      ? const SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor:
+                                AlwaysStoppedAnimation<Color>(Colors.white),
+                          ),
+                        )
+                      : Text(
+                          _isLogin ? 'auth_signin'.tr() : 'auth_signup'.tr(),
+                          style: AppTextStyles.button,
+                        ),
+                ),
+                const SizedBox(height: AppSpacing.md),
+
+                // Toggle between login/signup
+                TextButton(
+                  onPressed: authAsync.isLoading
+                      ? null
+                      : () {
+                          setState(() => _isLogin = !_isLogin);
+                        },
+                  child: Text(
+                    _isLogin
+                        ? 'auth_toggle_to_signup'.tr()
+                        : 'auth_toggle_to_signin'.tr(),
+                    style: AppTextStyles.body.copyWith(
+                      color: AppColors.primary,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.xl), // Extra space at bottom
+              ],
+            ),
           ),
         ),
       ),

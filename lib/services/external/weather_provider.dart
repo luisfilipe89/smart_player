@@ -1,17 +1,21 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'weather_service_instance.dart';
 import 'package:move_young/providers/infrastructure/shared_preferences_provider.dart';
 
 // Weather service provider
-final weatherServiceProvider = Provider<WeatherServiceInstance>((ref) {
+final weatherServiceProvider = Provider<WeatherServiceInstance?>((ref) {
   final prefs = ref.watch(sharedPreferencesProvider);
-  return WeatherServiceInstance(prefs);
+  return prefs != null ? WeatherServiceInstance(prefs) : null;
 });
 
 // Weather actions provider
-final weatherActionsProvider = Provider<WeatherActions>((ref) {
+final weatherActionsProvider = Provider<WeatherActions?>((ref) {
   final weatherService = ref.watch(weatherServiceProvider);
+  if (weatherService == null) {
+    return null;
+  }
   return WeatherActions(weatherService);
 });
 

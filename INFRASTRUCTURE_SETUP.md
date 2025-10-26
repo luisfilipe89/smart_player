@@ -157,3 +157,4 @@ flutter test --update-goldens test/golden/
 
 *Next: Priority 2 (Firebase Emulators & Golden Tests)*
 
+

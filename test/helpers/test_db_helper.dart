@@ -32,10 +32,11 @@ class TestDbHelper {
     );
   }
 
-  /// Initialize FFI if needed
+  /// Initialize FFI if needed and set global database factory
   static void initializeFfi() {
     try {
       sqfliteFfiInit();
+      databaseFactory = databaseFactoryFfi;
     } catch (e) {
       // Already initialized
     }

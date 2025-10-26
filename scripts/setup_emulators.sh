@@ -28,3 +28,4 @@ echo ""
 echo "Or manually:"
 echo "   firebase emulators:start"
 
+

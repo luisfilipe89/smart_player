@@ -25,3 +25,4 @@ echo "   Functions: http://localhost:5001"
 echo "   Storage:  http://localhost:9199"
 echo "   UI:       http://localhost:4000"
 
+

@@ -592,14 +592,16 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
       final longitude = _selectedField?['lon']?.toDouble() ?? 4.9041;
 
       final weatherActions = ref.read(weatherActionsProvider);
-      await weatherActions.fetchWeatherForDate(
-        date: date,
-        latitude: latitude,
-        longitude: longitude,
-      );
-      if (mounted) {
-        // Weather data loaded successfully
-        // Could be used to display weather information in the UI
+      if (weatherActions != null) {
+        await weatherActions.fetchWeatherForDate(
+          date: date,
+          latitude: latitude,
+          longitude: longitude,
+        );
+        if (mounted) {
+          // Weather data loaded successfully
+          // Could be used to display weather information in the UI
+        }
       }
     } catch (e) {
       if (mounted) {

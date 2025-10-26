@@ -155,7 +155,7 @@ class _ActivitiesScreenState extends ConsumerState<ActivitiesScreen> {
 
   void navigateToMenu(String key) {
     final hapticsActions = ref.read(hapticsActionsProvider);
-    hapticsActions.lightImpact();
+    hapticsActions?.lightImpact();
 
     final builder = _activityRoutes[key];
     assert(() {

@@ -10,7 +10,8 @@ android {
     namespace = "com.example.sportappdenbosch"
     // Use compileSdk 36 as required by plugins (plugins require SDK 36)
     compileSdk = 36
-    // Use NDK 27 for compatibility with integration_test plugin
+    // Let Flutter manage NDK version to avoid mismatch with local toolchains
+    // Pin to highest required version to satisfy integration_test plugin
     ndkVersion = "27.0.12077973"
 
     compileOptions {
@@ -37,10 +38,21 @@ android {
     }
 
     buildTypes {
+        debug {
+            // Disable native symbol stripping in debug to avoid strip task failures
+            ndk.debugSymbolLevel = "none"
+        }
         release {
             // TODO: Add your own signing config for the release build.
             // Signing with the debug keys for now, so `flutter run --release` works.
             signingConfig = signingConfigs.getByName("debug")
+        }
+    }
+
+    // Use legacy JNI packaging to stabilize native libs handling on some environments
+    packagingOptions {
+        jniLibs {
+            useLegacyPackaging = true
         }
     }
 }

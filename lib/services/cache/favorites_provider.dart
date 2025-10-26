@@ -1,22 +1,29 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:move_young/providers/infrastructure/shared_preferences_provider.dart';
 import 'favorites_service_instance.dart';
 
 /// FavoritesService provider with dependency injection
-final favoritesServiceProvider = Provider<FavoritesServiceInstance>((ref) {
+final favoritesServiceProvider = Provider<FavoritesServiceInstance?>((ref) {
   final prefs = ref.watch(sharedPreferencesProvider);
-  return FavoritesServiceInstance(prefs);
+  return prefs != null ? FavoritesServiceInstance(prefs) : null;
 });
 
 /// Favorites list provider (reactive)
 final favoritesListProvider = FutureProvider<Set<String>>((ref) {
   final favoritesService = ref.watch(favoritesServiceProvider);
+  if (favoritesService == null) {
+    return Future.value(<String>{});
+  }
   return favoritesService.getFavorites();
 });
 
 /// Favorites actions provider
-final favoritesActionsProvider = Provider<FavoritesActions>((ref) {
+final favoritesActionsProvider = Provider<FavoritesActions?>((ref) {
   final favoritesService = ref.watch(favoritesServiceProvider);
+  if (favoritesService == null) {
+    return null;
+  }
   return FavoritesActions(favoritesService);
 });
 

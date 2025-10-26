@@ -84,3 +84,4 @@ jobs:
       - name: Run golden tests
         run: flutter test test/golden/
 
+

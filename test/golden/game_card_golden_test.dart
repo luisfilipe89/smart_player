@@ -1,95 +1,130 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:golden_toolkit/golden_toolkit.dart';
+import '../helpers/golden_test_helper.dart';
+
+/// Simplified game card widget for golden tests
+class TestGameCard extends StatelessWidget {
+  final String title;
+  final String location;
+  final String time;
+  final String players;
+  final IconData icon;
+  final Color color;
+
+  const TestGameCard({
+    super.key,
+    required this.title,
+    required this.location,
+    required this.time,
+    required this.players,
+    required this.icon,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      elevation: 3,
+      margin: const EdgeInsets.all(16),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              children: [
+                Icon(icon, color: color, size: 32),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: color.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    players,
+                    style: TextStyle(color: color, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Icon(Icons.location_on, size: 16, color: Colors.grey[600]),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(
+                    location,
+                    style: TextStyle(color: Colors.grey[600]),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Icon(Icons.access_time, size: 16, color: Colors.grey[600]),
+                const SizedBox(width: 4),
+                Text(time, style: TextStyle(color: Colors.grey[600])),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
 
 void main() {
-  group('Game Card Visual Tests', () {
-    testWidgets('game card renders correctly', (tester) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: Center(
-              child: Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Text('Soccer Game'),
-                      const Text('Central Park Field'),
-                      const Text('Tomorrow at 2:00 PM'),
-                      const Text('5/10 players'),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
+  group('Game Card Golden Tests', () {
+    testGoldens('game card with soccer match', (tester) async {
+      await tester.pumpWidgetBuilder(
+        const TestGameCard(
+          title: 'Soccer Game',
+          location: 'Central Park Field',
+          time: 'Tomorrow at 2:00 PM',
+          players: '5/10',
+          icon: Icons.sports_soccer,
+          color: Colors.green,
         ),
+        surfaceSize: goldenSurfaceSize(),
+        wrapper: (child) => MaterialApp(home: Scaffold(body: child)),
       );
 
-      expect(find.text('Soccer Game'), findsOneWidget);
-      expect(find.text('Central Park Field'), findsOneWidget);
-      expect(find.text('Tomorrow at 2:00 PM'), findsOneWidget);
-      expect(find.text('5/10 players'), findsOneWidget);
-      expect(find.byType(Card), findsOneWidget);
+      await screenMatchesGolden(tester, 'game_card_soccer');
     });
 
-    testWidgets('game card with different sport', (tester) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: Center(
-              child: Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Text('Basketball Game'),
-                      const Text('Sports Complex'),
-                      const Text('Today at 6:00 PM'),
-                      const Text('3/8 players'),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
+    testGoldens('game card with basketball game', (tester) async {
+      await tester.pumpWidgetBuilder(
+        const TestGameCard(
+          title: 'Basketball Game',
+          location: 'Sports Complex',
+          time: 'Today at 6:00 PM',
+          players: '3/8',
+          icon: Icons.sports_basketball,
+          color: Colors.orange,
         ),
+        surfaceSize: goldenSurfaceSize(),
+        wrapper: (child) => MaterialApp(home: Scaffold(body: child)),
       );
 
-      expect(find.text('Basketball Game'), findsOneWidget);
-      expect(find.text('Sports Complex'), findsOneWidget);
-      expect(find.text('Today at 6:00 PM'), findsOneWidget);
-      expect(find.text('3/8 players'), findsOneWidget);
-    });
-
-    testWidgets('game card has correct structure', (tester) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: Center(
-              child: Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.sports_soccer),
-                      const Text('Game Title'),
-                      const Text('Game Details'),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-      );
-
-      expect(find.byIcon(Icons.sports_soccer), findsOneWidget);
-      expect(find.text('Game Title'), findsOneWidget);
-      expect(find.text('Game Details'), findsOneWidget);
+      await screenMatchesGolden(tester, 'game_card_basketball');
     });
   });
 }

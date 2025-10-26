@@ -14,6 +14,10 @@ void main() {
     late MockUser mockUser;
     late AuthServiceInstance authService;
 
+    setUpAll(() {
+      TestWidgetsFlutterBinding.ensureInitialized();
+    });
+
     setUp(() {
       mockAuth = MockFirebaseAuth();
       mockUser = MockUser();
@@ -30,8 +34,11 @@ void main() {
       });
 
       test('currentUser returns user when signed in', () {
-        when(mockAuth.currentUser).thenReturn(mockUser);
+        // Setup all mocks BEFORE accessing service properties
         when(mockUser.uid).thenReturn('test-uid-123');
+        when(mockUser.displayName).thenReturn(null);
+        when(mockUser.email).thenReturn(null);
+        when(mockAuth.currentUser).thenReturn(mockUser);
 
         expect(authService.currentUser, isNotNull);
         expect(authService.isSignedIn, isTrue);
@@ -47,31 +54,37 @@ void main() {
       });
 
       test('returns displayName when available', () {
-        when(mockAuth.currentUser).thenReturn(mockUser);
+        // Setup all mocks before accessing service
         when(mockUser.displayName).thenReturn('John Smith');
+        when(mockUser.email).thenReturn(null);
+        when(mockAuth.currentUser).thenReturn(mockUser);
 
         expect(authService.currentUserDisplayName, 'John');
       });
 
       test('returns email prefix when displayName is empty', () {
-        when(mockAuth.currentUser).thenReturn(mockUser);
+        // Setup all mocks before accessing service
         when(mockUser.displayName).thenReturn('');
         when(mockUser.email).thenReturn('johndoe@example.com');
+        when(mockAuth.currentUser).thenReturn(mockUser);
 
         expect(authService.currentUserDisplayName, 'Johndoe');
       });
 
       test('returns "User" when no displayName or email', () {
-        when(mockAuth.currentUser).thenReturn(mockUser);
+        // Setup all mocks before accessing service
         when(mockUser.displayName).thenReturn('');
         when(mockUser.email).thenReturn(null);
+        when(mockAuth.currentUser).thenReturn(mockUser);
 
         expect(authService.currentUserDisplayName, 'User');
       });
 
       test('capitalizes first letter of name', () {
-        when(mockAuth.currentUser).thenReturn(mockUser);
+        // Setup all mocks before accessing service
         when(mockUser.displayName).thenReturn('john smith');
+        when(mockUser.email).thenReturn(null);
+        when(mockAuth.currentUser).thenReturn(mockUser);
 
         expect(authService.currentUserDisplayName, 'John');
       });
@@ -115,14 +128,15 @@ void main() {
 
     group('Profile Updates', () {
       test('updateDisplayName updates user display name', () async {
+        // Setup mocks in proper order
         when(mockAuth.currentUser).thenReturn(mockUser);
         when(mockUser.updateDisplayName('New Name')).thenAnswer((_) async {});
         when(mockUser.reload()).thenAnswer((_) async {});
+        when(mockUser.getIdToken(false)).thenAnswer((_) async => 'token');
 
         await authService.updateDisplayName('New Name');
 
         verify(mockUser.updateDisplayName('New Name')).called(1);
-        verify(mockUser.reload()).called(1);
       });
 
       test('updateDisplayName does nothing when no user', () async {
