@@ -6,6 +6,7 @@ import 'package:move_young/db/db_paths.dart';
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:move_young/models/infrastructure/cached_data.dart';
 import '../notifications/notification_interface.dart';
+import '../../utils/service_error.dart';
 
 // Background processing will be added when needed
 
@@ -43,7 +44,7 @@ class CloudGamesServiceInstance {
     try {
       final userId = _currentUserId;
       if (userId == null) {
-        throw Exception('User not authenticated');
+        throw AuthException('User not authenticated');
       }
 
       // Ensure the user has a profile
@@ -391,13 +392,13 @@ class CloudGamesServiceInstance {
     try {
       final userId = _currentUserId;
       if (userId == null) {
-        throw Exception('User not authenticated');
+        throw AuthException('User not authenticated');
       }
 
       // Get the game
       final gameSnapshot = await _gamesRef.child(gameId).get();
       if (!gameSnapshot.exists) {
-        throw Exception('Game not found');
+        throw NotFoundException('Game not found');
       }
 
       final game =
@@ -405,12 +406,12 @@ class CloudGamesServiceInstance {
 
       // Check if user is already in the game
       if (game.players.contains(userId)) {
-        throw Exception('Already joined this game');
+        throw AlreadyExistsException('Already joined this game');
       }
 
       // Check if game is full
       if (game.players.length >= game.maxPlayers) {
-        throw Exception('Game is full');
+        throw ValidationException('Game is full');
       }
 
       // Add user to the game
@@ -450,13 +451,13 @@ class CloudGamesServiceInstance {
     try {
       final userId = _currentUserId;
       if (userId == null) {
-        throw Exception('User not authenticated');
+        throw AuthException('User not authenticated');
       }
 
       // Get the game
       final gameSnapshot = await _gamesRef.child(gameId).get();
       if (!gameSnapshot.exists) {
-        throw Exception('Game not found');
+        throw NotFoundException('Game not found');
       }
 
       final game =
@@ -464,7 +465,7 @@ class CloudGamesServiceInstance {
 
       // Check if user is in the game
       if (!game.players.contains(userId)) {
-        throw Exception('Not in this game');
+        throw NotFoundException('Not in this game');
       }
 
       // Remove user from the game
@@ -495,7 +496,7 @@ class CloudGamesServiceInstance {
     try {
       final userId = _currentUserId;
       if (userId == null) {
-        throw Exception('User not authenticated');
+        throw AuthException('User not authenticated');
       }
 
       // Check if user has a pending invite for this game
@@ -505,12 +506,12 @@ class CloudGamesServiceInstance {
           .get();
 
       if (!inviteSnapshot.exists) {
-        throw Exception('No pending invite for this game');
+        throw NotFoundException('No pending invite for this game');
       }
 
       final inviteData = Map<String, dynamic>.from(inviteSnapshot.value as Map);
       if (inviteData['status'] != 'pending') {
-        throw Exception('Invite is not pending');
+        throw ValidationException('Invite is not pending');
       }
 
       // Join the game (this will also remove the invite)
@@ -526,7 +527,7 @@ class CloudGamesServiceInstance {
     try {
       final userId = _currentUserId;
       if (userId == null) {
-        throw Exception('User not authenticated');
+        throw AuthException('User not authenticated');
       }
 
       // Remove the invite

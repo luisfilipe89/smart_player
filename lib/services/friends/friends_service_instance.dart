@@ -9,6 +9,7 @@ import 'package:move_young/db/db_paths.dart';
 import 'package:move_young/models/infrastructure/cached_data.dart';
 import 'package:move_young/services/firebase_error_handler.dart';
 import '../notifications/notification_interface.dart';
+import '../../utils/service_error.dart';
 
 /// Instance-based FriendsService for use with Riverpod dependency injection
 class FriendsServiceInstance {
@@ -546,7 +547,7 @@ class FriendsServiceInstance {
   // Generate friend token for QR code
   Future<String> generateFriendToken() async {
     final user = _auth.currentUser;
-    if (user == null) throw Exception('Not signed in');
+    if (user == null) throw AuthException('Not signed in');
 
     final uid = user.uid;
     final now = DateTime.now();

@@ -178,7 +178,7 @@ class AuthServiceInstance {
     try {
       final user = _auth.currentUser;
       if (user == null) {
-        throw Exception('No user signed in');
+        throw AuthException('No user signed in');
       }
 
       await user.updateDisplayName(displayName);
@@ -197,7 +197,7 @@ class AuthServiceInstance {
   Future<void> updateEmail(String newEmail) async {
     try {
       final user = _auth.currentUser;
-      if (user == null) throw Exception('Not signed in');
+      if (user == null) throw AuthException('Not signed in');
 
       await user.verifyBeforeUpdateEmail(newEmail);
       debugPrint('Verification email sent to: $newEmail');
@@ -212,10 +212,10 @@ class AuthServiceInstance {
     try {
       final user = _auth.currentUser;
       if (user == null) {
-        throw Exception('No user signed in');
+        throw AuthException('No user signed in');
       }
       if (displayName.isEmpty) {
-        throw Exception('Display name cannot be empty');
+        throw ValidationException('Display name cannot be empty');
       }
 
       await user.updateDisplayName(displayName);
@@ -254,11 +254,11 @@ class AuthServiceInstance {
   ) async {
     try {
       final user = _auth.currentUser;
-      if (user == null) throw Exception('Not signed in');
+      if (user == null) throw AuthException('Not signed in');
 
       final email = user.email;
       if (email == null) {
-        throw Exception('No email on account');
+        throw ValidationException('No email on account');
       }
 
       // Reauthenticate with current password
@@ -272,9 +272,9 @@ class AuthServiceInstance {
       await user.updatePassword(newPassword);
       debugPrint('Password changed successfully');
     } on FirebaseAuthException catch (e) {
-      throw Exception(_mapFirebaseError(e, isSignup: false));
+      throw AuthException(_mapFirebaseError(e, isSignup: false), code: e.code);
     } catch (e) {
-      throw Exception('Password change failed: ${e.toString()}');
+      throw ServiceException('Password change failed', originalError: e);
     }
   }
 
@@ -284,9 +284,10 @@ class AuthServiceInstance {
       await _auth.sendPasswordResetEmail(email: email);
       debugPrint('Password reset email sent to: $email');
     } on FirebaseAuthException catch (e) {
-      throw Exception(_mapFirebaseError(e, isSignup: false));
+      throw AuthException(_mapFirebaseError(e, isSignup: false), code: e.code);
     } catch (e) {
-      throw Exception('Failed to send password reset email: ${e.toString()}');
+      throw ServiceException('Failed to send password reset email',
+          originalError: e);
     }
   }
 
@@ -297,11 +298,11 @@ class AuthServiceInstance {
   }) async {
     try {
       final user = _auth.currentUser;
-      if (user == null) throw Exception('Not signed in');
+      if (user == null) throw AuthException('Not signed in');
 
       final email = user.email;
       if (email == null) {
-        throw Exception('No email on account');
+        throw ValidationException('No email on account');
       }
 
       // Reauthenticate with current password
@@ -315,9 +316,9 @@ class AuthServiceInstance {
       await user.verifyBeforeUpdateEmail(newEmail);
       debugPrint('Verification email sent to: $newEmail');
     } on FirebaseAuthException catch (e) {
-      throw Exception(_mapFirebaseError(e, isSignup: false));
+      throw AuthException(_mapFirebaseError(e, isSignup: false), code: e.code);
     } catch (e) {
-      throw Exception('Email change failed: ${e.toString()}');
+      throw ServiceException('Email change failed', originalError: e);
     }
   }
 

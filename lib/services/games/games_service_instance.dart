@@ -136,7 +136,7 @@ class GamesServiceInstance {
       final userId = _authService.currentUserId;
 
       if (userId == null) {
-        throw Exception('User not authenticated');
+        throw AuthException('User not authenticated');
       }
 
       // If authenticated, create in cloud first
@@ -265,22 +265,22 @@ class GamesServiceInstance {
     try {
       final game = await getGameById(gameId);
       if (game == null) {
-        throw Exception('Game not found');
+        throw NotFoundException('Game not found');
       }
 
       final userId = _authService.currentUserId;
       if (userId == null) {
-        throw Exception('User not authenticated');
+        throw AuthException('User not authenticated');
       }
 
       // Check if user is already in the game
       if (game.players.contains(userId)) {
-        throw Exception('Already joined this game');
+        throw AlreadyExistsException('Already joined this game');
       }
 
       // Check if game is full
       if (game.players.length >= game.maxPlayers) {
-        throw Exception('Game is full');
+        throw ValidationException('Game is full');
       }
 
       // Update local database
@@ -307,17 +307,17 @@ class GamesServiceInstance {
     try {
       final game = await getGameById(gameId);
       if (game == null) {
-        throw Exception('Game not found');
+        throw NotFoundException('Game not found');
       }
 
       final userId = _authService.currentUserId;
       if (userId == null) {
-        throw Exception('User not authenticated');
+        throw AuthException('User not authenticated');
       }
 
       // Check if user is in the game
       if (!game.players.contains(userId)) {
-        throw Exception('Not in this game');
+        throw NotFoundException('Not in this game');
       }
 
       // Update local database
