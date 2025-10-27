@@ -11,7 +11,10 @@
                 "createdAt",
                 "isActive",
                 "location",
-                "fieldId"
+                "fieldId",
+                "organizerId",
+                "isPublic",
+                "dateTime"
             ],
             "$gameId": {
                 "invites": {
@@ -19,7 +22,7 @@
                         "status"
                     ],
                     "$uid": {
-                        ".read": "auth != null && (auth.uid == $uid || data.parent().parent().child('organizerId').val() == auth.uid)",
+                        ".read": "auth != null",
                         ".write": "auth != null"
                     }
                 }
@@ -62,8 +65,8 @@
                 },
                 "gameInvites": {
                     "$gameId": {
-                        ".read": "auth != null && (auth.uid == $uid || data.child('organizerId').val() == auth.uid)",
-                        ".write": "auth != null && (auth.uid == $uid || data.child('organizerId').val() == auth.uid)"
+                        ".read": "auth != null && auth.uid == $uid",
+                        ".write": "auth != null"
                     }
                 },
                 "settings": {
@@ -84,6 +87,14 @@
             "$hash": {
                 ".read": "auth != null",
                 ".write": "auth != null && (!data.exists() || data.val() === auth.uid) && newData.val() === auth.uid"
+            }
+        },
+        "usersByDisplayNameLower": {
+            "$name": {
+                "$uid": {
+                    ".read": "auth != null",
+                    ".write": "auth != null && $uid === auth.uid"
+                }
             }
         },
         "friendTokens": {
