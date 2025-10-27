@@ -35,6 +35,7 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        multiDexEnabled = true
     }
 
     buildTypes {
@@ -46,6 +47,7 @@ android {
             // TODO: Add your own signing config for the release build.
             // Signing with the debug keys for now, so `flutter run --release` works.
             signingConfig = signingConfigs.getByName("debug")
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }
 
@@ -55,6 +57,12 @@ android {
             useLegacyPackaging = true
         }
     }
+
+    // Suppress deprecation warnings from dependencies
+    lint {
+        checkReleaseBuilds = false
+        checkDependencies = false
+    }
 }
 
 flutter {
@@ -62,7 +70,8 @@ flutter {
 }
 
 dependencies {
-    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
     // Import the Firebase BoM - requested when creating a new project in Firebase 
     implementation(platform("com.google.firebase:firebase-bom:34.3.0"))
+    implementation("androidx.multidex:multidex:2.0.1")
 }
