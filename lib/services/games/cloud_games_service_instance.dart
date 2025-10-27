@@ -3,10 +3,12 @@ import 'package:firebase_database/firebase_database.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:move_young/models/core/game.dart';
 import 'package:move_young/db/db_paths.dart';
-import 'package:flutter/foundation.dart' show debugPrint;
+// import 'package:flutter/foundation.dart' show debugPrint;
+import 'package:move_young/utils/logger.dart';
 import 'package:move_young/models/infrastructure/cached_data.dart';
 import '../notifications/notification_interface.dart';
 import '../../utils/service_error.dart';
+import 'package:move_young/utils/crashlytics_helper.dart';
 
 // Background processing will be added when needed
 
@@ -28,6 +30,7 @@ class CloudGamesServiceInstance {
 
   // Cache for games data
   final Map<String, CachedData<List<Game>>> _gameCache = {};
+  static const Duration _defaultCacheTtl = Duration(minutes: 5);
 
   // Database references
   DatabaseReference get _gamesRef => _database.ref(DbPaths.games);
@@ -74,17 +77,73 @@ class CloudGamesServiceInstance {
       // Send notifications to invited friends
       // This will be implemented when we add friend invites functionality
       // For now, we'll just log it
-      debugPrint('Game created successfully: $gameId');
+      NumberedLogger.i('Game created successfully: $gameId');
+      CrashlyticsHelper.breadcrumb('game_create_ok:$gameId');
 
       return gameId;
+    } catch (e, st) {
+      NumberedLogger.e('Error creating game: $e');
+      CrashlyticsHelper.recordError(e, st, reason: 'game_create_fail');
+      rethrow;
+    }
+  }
+
+  // Get a single game by ID
+  Future<Game?> getGameById(String gameId) async {
+    try {
+      final snapshot = await _gamesRef.child(gameId).get();
+
+      if (!snapshot.exists) {
+        return null;
+      }
+
+      final data = Map<String, dynamic>.from(snapshot.value as Map);
+      return Game.fromJson(data);
     } catch (e) {
-      debugPrint('Error creating game: $e');
+      NumberedLogger.e('Error getting game by ID: $e');
+      return null;
+    }
+  }
+
+  // Update a game
+  Future<void> updateGame(Game game) async {
+    try {
+      await _gamesRef.child(game.id).update(game.toJson());
+      _clearCache(); // Invalidate cache
+    } catch (e, st) {
+      NumberedLogger.e('Error updating game: $e');
+      CrashlyticsHelper.recordError(e, st, reason: 'game_update_fail');
+      rethrow;
+    }
+  }
+
+  // Delete a game
+  Future<void> deleteGame(String gameId) async {
+    try {
+      final userId = _currentUserId;
+      if (userId == null) {
+        throw AuthException('User not authenticated');
+      }
+
+      // Remove the game
+      await _gamesRef.child(gameId).remove();
+
+      // Remove from user's created games index
+      await _usersRef
+          .child(DbPaths.userCreatedGames(userId))
+          .child(gameId)
+          .remove();
+
+      _clearCache(); // Invalidate cache
+    } catch (e, st) {
+      NumberedLogger.e('Error deleting game: $e');
+      CrashlyticsHelper.recordError(e, st, reason: 'game_delete_fail');
       rethrow;
     }
   }
 
   // Get games for the current user
-  Future<List<Game>> getMyGames() async {
+  Future<List<Game>> getMyGames({Duration? ttl}) async {
     try {
       final userId = _currentUserId;
       if (userId == null) {
@@ -113,23 +172,24 @@ class CloudGamesServiceInstance {
             final game = Game.fromJson(Map<String, dynamic>.from(entry));
             games.add(game);
           } catch (e) {
-            debugPrint('Error parsing game: $e');
+            NumberedLogger.w('Error parsing game: $e');
           }
         }
       }
 
       // Cache the result
-      _gameCache[cacheKey] = CachedData(games, DateTime.now());
+      _gameCache[cacheKey] =
+          CachedData(games, DateTime.now(), expiry: ttl ?? _defaultCacheTtl);
 
       return games;
     } catch (e) {
-      debugPrint('Error getting my games: $e');
+      NumberedLogger.e('Error getting my games: $e');
       return [];
     }
   }
 
   // Get games that the user can join
-  Future<List<Game>> getJoinableGames() async {
+  Future<List<Game>> getJoinableGames({Duration? ttl}) async {
     try {
       final userId = _currentUserId;
       if (userId == null) {
@@ -161,23 +221,24 @@ class CloudGamesServiceInstance {
               games.add(game);
             }
           } catch (e) {
-            debugPrint('Error parsing game: $e');
+            NumberedLogger.w('Error parsing game: $e');
           }
         }
       }
 
       // Cache the result
-      _gameCache[cacheKey] = CachedData(games, DateTime.now());
+      _gameCache[cacheKey] =
+          CachedData(games, DateTime.now(), expiry: ttl ?? _defaultCacheTtl);
 
       return games;
     } catch (e) {
-      debugPrint('Error getting joinable games: $e');
+      NumberedLogger.e('Error getting joinable games: $e');
       return [];
     }
   }
 
   // Get invited games for the current user
-  Future<List<Game>> getInvitedGamesForCurrentUser() async {
+  Future<List<Game>> getInvitedGamesForCurrentUser({Duration? ttl}) async {
     try {
       final userId = _currentUserId;
       if (userId == null) {
@@ -219,18 +280,19 @@ class CloudGamesServiceInstance {
                   Map<String, dynamic>.from(gameSnapshot.value as Map));
               games.add(game);
             } catch (e) {
-              debugPrint('Error parsing invited game: $e');
+              NumberedLogger.w('Error parsing invited game: $e');
             }
           }
         }
       }
 
       // Cache the result
-      _gameCache[cacheKey] = CachedData(games, DateTime.now());
+      _gameCache[cacheKey] =
+          CachedData(games, DateTime.now(), expiry: ttl ?? _defaultCacheTtl);
 
       return games;
     } catch (e) {
-      debugPrint('Error getting invited games: $e');
+      NumberedLogger.e('Error getting invited games: $e');
       return [];
     }
   }
@@ -293,7 +355,7 @@ class CloudGamesServiceInstance {
         }
       }
     } catch (e) {
-      debugPrint('validateUserGameIndexes error: $e');
+      NumberedLogger.e('validateUserGameIndexes error: $e');
     }
 
     return issues;
@@ -361,7 +423,7 @@ class CloudGamesServiceInstance {
         }
       }
     } catch (e) {
-      debugPrint('fixSimpleInconsistencies error: $e');
+      NumberedLogger.e('fixSimpleInconsistencies error: $e');
     }
 
     if (fixes > 0) _clearCache();
@@ -440,8 +502,9 @@ class CloudGamesServiceInstance {
 
       // Clear cache
       _clearCache();
-    } catch (e) {
-      debugPrint('Error joining game: $e');
+    } catch (e, st) {
+      NumberedLogger.e('Error joining game: $e');
+      CrashlyticsHelper.recordError(e, st, reason: 'game_join_fail');
       rethrow;
     }
   }
@@ -485,8 +548,9 @@ class CloudGamesServiceInstance {
 
       // Clear cache
       _clearCache();
-    } catch (e) {
-      debugPrint('Error leaving game: $e');
+    } catch (e, st) {
+      NumberedLogger.e('Error leaving game: $e');
+      CrashlyticsHelper.recordError(e, st, reason: 'game_leave_fail');
       rethrow;
     }
   }
@@ -517,7 +581,7 @@ class CloudGamesServiceInstance {
       // Join the game (this will also remove the invite)
       await joinGame(gameId);
     } catch (e) {
-      debugPrint('Error accepting game invite: $e');
+      NumberedLogger.e('Error accepting game invite: $e');
       rethrow;
     }
   }
@@ -539,7 +603,7 @@ class CloudGamesServiceInstance {
       // Clear cache
       _clearCache();
     } catch (e) {
-      debugPrint('Error declining game invite: $e');
+      NumberedLogger.e('Error declining game invite: $e');
       rethrow;
     }
   }
@@ -564,7 +628,7 @@ class CloudGamesServiceInstance {
 
       return statuses;
     } catch (e) {
-      debugPrint('Error getting invite statuses for game $gameId: $e');
+      NumberedLogger.e('Error getting invite statuses for game $gameId: $e');
       return {};
     }
   }
@@ -579,10 +643,10 @@ class CloudGamesServiceInstance {
         await _notificationService.sendGameInviteNotification(
             friendUid, gameId);
       }
-      debugPrint(
+      NumberedLogger.i(
           'Game invites sent to ${friendUids.length} friends for game $gameId');
     } catch (e) {
-      debugPrint('Error sending game invites: $e');
+      NumberedLogger.e('Error sending game invites: $e');
     }
   }
 
@@ -600,13 +664,18 @@ class CloudGamesServiceInstance {
         });
       }
     } catch (e) {
-      debugPrint('Error ensuring user profile: $e');
+      NumberedLogger.e('Error ensuring user profile: $e');
     }
   }
 
   // Clear cache
   void _clearCache() {
     _gameCache.clear();
+  }
+
+  // Public cache invalidation for auth changes or external triggers
+  void invalidateAllCache() {
+    _clearCache();
   }
 
   // Clear expired cache entries

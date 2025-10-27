@@ -13,6 +13,7 @@ import 'package:move_young/screens/help/help_screen.dart';
 import 'package:move_young/screens/profile/profile_screen.dart';
 import 'package:move_young/screens/friends/friends_screen.dart';
 import 'package:move_young/screens/auth/auth_screen.dart';
+import 'package:move_young/providers/locale_controller.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:move_young/services/games/cloud_games_provider.dart';
 import 'package:move_young/services/system/haptics_provider.dart';
@@ -165,15 +166,19 @@ class _HomeScreenNewState extends ConsumerState<HomeScreenNew> {
               context.locale.languageCode == 'nl' ? 'EN' : 'NL',
               style: AppTextStyles.body,
             ),
-            onPressed: () {
+            onPressed: () async {
               final haptics = ref.read(hapticsServiceProvider);
               haptics?.lightImpact();
               final curr = context.locale;
-              context.setLocale(
-                curr.languageCode == 'nl'
-                    ? const Locale('en')
-                    : const Locale('nl'),
-              );
+              final newLocale = curr.languageCode == 'nl'
+                  ? const Locale('en')
+                  : const Locale('nl');
+              await context.setLocale(newLocale);
+              // Persist via LocaleController once prefs are ready
+              try {
+                final ctrl = ref.read(localeControllerProvider);
+                await ctrl.saveLocale(newLocale);
+              } catch (_) {}
             },
             style: TextButton.styleFrom(foregroundColor: AppColors.blackIcon),
           ),
@@ -214,7 +219,7 @@ class _HomeScreenNewState extends ConsumerState<HomeScreenNew> {
                   children: [
                     _HomeGreeting(ref),
                     const SizedBox(height: AppHeights.small),
-                    const _ActivitiesCard(),
+                    _ActivitiesCard(),
                     const SizedBox(height: AppHeights.huge),
                     _QuickTilesRow(
                       pendingInvites: _pendingInvites,
@@ -612,12 +617,13 @@ class _HomeGreeting extends ConsumerWidget {
   }
 }
 
-class _ActivitiesCard extends StatelessWidget {
-  const _ActivitiesCard();
-
+class _ActivitiesCard extends ConsumerWidget {
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final currentLocale = context.locale;
+
     return Container(
+      key: ValueKey(currentLocale.languageCode),
       decoration: BoxDecoration(
         color: AppColors.white,
         borderRadius: BorderRadius.circular(AppRadius.card),
@@ -639,7 +645,7 @@ class _ActivitiesCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Ink.image(
-                image: const AssetImage('assets/images/running6.png'),
+                image: const AssetImage('assets/images/fitness_circus_3.jpg'),
                 height: 100,
                 width: double.infinity,
                 fit: BoxFit.cover,
@@ -1045,6 +1051,7 @@ class _HomeImageTile extends StatelessWidget {
                           style: AppTextStyles.smallCardTitle,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis),
+                      const SizedBox(height: 2),
                       Text(subtitle,
                           style: AppTextStyles.superSmall,
                           maxLines: 2,

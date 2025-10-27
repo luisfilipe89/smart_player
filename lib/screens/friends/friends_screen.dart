@@ -78,6 +78,9 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen>
   @override
   Widget build(BuildContext context) {
     final uid = ref.read(currentUserIdProvider);
+    // Watch locale to rebuild on language change
+    final currentLocale = context.locale;
+
     return Scaffold(
       backgroundColor: AppColors.white,
       extendBodyBehindAppBar: true,
@@ -98,6 +101,7 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen>
         centerTitle: true,
         bottom: TabBar(
           controller: _tabController,
+          key: ValueKey(currentLocale.languageCode),
           labelColor: AppColors.primary,
           unselectedLabelColor: AppColors.grey,
           indicatorColor: AppColors.primary,
@@ -165,6 +169,7 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen>
                         ? const SizedBox.shrink()
                         : TabBarView(
                             controller: _tabController,
+                            key: ValueKey(currentLocale.languageCode),
                             children: [
                               RefreshIndicator(
                                 onRefresh: () async {

@@ -1,44 +1,27 @@
-import 'package:sqflite_common_ffi/sqflite_ffi.dart';
-
-/// Helper to create in-memory SQLite databases for testing
+/// Helper for testing - SQLite has been removed
+/// This file is kept for compatibility but does nothing
 class TestDbHelper {
-  static Future<Database> createInMemoryDb({
+  /// Initialize FFI (no-op, SQLite removed)
+  static void initializeFfi() {
+    // SQLite has been removed from the app
+    // This method does nothing but keeps tests from breaking
+  }
+
+  /// Create in-memory DB (no-op, SQLite removed)
+  static Future<void> createInMemoryDb({
     int version = 1,
     String? onCreate,
   }) async {
-    sqfliteFfiInit();
-
-    return await databaseFactoryFfi.openDatabase(
-      inMemoryDatabasePath,
-      options: OpenDatabaseOptions(
-        version: version,
-        onCreate: onCreate != null
-            ? (database, version) async {
-                await database.execute(onCreate);
-              }
-            : null,
-      ),
-    );
+    // SQLite has been removed from the app
+    // This method does nothing but keeps tests from breaking
   }
 
-  /// Create a database with a specific schema
-  static Future<Database> createDbWithSchema({
+  /// Create DB with schema (no-op, SQLite removed)
+  static Future<void> createDbWithSchema({
     required String schema,
     int version = 1,
   }) async {
-    return await createInMemoryDb(
-      version: version,
-      onCreate: schema,
-    );
-  }
-
-  /// Initialize FFI if needed and set global database factory
-  static void initializeFfi() {
-    try {
-      sqfliteFfiInit();
-      databaseFactory = databaseFactoryFfi;
-    } catch (e) {
-      // Already initialized
-    }
+    // SQLite has been removed from the app
+    // This method does nothing but keeps tests from breaking
   }
 }

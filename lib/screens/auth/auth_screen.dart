@@ -79,9 +79,10 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
   Future<void> _handleAuth() async {
     if (!_formKey.currentState!.validate()) return;
 
-    // Check connectivity before attempting auth
-    final hasConnection = ref.read(hasConnectionProvider);
-    if (!hasConnection) {
+    // Check connectivity before attempting auth (active one-shot check)
+    final connected =
+        await ref.read(connectivityActionsProvider).hasInternetConnection();
+    if (!connected) {
       ErrorHandlerServiceInstance().showError(context, 'error_network');
       return;
     }
@@ -219,9 +220,9 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                 TextFormField(
                   controller: _emailController,
                   keyboardType: TextInputType.emailAddress,
-                  maxLength: 254,
+                  maxLength: 80,
                   inputFormatters: [
-                    LengthLimitingTextInputFormatter(254),
+                    LengthLimitingTextInputFormatter(80),
                   ],
                   decoration: InputDecoration(
                     labelText: 'auth_email'.tr(),
@@ -245,9 +246,9 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                 TextFormField(
                   controller: _passwordController,
                   obscureText: _obscurePassword,
-                  maxLength: 128,
+                  maxLength: 64,
                   inputFormatters: [
-                    LengthLimitingTextInputFormatter(128),
+                    LengthLimitingTextInputFormatter(64),
                   ],
                   decoration: InputDecoration(
                     labelText: 'auth_password'.tr(),

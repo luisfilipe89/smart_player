@@ -2,6 +2,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import 'package:move_young/utils/logger.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../games/cloud_games_service_instance.dart';
 import '../friends/friends_service_instance.dart';
@@ -106,7 +107,7 @@ class SyncServiceInstance {
         if (op.retryCount >= 3) {
           op.status = _statusFailed;
         }
-        debugPrint('Sync retry failed: $e');
+        NumberedLogger.w('Sync retry failed: $e');
       }
     }
 
@@ -191,7 +192,7 @@ class SyncServiceInstance {
         }
       }
     } catch (e) {
-      debugPrint('Failed to load sync queue: $e');
+      NumberedLogger.w('Failed to load sync queue: $e');
       // If SharedPreferences is not ready, just start with empty queue
       _syncQueue.clear();
     }
@@ -201,7 +202,7 @@ class SyncServiceInstance {
   Future<void> _saveSyncQueue() async {
     try {
       if (_prefs == null) {
-        debugPrint('SharedPreferences not available, cannot save queue');
+        NumberedLogger.w('SharedPreferences not available, cannot save queue');
         return;
       }
 
@@ -209,7 +210,7 @@ class SyncServiceInstance {
           jsonEncode(_syncQueue.map((op) => op.toJson()).toList());
       await _prefs!.setString(_syncQueueKey, queueJson);
     } catch (e) {
-      debugPrint('Failed to save sync queue: $e');
+      NumberedLogger.w('Failed to save sync queue: $e');
       // If SharedPreferences fails, operations will be lost but app continues
     }
   }
@@ -263,11 +264,11 @@ class SyncServiceInstance {
           return await _friendsService.acceptFriendRequest(fromUid);
 
         default:
-          debugPrint('Unknown operation type: $type');
+          NumberedLogger.w('Unknown operation type: $type');
           return false;
       }
     } catch (e) {
-      debugPrint('Error executing operation $type: $e');
+      NumberedLogger.e('Error executing operation $type: $e');
       return false;
     }
   }
@@ -401,14 +402,14 @@ extension _SyncServiceHealth on SyncServiceInstance {
   void _logHealthSnapshot() {
     final snap = getHealthSnapshot();
     if (snap.total == 0) return; // keep noise low
-    debugPrint(
+    NumberedLogger.d(
         '[SyncHealth] total=${snap.total} pending=${snap.pending} failed=${snap.failed} '
         'stuck=${snap.stuck} oldestPendingAge=${snap.oldestPendingAge?.inMinutes}m');
     if (snap.byTypePending.isNotEmpty) {
-      debugPrint('[SyncHealth] pendingByType=${snap.byTypePending}');
+      NumberedLogger.d('[SyncHealth] pendingByType=${snap.byTypePending}');
     }
     if (snap.byTypeFailed.isNotEmpty) {
-      debugPrint('[SyncHealth] failedByType=${snap.byTypeFailed}');
+      NumberedLogger.d('[SyncHealth] failedByType=${snap.byTypeFailed}');
     }
     final stuckOps = getStuckOperations();
     if (stuckOps.isNotEmpty) {
@@ -418,7 +419,8 @@ extension _SyncServiceHealth on SyncServiceInstance {
             'ageMin': DateTime.now().difference(o.timestamp).inMinutes,
             'retries': o.retryCount,
           });
-      debugPrint('[SyncHealth] stuckOps=${stuckOps.length} sample=$sample');
+      NumberedLogger.d(
+          '[SyncHealth] stuckOps=${stuckOps.length} sample=$sample');
     }
   }
 }

@@ -45,4 +45,23 @@ class NumberedLogger {
   static void reset() {
     _counter = 0;
   }
+
+  /// Convenience helpers for leveled logging
+  static void i(String message) {
+    debugPrint('ℹ️ $message');
+  }
+
+  static void w(String message) {
+    debugPrint('⚠️ $message');
+  }
+
+  static void e(String message) {
+    debugPrint('❌ $message');
+  }
+
+  static void d(String message) {
+    if (kDebugMode) {
+      debugPrint(message);
+    }
+  }
 }

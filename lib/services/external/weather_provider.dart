@@ -4,17 +4,14 @@ import 'weather_service_instance.dart';
 import 'package:move_young/providers/infrastructure/shared_preferences_provider.dart';
 
 // Weather service provider
-final weatherServiceProvider = Provider<WeatherServiceInstance?>((ref) {
+final weatherServiceProvider = Provider<WeatherServiceInstance>((ref) {
   final prefs = ref.watch(sharedPreferencesProvider);
-  return prefs != null ? WeatherServiceInstance(prefs) : null;
+  return WeatherServiceInstance(prefs);
 });
 
 // Weather actions provider
-final weatherActionsProvider = Provider<WeatherActions?>((ref) {
+final weatherActionsProvider = Provider<WeatherActions>((ref) {
   final weatherService = ref.watch(weatherServiceProvider);
-  if (weatherService == null) {
-    return null;
-  }
   return WeatherActions(weatherService);
 });
 

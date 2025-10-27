@@ -1,23 +1,20 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:move_young/services/cache/cache_service_instance.dart';
-import '../helpers/test_db_helper.dart';
 
 void main() {
   group('CacheServiceInstance Tests', () {
     late CacheServiceInstance cacheService;
 
-    setUpAll(() {
-      TestDbHelper.initializeFfi();
-    });
-
     setUp(() async {
-      cacheService = CacheServiceInstance();
-      // Force initialization
-      await cacheService.database;
+      // Use in-memory SharedPreferences for testing
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+      cacheService = CacheServiceInstance(prefs);
     });
 
     tearDown(() async {
-      await cacheService.close();
+      await cacheService.clearAllCache();
     });
 
     group('User Profile Cache', () {

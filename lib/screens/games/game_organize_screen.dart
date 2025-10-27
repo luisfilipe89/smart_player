@@ -198,29 +198,32 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
   Future<void> _loadFields() async {
     if (_selectedSport == null) return;
 
-    setState(() {
-      _isLoadingFields = true;
-      _availableFields = [];
-    });
+    if (mounted) {
+      setState(() {
+        _isLoadingFields = true;
+        _availableFields = [];
+      });
+    }
 
     try {
       final overpassActions = ref.read(overpassActionsProvider);
-      if (overpassActions == null) {
-        setState(() {
-          _availableFields = [];
-          _isLoadingFields = false;
-        });
-        return;
-      }
 
       // Only support soccer and basketball and keep 's-Hertogenbosch'
       final sportType =
           _selectedSport == 'basketball' ? 'basketball' : 'soccer';
 
       final rawFields = await overpassActions.fetchFields(
-        areaName: "'s-Hertogenbosch",
+        areaName: 's-Hertogenbosch',
         sportType: sportType,
+        bypassCache: true, // Force fresh fetch to debug
       );
+
+      // Debug: Check what we got back
+      print(
+          '🔍 Fetched ${rawFields.length} raw fields for sport: $sportType in area: s-Hertogenbosch');
+      if (rawFields.isNotEmpty) {
+        print('🔍 First field data: ${rawFields.first}');
+      }
 
       // Normalize Overpass keys for UI consistency
       final fields = rawFields
@@ -243,44 +246,52 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
           .where((m) => m['latitude'] != null && m['longitude'] != null)
           .toList();
 
-      setState(() {
-        _availableFields = fields;
-        _isLoadingFields = false;
+      print('🔍 Normalized to ${fields.length} fields with valid coordinates');
 
-        // If a field was preselected (e.g., editing a game), map it to the
-        // corresponding instance from the freshly loaded list so identity
-        // comparison (_selectedField == field) works for highlighting.
-        if (_selectedField != null) {
-          final String selName = (_selectedField?['name'] as String?) ?? '';
-          final match = fields.firstWhere(
-            (f) => (f['name'] as String?) == selName,
-            orElse: () => {},
-          );
-          if (match.isNotEmpty) {
-            _selectedField = match;
+      if (mounted) {
+        setState(() {
+          _availableFields = fields;
+          _isLoadingFields = false;
+
+          // If a field was preselected (e.g., editing a game), map it to the
+          // corresponding instance from the freshly loaded list so identity
+          // comparison (_selectedField == field) works for highlighting.
+          if (_selectedField != null) {
+            final String selName = (_selectedField?['name'] as String?) ?? '';
+            final match = fields.firstWhere(
+              (f) => (f['name'] as String?) == selName,
+              orElse: () => {},
+            );
+            if (match.isNotEmpty) {
+              _selectedField = match;
+            }
           }
-        }
-      });
+        });
+      }
     } catch (e) {
-      setState(() {
-        _availableFields = [];
-        _isLoadingFields = false;
-      });
+      // Log the error so we can see Overpass or parsing failures
+      // ignore: avoid_print
+      print('❌ Failed to load fields: $e');
+      if (mounted) {
+        setState(() {
+          _availableFields = [];
+          _isLoadingFields = false;
+        });
+      }
     }
   }
 
   // Load weather data for the selected date
   Future<void> _loadWeather() async {
-    if (_selectedDate == null) return;
+    if (_selectedDate == null) {
+      debugPrint('🌤️ Weather: No selected date');
+      return;
+    }
 
     try {
       final weatherActions = ref.read(weatherActionsProvider);
-      if (weatherActions == null) {
-        setState(() {
-          _weatherData = {};
-        });
-        return;
-      }
+      debugPrint(
+          '🌤️ Weather: Fetching for date ${_selectedDate!}, lat 51.6978, lon 5.3037');
 
       // Use a default location for 's-Hertogenbosch
       final weatherData = await weatherActions.fetchWeatherForDate(
@@ -289,14 +300,21 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
         longitude: 5.3037,
       );
 
-      setState(() {
-        _weatherData = weatherData;
-      });
+      debugPrint('🌤️ Weather: Received ${weatherData.length} hours of data');
+
+      if (mounted) {
+        setState(() {
+          _weatherData = weatherData;
+        });
+      }
     } catch (e) {
+      debugPrint('🌤️ Weather: Error - $e');
       // Set default weather data on error
-      setState(() {
-        _weatherData = {};
-      });
+      if (mounted) {
+        setState(() {
+          _weatherData = {};
+        });
+      }
     }
   }
 
@@ -349,9 +367,11 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
       return;
     }
 
-    setState(() {
-      _isLoading = true;
-    });
+    if (mounted) {
+      setState(() {
+        _isLoading = true;
+      });
+    }
 
     try {
       // Parse the selected time and combine with selected date
@@ -522,9 +542,11 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
       return;
     }
 
-    setState(() {
-      _isLoading = true;
-    });
+    if (mounted) {
+      setState(() {
+        _isLoading = true;
+      });
+    }
 
     try {
       // Parse the selected time and combine with selected date
@@ -1023,7 +1045,7 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
       appBar: AppBar(
         leadingWidth: 48,
         leading: const AppBackButton(),
-        title: Text('organize_game'.tr()),
+        title: Text('organize_a_game'.tr()),
         backgroundColor: AppColors.white,
         elevation: 0,
       ),
@@ -1382,14 +1404,14 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                                                   weatherCondition != null
                                               ? ref
                                                   .read(weatherActionsProvider)
-                                                  ?.getWeatherIcon(
+                                                  .getWeatherIcon(
                                                       time, weatherCondition)
                                               : null;
                                           final weatherColor = hasWeatherData &&
                                                   weatherCondition != null
                                               ? ref
                                                   .read(weatherActionsProvider)
-                                                  ?.getWeatherColor(
+                                                  .getWeatherColor(
                                                       weatherCondition)
                                               : null;
 

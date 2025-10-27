@@ -1,6 +1,8 @@
 // lib/services/auth_service_instance.dart
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
+import 'dart:async';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:move_young/utils/logger.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import '../../utils/service_error.dart';
 import '../firebase_error_handler.dart';
@@ -56,8 +58,14 @@ class AuthServiceInstance {
   // Sign in anonymously
   Future<UserCredential> signInAnonymously() async {
     try {
-      final userCredential = await _auth.signInAnonymously();
+      NumberedLogger.d('Auth: signInAnonymously start');
+      final userCredential = await _auth.signInAnonymously().timeout(
+        const Duration(seconds: 12),
+      );
+      NumberedLogger.d('Auth: signInAnonymously success uid=${userCredential.user?.uid}');
       return userCredential;
+    } on TimeoutException catch (e) {
+      throw NetworkException('network_error', originalError: e);
     } on FirebaseAuthException catch (e) {
       throw FirebaseErrorHandler.toServiceException(e);
     } catch (e) {
@@ -81,18 +89,19 @@ class AuthServiceInstance {
       final GoogleSignInAccount? googleUser = await GoogleSignIn().signIn();
       if (googleUser == null) {
         // User aborted the sign-in flow
-        debugPrint('Google Sign-In: User cancelled');
+        NumberedLogger.i('Google Sign-In: User cancelled');
         return null; // User cancellation is not an error
       }
 
-      debugPrint('Google Sign-In: User selected: ${googleUser.email}');
+      NumberedLogger.d('Google Sign-In: User selected: ${googleUser.email}');
 
       final GoogleSignInAuthentication googleAuth =
           await googleUser.authentication;
 
       if (googleAuth.accessToken == null || googleAuth.idToken == null) {
         throw ServiceException(
-            'Failed to get authentication tokens from Google');
+          'Failed to get authentication tokens from Google',
+        );
       }
 
       final oauthCredential = GoogleAuthProvider.credential(
@@ -102,12 +111,12 @@ class AuthServiceInstance {
 
       final userCredential = await _auth.signInWithCredential(oauthCredential);
       await _auth.currentUser?.reload();
-      debugPrint('Google Sign-In: Success');
+      NumberedLogger.i('Google Sign-In: Success');
       return userCredential;
     } on FirebaseAuthException catch (e) {
       throw FirebaseErrorHandler.toServiceException(e);
     } catch (e) {
-      debugPrint('Google Sign-In Error: $e');
+      NumberedLogger.e('Google Sign-In Error: $e');
       if (e is ServiceException) rethrow;
       throw ServiceException('Failed to sign in with Google', originalError: e);
     }
@@ -115,7 +124,9 @@ class AuthServiceInstance {
 
   // Sign in with email and password
   Future<UserCredential> signInWithEmailAndPassword(
-      String email, String password) async {
+    String email,
+    String password,
+  ) async {
     if (password.isEmpty) {
       throw ValidationException('auth_password_required');
     }
@@ -165,16 +176,13 @@ class AuthServiceInstance {
     try {
       await _auth.signOut();
     } catch (e) {
-      debugPrint('Error signing out: $e');
+      NumberedLogger.e('Error signing out: $e');
       rethrow; // Re-throw to let UI know there was an error
     }
   }
 
   // Update user profile
-  Future<void> updateProfile({
-    String? displayName,
-    String? photoURL,
-  }) async {
+  Future<void> updateProfile({String? displayName, String? photoURL}) async {
     try {
       final user = _auth.currentUser;
       if (user == null) {
@@ -188,7 +196,7 @@ class AuthServiceInstance {
 
       await user.reload();
     } catch (e) {
-      debugPrint('Error updating profile: $e');
+      NumberedLogger.e('Error updating profile: $e');
       rethrow;
     }
   }
@@ -200,9 +208,9 @@ class AuthServiceInstance {
       if (user == null) throw AuthException('Not signed in');
 
       await user.verifyBeforeUpdateEmail(newEmail);
-      debugPrint('Verification email sent to: $newEmail');
+      NumberedLogger.i('Verification email sent to: $newEmail');
     } catch (e) {
-      debugPrint('Error updating email: $e');
+      NumberedLogger.e('Error updating email: $e');
       rethrow;
     }
   }
@@ -223,7 +231,7 @@ class AuthServiceInstance {
       // Force refresh the user data
       await user.getIdToken(true);
     } catch (e) {
-      debugPrint('Error updating nickname: $e');
+      NumberedLogger.e('Error updating nickname: $e');
       rethrow;
     }
   }
@@ -233,16 +241,16 @@ class AuthServiceInstance {
     try {
       final user = _auth.currentUser;
       if (user == null) {
-        debugPrint('No user to delete');
+        NumberedLogger.w('No user to delete');
         return false;
       }
 
       // Delete the user account
       await user.delete();
-      debugPrint('User account deleted successfully');
+      NumberedLogger.i('User account deleted successfully');
       return true;
     } catch (e) {
-      debugPrint('Error deleting account: $e');
+      NumberedLogger.e('Error deleting account: $e');
       return false;
     }
   }
@@ -270,7 +278,7 @@ class AuthServiceInstance {
 
       // Change password
       await user.updatePassword(newPassword);
-      debugPrint('Password changed successfully');
+      NumberedLogger.i('Password changed successfully');
     } on FirebaseAuthException catch (e) {
       throw AuthException(_mapFirebaseError(e, isSignup: false), code: e.code);
     } catch (e) {
@@ -282,12 +290,14 @@ class AuthServiceInstance {
   Future<void> sendPasswordResetEmail(String email) async {
     try {
       await _auth.sendPasswordResetEmail(email: email);
-      debugPrint('Password reset email sent to: $email');
+      NumberedLogger.i('Password reset email sent to: $email');
     } on FirebaseAuthException catch (e) {
       throw AuthException(_mapFirebaseError(e, isSignup: false), code: e.code);
     } catch (e) {
-      throw ServiceException('Failed to send password reset email',
-          originalError: e);
+      throw ServiceException(
+        'Failed to send password reset email',
+        originalError: e,
+      );
     }
   }
 
@@ -314,7 +324,7 @@ class AuthServiceInstance {
 
       // Change email (requires verification)
       await user.verifyBeforeUpdateEmail(newEmail);
-      debugPrint('Verification email sent to: $newEmail');
+      NumberedLogger.i('Verification email sent to: $newEmail');
     } on FirebaseAuthException catch (e) {
       throw AuthException(_mapFirebaseError(e, isSignup: false), code: e.code);
     } catch (e) {

@@ -6,7 +6,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 class OverpassServiceInstance {
-  final SharedPreferences _prefs;
+  final SharedPreferences? _prefs;
 
   static const _cacheDuration = Duration(days: 90);
 
@@ -40,22 +40,101 @@ class OverpassServiceInstance {
       if (cached != null) return cached;
     }
 
+    // Primary query using the provided area name
     final areaSel = _areaSelector(areaName);
+    final String primaryQuery = _buildSportQuery(areaSel, sportType);
+    print('🔍 Overpass Query (primary):\n$primaryQuery');
 
-    final query = '''
-    [out:json][timeout:25];
-    $areaSel
-    (
-      nwr["sport"="$sportType"]["access"!="private"]["access"!="no"](area.searchArea);
-      ${sportType == 'beachvolleyball' ? '''
-      nwr["sport"="volleyball"]["surface"="sand"]["access"!="private"]["access"!="no"](area.searchArea);
-      ''' : ''}
-    );
-    out center tags qt;
-    ''';
+    String body;
+    List<Map<String, dynamic>> parsed = const [];
+    try {
+      body = await _postOverpass(primaryQuery);
+      parsed = _parseOverpassData(body);
+    } catch (e) {
+      print('❌ Failed primary Overpass query: $e');
+    }
 
-    final body = await _postOverpass(query);
-    final parsed = _parseOverpassData(body);
+    print('🔍 Overpass Response (primary): ${parsed.length} elements found');
+
+    // Second attempt: add country for disambiguation (e.g., “, Netherlands”)
+    if (parsed.isEmpty) {
+      final areaSelWithCountry = _areaSelectorWithCountry(areaName);
+      if (areaSelWithCountry != areaSel) {
+        final String countryQuery =
+            _buildSportQuery(areaSelWithCountry, sportType);
+        print('🔍 Overpass Query (country disambiguation):\n$countryQuery');
+        try {
+          final body2 = await _postOverpass(countryQuery);
+          parsed = _parseOverpassData(body2);
+        } catch (e) {
+          print('❌ Failed country Overpass query: $e');
+        }
+        print(
+            '🔍 Overpass Response (country): ${parsed.length} elements found');
+      }
+    }
+
+    // Third attempt: broader search for any pitches/stadiums in the area, then
+    // filter locally by sport tag or name synonyms (voetbal/football/soccer)
+    if (parsed.isEmpty) {
+      final areaSel3 = _areaSelectorWithCountry(areaName);
+      final wideQuery = '''
+[out:json][timeout:25];
+$areaSel3
+(
+  nwr["leisure"="pitch"](area.searchArea);
+  nwr["leisure"="stadium"](area.searchArea);
+);
+out center tags qt;
+''';
+      print('🔍 Overpass Query (wide, filter locally):\n$wideQuery');
+      try {
+        final body3 = await _postOverpass(wideQuery);
+        final wide = _parseOverpassData(body3);
+        final wanted = sportType.toLowerCase();
+        final filtered = wide.where((m) {
+          final tags = (m['tags'] as Map<String, dynamic>?);
+          final sport = tags?['sport']?.toString().toLowerCase();
+          final name = tags?['name']?.toString().toLowerCase() ?? '';
+          if (sport == wanted) return true;
+          // NL synonyms and generic terms commonly used
+          if (name.contains('voetbal') ||
+              name.contains('soccer') ||
+              name.contains('football')) return true;
+          return false;
+        }).toList();
+        parsed = filtered;
+      } catch (e) {
+        print('❌ Failed Overpass wide query: $e');
+      }
+      print(
+          '🔍 Overpass Response (wide filtered): ${parsed.length} elements found');
+    }
+
+    // Final fallback: radius search around Den Bosch center
+    if (parsed.isEmpty) {
+      const double fallbackLat = 51.6978;
+      const double fallbackLon = 5.3037;
+      const int radiusMeters = 15000; // 15km
+
+      final fallbackQuery = '''
+      [out:json][timeout:25];
+      (
+        nwr(around:$radiusMeters,$fallbackLat,$fallbackLon)["sport"="$sportType"];
+        nwr(around:$radiusMeters,$fallbackLat,$fallbackLon)["leisure"="pitch"]["sport"="$sportType"];
+        nwr(around:$radiusMeters,$fallbackLat,$fallbackLon)["leisure"="stadium"]["sport"="$sportType"];
+      );
+      out center tags qt;
+      ''';
+      print('🔍 Overpass Fallback Query (radius):\n$fallbackQuery');
+      try {
+        final fbBody = await _postOverpass(fallbackQuery);
+        parsed = _parseOverpassData(fbBody);
+      } catch (e) {
+        print('❌ Failed Overpass fallback (radius): $e');
+      }
+      print('🔍 Overpass Fallback Response: ${parsed.length} elements found');
+    }
 
     // Only cache if we actually got something
     if (parsed.isNotEmpty) {
@@ -104,14 +183,35 @@ out center tags qt;
 
   // Builds an area selector. Accepts plain names (preferred) or already-quoted.
   String _areaSelector(String areaName) {
+    // Use Overpass geocodeArea macro for robust area lookup
+    // Match user's expected form: {{geocodeArea:'s-Hertogenbosch'}}->.searchArea;
     final startsWithQuote =
-        areaName.startsWith('"') || areaName.startsWith("'");
-    final endsWithQuote = areaName.endsWith('"') || areaName.endsWith("'");
+        areaName.startsWith("'") || areaName.startsWith('"');
+    final endsWithQuote = areaName.endsWith("'") || areaName.endsWith('"');
     final alreadyQuoted = startsWithQuote && endsWithQuote;
+    final value = alreadyQuoted ? areaName : "'$areaName'";
+    return '{{geocodeArea:$value}}->.searchArea;';
+  }
 
-    // Always wrap with double quotes unless caller passed a fully quoted string already
-    final value = alreadyQuoted ? areaName : '"$areaName"';
-    return 'area["name"=$value]->.searchArea;';
+  // Add a country disambiguator if none is present (e.g., “, Netherlands”).
+  String _areaSelectorWithCountry(String areaName) {
+    if (areaName.contains(',')) {
+      return _areaSelector(areaName);
+    }
+    return _areaSelector('$areaName, Netherlands');
+  }
+
+  String _buildSportQuery(String areaSel, String sportType) {
+    return '''
+[out:json][timeout:25];
+$areaSel
+(
+  nwr["sport"="$sportType"](area.searchArea);
+  nwr["leisure"="pitch"]["sport"="$sportType"](area.searchArea);
+  nwr["leisure"="stadium"]["sport"="$sportType"](area.searchArea);
+);
+out center tags qt;
+''';
   }
 
   // Rotate through mirrors with timeout. Throws the last error if all fail.
@@ -119,9 +219,12 @@ out center tags qt;
     Exception? lastError;
     for (final url in _endpoints) {
       try {
-        final resp = await http.post(Uri.parse(url),
-            headers: _headers,
-            body: {'data': query}).timeout(const Duration(seconds: 45));
+        print('🔌 Overpass POST -> $url');
+        final resp = await http.post(
+          Uri.parse(url),
+          headers: _headers,
+          body: {'data': query},
+        ).timeout(const Duration(seconds: 20));
         if (resp.statusCode == 200) return resp.body;
 
         final head =
@@ -182,16 +285,18 @@ out center tags qt;
   // --------- Simple key/value cache (SharedPreferences) ---------
 
   Future<void> _cacheData(String key, List<Map<String, dynamic>> data) async {
+    if (_prefs == null) return; // caching disabled when prefs unavailable
     final entry = {
       'timestamp': DateTime.now().millisecondsSinceEpoch,
       'expiry': DateTime.now().add(_cacheDuration).millisecondsSinceEpoch,
       'data': data,
     };
-    await _prefs.setString(key, jsonEncode(entry));
+    await _prefs!.setString(key, jsonEncode(entry));
   }
 
   Future<List<Map<String, dynamic>>?> _getCachedData(String key) async {
-    final jsonString = _prefs.getString(key);
+    if (_prefs == null) return null; // no cache
+    final jsonString = _prefs!.getString(key);
     if (jsonString == null) return null;
 
     final Map<String, dynamic> json = jsonDecode(jsonString);

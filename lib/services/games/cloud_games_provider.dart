@@ -2,7 +2,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'cloud_games_service_instance.dart';
 import 'package:move_young/models/core/game.dart';
-import '../auth/auth_provider.dart';
+// import '../auth/auth_provider.dart';
 import '../notifications/notification_provider.dart';
 import 'package:move_young/providers/infrastructure/firebase_providers.dart';
 
@@ -20,46 +20,16 @@ final cloudGamesServiceProvider = Provider<CloudGamesServiceInstance>((ref) {
 });
 
 // My games provider (reactive)
-final myGamesProvider = FutureProvider.autoDispose<List<Game>>((ref) async {
-  final cloudGamesService = ref.watch(cloudGamesServiceProvider);
-  final userId = ref.watch(currentUserIdProvider);
-
-  if (userId == null) return [];
-
-  return await cloudGamesService.getMyGames();
-});
+// Moved to games_provider.dart
 
 // Joinable games provider (reactive)
-final joinableGamesProvider =
-    FutureProvider.autoDispose<List<Game>>((ref) async {
-  final cloudGamesService = ref.watch(cloudGamesServiceProvider);
-  final userId = ref.watch(currentUserIdProvider);
-
-  if (userId == null) return [];
-
-  return await cloudGamesService.getJoinableGames();
-});
+// Moved to games_provider.dart
 
 // Invited games provider (reactive)
-final invitedGamesProvider =
-    FutureProvider.autoDispose<List<Game>>((ref) async {
-  final cloudGamesService = ref.watch(cloudGamesServiceProvider);
-  final userId = ref.watch(currentUserIdProvider);
-
-  if (userId == null) return [];
-
-  return await cloudGamesService.getInvitedGamesForCurrentUser();
-});
+// Moved to games_provider.dart
 
 // Pending invites count provider (reactive stream)
-final pendingInvitesCountProvider = StreamProvider.autoDispose<int>((ref) {
-  final cloudGamesService = ref.watch(cloudGamesServiceProvider);
-  final userId = ref.watch(currentUserIdProvider);
-
-  if (userId == null) return Stream.value(0);
-
-  return cloudGamesService.watchPendingInvitesCount();
-});
+// Moved to games_provider.dart
 
 // Cloud games actions provider (for game operations)
 final cloudGamesActionsProvider = Provider<CloudGamesActions>((ref) {

@@ -12,7 +12,7 @@ Future<void> initializeSharedPreferences(WidgetRef ref) async {
   try {
     debugPrint('Initializing SharedPreferences...');
     // Wait to ensure platform channels are ready
-    await Future.delayed(const Duration(milliseconds: 200));
+    await Future.delayed(const Duration(milliseconds: 500));
     final prefs = await SharedPreferences.getInstance();
     ref.read(sharedPreferencesProvider.notifier).state = prefs;
     debugPrint('SharedPreferences initialized successfully');
@@ -20,7 +20,7 @@ Future<void> initializeSharedPreferences(WidgetRef ref) async {
     debugPrint('Failed to get SharedPreferences: $e');
     // Retry once after a longer delay
     try {
-      await Future.delayed(const Duration(milliseconds: 1000));
+      await Future.delayed(const Duration(milliseconds: 2000));
       final prefs = await SharedPreferences.getInstance();
       ref.read(sharedPreferencesProvider.notifier).state = prefs;
       debugPrint('SharedPreferences initialized on retry');

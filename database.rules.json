@@ -17,13 +17,14 @@
                 "dateTime"
             ],
             "$gameId": {
+                ".write": "auth != null && (!data.exists() && newData.child('organizerId').val() === auth.uid || data.exists() && data.child('organizerId').val() === auth.uid)",
                 "invites": {
                     ".indexOn": [
                         "status"
                     ],
                     "$uid": {
-                        ".read": "auth != null",
-                        ".write": "auth != null"
+                        ".read": "auth != null && ($uid === auth.uid || root.child('games/'+$gameId+'/organizerId').val() === auth.uid)",
+                        ".write": "auth != null && ($uid === auth.uid || root.child('games/'+$gameId+'/organizerId').val() === auth.uid)"
                     }
                 }
             }
@@ -66,7 +67,7 @@
                 "gameInvites": {
                     "$gameId": {
                         ".read": "auth != null && auth.uid == $uid",
-                        ".write": "auth != null"
+                        ".write": "auth != null && (auth.uid == $uid)"
                     }
                 },
                 "settings": {

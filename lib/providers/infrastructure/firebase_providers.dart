@@ -15,9 +15,13 @@ final firebaseAuthProvider = Provider<FirebaseAuth>((ref) {
   return FirebaseAuth.instance;
 });
 
-// Firebase Database
+// Firebase Database with offline persistence enabled
 final firebaseDatabaseProvider = Provider<FirebaseDatabase>((ref) {
-  return FirebaseDatabase.instance;
+  final db = FirebaseDatabase.instance;
+  // Enable offline persistence for better offline support
+  db.setPersistenceEnabled(true);
+  db.setPersistenceCacheSizeBytes(100 * 1024 * 1024); // 100MB cache
+  return db;
 });
 
 // Firebase Storage
@@ -29,4 +33,3 @@ final firebaseStorageProvider = Provider<FirebaseStorage>((ref) {
 final firebaseMessagingProvider = Provider<FirebaseMessaging>((ref) {
   return FirebaseMessaging.instance;
 });
-

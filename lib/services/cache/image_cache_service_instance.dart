@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:move_young/utils/background_processor.dart';
+import 'package:move_young/utils/logger.dart';
 import 'dart:typed_data';
 
 // Top-level function for background image compression
@@ -30,7 +31,7 @@ class ImageCacheServiceInstance {
 
       _initialized = true;
     } catch (e) {
-      debugPrint('Failed to initialize ImageCacheService: $e');
+      NumberedLogger.e('Failed to initialize ImageCacheService: $e');
     }
   }
 
@@ -50,6 +51,7 @@ class ImageCacheServiceInstance {
     Widget Function(BuildContext, String, dynamic)? errorWidget,
     Duration fadeInDuration = const Duration(milliseconds: 300),
     Curve fadeInCurve = Curves.easeInOut,
+    Map<String, String>? httpHeaders,
   }) {
     // Handle infinity values for width/height
     int? memCacheWidth;
@@ -71,6 +73,7 @@ class ImageCacheServiceInstance {
       memCacheHeight: memCacheHeight,
       fadeInDuration: fadeInDuration,
       fadeInCurve: fadeInCurve,
+      httpHeaders: httpHeaders,
       placeholder: placeholder ??
           (BuildContext context, String url) =>
               _buildShimmerPlaceholder(width, height),
@@ -127,7 +130,7 @@ class ImageCacheServiceInstance {
             context,
           );
         } catch (e) {
-          debugPrint('Failed to preload image $url: $e');
+          NumberedLogger.w('Failed to preload image $url: $e');
         }
       }
     }
@@ -139,7 +142,7 @@ class ImageCacheServiceInstance {
       PaintingBinding.instance.imageCache.clear();
       await DefaultCacheManager().emptyCache();
     } catch (e) {
-      debugPrint('Failed to clear image cache: $e');
+      NumberedLogger.w('Failed to clear image cache: $e');
     }
   }
 

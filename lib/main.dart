@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+// No explicit DartPluginRegistrant import; rely on default plugin registration
 import 'package:easy_localization/easy_localization.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_app_check/firebase_app_check.dart';
@@ -12,9 +13,11 @@ import 'package:move_young/screens/welcome/welcome_screen.dart';
 import 'package:move_young/theme/_theme.dart';
 import 'package:move_young/services/system/accessibility_provider.dart';
 import 'package:move_young/providers/infrastructure/shared_preferences_provider.dart';
+import 'package:move_young/providers/locale_controller.dart';
 import 'package:move_young/widgets/common/sync_status_indicator.dart';
 import 'firebase_options.dart';
 import 'package:move_young/utils/logger.dart';
+import 'package:move_young/services/notifications/notification_provider.dart';
 
 // Global navigator key for navigation from notifications
 // Note: This is still needed for Firebase notification callbacks in background
@@ -23,99 +26,130 @@ final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 void main() async {
   // Handle errors in async Zone
-  runZonedGuarded(() async {
-    WidgetsFlutterBinding.ensureInitialized();
-    NumberedLogger.install();
+  runZonedGuarded(
+    () async {
+      WidgetsFlutterBinding.ensureInitialized();
+      NumberedLogger.install();
 
-    // SharedPreferences will be initialized after first frame
-    // to avoid platform channel errors during app startup
-
-    // Handle errors gracefully
-    FlutterError.onError = (FlutterErrorDetails details) {
-      // Log platform channel errors but don't crash the app
-      if (details.exception is PlatformException) {
-        final error = details.exception as PlatformException;
-        if (error.code == 'channel-error') {
-          debugPrint('Platform channel error (ignored): ${error.message}');
-          return;
-        }
-      }
-      // Let other errors be handled normally
-      FlutterError.presentError(details);
-    };
-
-    // Defer EasyLocalization initialization; the widget will handle loading
-
-    // Services are now initialized through Riverpod providers
-    // This ensures proper dependency injection and testability
-    // Haptics and Accessibility will be initialized when first accessed
-    // to avoid SharedPreferences channel errors during app startup
-
-    // Status bar styling only; avoid forcing Android nav bar appearance
-    SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
-      statusBarColor: Colors.transparent,
-      statusBarIconBrightness: Brightness.dark,
-      statusBarBrightness: Brightness.light,
-    ));
-
-    // Render the first frame ASAP
-    runApp(
-      ProviderScope(
-        child: EasyLocalization(
-          supportedLocales: const [Locale('en'), Locale('nl')],
-          path: 'assets/translations',
-          fallbackLocale: const Locale('nl'),
-          startLocale: const Locale('nl'),
-          saveLocale: false,
-          child: const MoveYoungApp(),
-        ),
-      ),
-    );
-
-    // Kick off heavy init work asynchronously (do not block first frame)
-    // Firebase init
-    unawaited(Future(() async {
+      // Initialize Firebase BEFORE runApp to avoid plugin/channel races during auth
       try {
         await Firebase.initializeApp(
           options: DefaultFirebaseOptions.currentPlatform,
         );
       } catch (_) {}
 
+      // Register background message handler early
       try {
-        await FirebaseAppCheck.instance.activate(
-          androidProvider: kDebugMode
-              ? AndroidProvider.debug
-              : AndroidProvider.playIntegrity,
-          appleProvider:
-              kDebugMode ? AppleProvider.debug : AppleProvider.deviceCheck,
-          webProvider: ReCaptchaV3Provider('auto'),
+        FirebaseMessaging.onBackgroundMessage(
+          _firebaseMessagingBackgroundHandler,
         );
       } catch (_) {}
 
-      // Initialize Crashlytics
-      try {
-        await FirebaseCrashlytics.instance
-            .setCrashlyticsCollectionEnabled(true);
-        FlutterError.onError = (errorDetails) {
-          FirebaseCrashlytics.instance.recordFlutterFatalError(errorDetails);
-        };
-      } catch (_) {}
+      // SharedPreferences will be initialized after first frame
+      // to avoid platform channel errors during app startup
 
-      // Register background message handler
-      FirebaseMessaging.onBackgroundMessage(
-        _firebaseMessagingBackgroundHandler,
+      // Handle errors gracefully
+      FlutterError.onError = (FlutterErrorDetails details) {
+        // Log platform channel errors but don't crash the app
+        if (details.exception is PlatformException) {
+          final error = details.exception as PlatformException;
+          if (error.code == 'channel-error') {
+            debugPrint('Platform channel error (ignored): ${error.message}');
+            return;
+          }
+        }
+        // Ignore any remaining SQLite references (no longer used)
+        if (details.exception.toString().contains('sqflite') ||
+            details.exception.toString().contains('getDatabasesPath')) {
+          // No longer using SQLite - can ignore
+          return;
+        }
+        // Let other errors be handled normally
+        FlutterError.presentError(details);
+      };
+
+      // Defer EasyLocalization initialization; the widget will handle loading
+
+      // Services are now initialized through Riverpod providers
+      // This ensures proper dependency injection and testability
+      // Haptics and Accessibility will be initialized when first accessed
+      // to avoid SharedPreferences channel errors during app startup
+
+      // Status bar styling only; avoid forcing Android nav bar appearance
+      SystemChrome.setSystemUIOverlayStyle(
+        const SystemUiOverlayStyle(
+          statusBarColor: Colors.transparent,
+          statusBarIconBrightness: Brightness.dark,
+          statusBarBrightness: Brightness.light,
+        ),
       );
-    }));
-  }, (error, stack) {
-    // Handle uncaught errors gracefully
-    debugPrint('Uncaught error in main: $error');
-    if (error is PlatformException && error.code == 'channel-error') {
-      debugPrint('Ignoring platform channel error during startup');
-      return;
-    }
-    // Re-throw other errors
-    throw error;
-  });
+
+      // Do not block startup on EasyLocalization internal init. We handle
+      // locale persistence ourselves post-runApp to avoid channel races.
+      debugPrint('[Startup] Skipping EasyLocalization.ensureInitialized()');
+
+      // Render the first frame ASAP
+      runApp(
+        ProviderScope(
+          child: EasyLocalization(
+            supportedLocales: const [Locale('en'), Locale('nl')],
+            path: 'assets/translations',
+            fallbackLocale: const Locale('en'),
+            startLocale: const Locale('en'),
+            // Do not force a startLocale if a saved value exists; we manage persistence ourselves
+            saveLocale: false, // We handle persistence via LocaleController
+            useOnlyLangCode: true, // Use only language code (en, nl)
+            child: const MoveYoungApp(),
+          ),
+        ),
+      );
+
+      // Kick off AppCheck and Crashlytics init asynchronously (non-blocking)
+      unawaited(
+        Future(() async {
+          try {
+            await FirebaseAppCheck.instance.activate(
+              androidProvider: kDebugMode
+                  ? AndroidProvider.debug
+                  : AndroidProvider.playIntegrity,
+              appleProvider: kDebugMode
+                  ? AppleProvider.debug
+                  : AppleProvider.deviceCheck,
+              webProvider: ReCaptchaV3Provider('auto'),
+            );
+          } catch (_) {}
+
+          // Initialize Crashlytics
+          try {
+            await FirebaseCrashlytics.instance.setCrashlyticsCollectionEnabled(
+              true,
+            );
+            FlutterError.onError = (errorDetails) {
+              FirebaseCrashlytics.instance.recordFlutterFatalError(
+                errorDetails,
+              );
+            };
+          } catch (_) {}
+        }),
+      );
+    },
+    (error, stack) {
+      // Handle uncaught errors gracefully
+      debugPrint('Uncaught error in main: $error');
+      if (error is PlatformException && error.code == 'channel-error') {
+        debugPrint('Ignoring platform channel error during startup');
+        return;
+      }
+      // Ignore any remaining SQLite errors (no longer used)
+      if (error.toString().contains('sqflite') ||
+          error.toString().contains('MissingPluginException')) {
+        debugPrint('Ignoring SQLite-related error (no longer used)');
+        return;
+      }
+      // Re-throw other errors
+      throw error;
+    },
+  );
 }
 
 class MoveYoungApp extends ConsumerStatefulWidget {
@@ -128,17 +162,62 @@ class MoveYoungApp extends ConsumerStatefulWidget {
 class _MoveYoungAppState extends ConsumerState<MoveYoungApp>
     with WidgetsBindingObserver {
   bool _isInitialized = false;
+  ProviderSubscription? _prefsSubscription;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    // Apply saved locale when SharedPreferences becomes available later
+    _prefsSubscription = ref.listenManual(sharedPreferencesProvider, (
+      previous,
+      next,
+    ) async {
+      if (previous == null && next != null && mounted && context.mounted) {
+        try {
+          final ctrl = ref.read(localeControllerProvider);
+          final saved = await ctrl.loadSavedLocaleCode();
+          final locale = ctrl.parseLocaleCode(saved);
+          if (locale != null) {
+            await context.setLocale(locale);
+            debugPrint(
+              '[Startup] Applied saved locale on prefs ready: ${locale.languageCode}',
+            );
+          }
+        } catch (e) {
+          debugPrint('Failed to apply saved locale (late): $e');
+        }
+      }
+    });
     // Wait a full frame cycle before initializing
     // This ensures platform channels are completely ready
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       // Initialize SharedPreferences after first frame
       if (mounted) {
-        await initializeSharedPreferences(ref);
+        try {
+          await initializeSharedPreferences(
+            ref,
+          ).timeout(const Duration(seconds: 2));
+          debugPrint('[Startup] SharedPreferences init completed');
+        } catch (e) {
+          debugPrint(
+            '[Startup] SharedPreferences init timed out or failed: $e',
+          );
+        }
+        // Apply saved locale after SharedPreferences is ready
+        try {
+          final ctrl = ref.read(localeControllerProvider);
+          final saved = await ctrl.loadSavedLocaleCode();
+          final locale = ctrl.parseLocaleCode(saved);
+          if (locale != null && mounted && context.mounted) {
+            await context.setLocale(locale);
+            debugPrint(
+              '[Startup] Applied saved locale after init: ${locale.languageCode}',
+            );
+          }
+        } catch (e) {
+          debugPrint('Failed to apply saved locale: $e');
+        }
         // Mark as initialized after SharedPreferences is ready
         if (mounted) {
           setState(() {
@@ -151,6 +230,7 @@ class _MoveYoungAppState extends ConsumerState<MoveYoungApp>
 
   @override
   void dispose() {
+    _prefsSubscription?.close();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -179,6 +259,16 @@ class _MoveYoungAppState extends ConsumerState<MoveYoungApp>
           debugPrint('Error reading high contrast mode: $e');
           isHighContrast = false;
         }
+
+        // Initialize notifications with deep-link dispatcher once after init
+        WidgetsBinding.instance.addPostFrameCallback((_) async {
+          try {
+            final dispatcher = ref.read(deepLinkDispatcherProvider);
+            await ref
+                .read(notificationActionsProvider)
+                .initialize(onDeepLinkNavigation: dispatcher.dispatch);
+          } catch (_) {}
+        });
 
         return MaterialApp(
           navigatorKey: navigatorKey,
@@ -217,11 +307,7 @@ class SplashScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Scaffold(
-      body: Center(
-        child: CircularProgressIndicator(),
-      ),
-    );
+    return const Scaffold(body: Center(child: CircularProgressIndicator()));
   }
 }
 
@@ -255,9 +341,7 @@ class _WelcomeScreenWrapperState extends State<WelcomeScreenWrapper> {
     if (!_ready) {
       return const WelcomeScreen();
     }
-    return GlobalSyncStatusBanner(
-      child: const WelcomeScreen(),
-    );
+    return GlobalSyncStatusBanner(child: const WelcomeScreen());
   }
 }
 
@@ -269,8 +353,21 @@ class _WelcomeScreenWrapperState extends State<WelcomeScreenWrapper> {
 // String? _pendingGameId; // Removed unused variable
 
 // Background message handler for Firebase Messaging
+// Note: This runs in a separate isolate, so it can't access platform channels
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  debugPrint('Background message received: ${message.messageId}');
-  // Handle background messages here
+  try {
+    // Initialize Firebase for background isolate
+    try {
+      await Firebase.initializeApp(
+        options: DefaultFirebaseOptions.currentPlatform,
+      );
+    } catch (_) {}
+
+    debugPrint('Background message received: ${message.messageId}');
+  } catch (e) {
+    // Suppress errors from plugin initialization in background isolate
+    // (SharedPreferences, SQLite, etc. aren't available in background threads)
+    debugPrint('Background message handler error (suppressed): $e');
+  }
 }

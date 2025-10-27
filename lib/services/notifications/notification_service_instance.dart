@@ -1,8 +1,8 @@
 // lib/services/notification_service_instance.dart
 import 'dart:async';
 import 'dart:io' show Platform;
-import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:move_young/utils/logger.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
@@ -141,12 +141,12 @@ class NotificationServiceInstance implements INotificationService {
     );
 
     if (settings.authorizationStatus == AuthorizationStatus.authorized) {
-      debugPrint('User granted permission');
+      NumberedLogger.i('User granted permission');
     } else if (settings.authorizationStatus ==
         AuthorizationStatus.provisional) {
-      debugPrint('User granted provisional permission');
+      NumberedLogger.i('User granted provisional permission');
     } else {
-      debugPrint('User declined or has not accepted permission');
+      NumberedLogger.w('User declined or has not accepted permission');
     }
 
     // Request local notification permissions for Android
@@ -162,11 +162,11 @@ class NotificationServiceInstance implements INotificationService {
   Future<void> _setupFirebaseMessaging() async {
     // Handle foreground messages
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-      debugPrint('Got a message whilst in the foreground!');
-      debugPrint('Message data: ${message.data}');
+      NumberedLogger.i('Got a message whilst in the foreground!');
+      NumberedLogger.d('Message data: ${message.data}');
 
       if (message.notification != null) {
-        debugPrint(
+        NumberedLogger.d(
             'Message also contained a notification: ${message.notification}');
       }
     });
@@ -176,7 +176,7 @@ class NotificationServiceInstance implements INotificationService {
 
     // Handle notification taps when app is in background
     FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
-      debugPrint('A new onMessageOpenedApp event was published!');
+      NumberedLogger.i('A new onMessageOpenedApp event was published!');
       _handleNotificationTap(message);
     });
 
@@ -205,7 +205,7 @@ class NotificationServiceInstance implements INotificationService {
     try {
       return await _messaging.getToken();
     } catch (e) {
-      debugPrint('Error getting FCM token: $e');
+      NumberedLogger.e('Error getting FCM token: $e');
       return null;
     }
   }
@@ -213,18 +213,18 @@ class NotificationServiceInstance implements INotificationService {
   Future<void> subscribeToTopic(String topic) async {
     try {
       await _messaging.subscribeToTopic(topic);
-      debugPrint('Subscribed to topic: $topic');
+      NumberedLogger.i('Subscribed to topic: $topic');
     } catch (e) {
-      debugPrint('Error subscribing to topic $topic: $e');
+      NumberedLogger.e('Error subscribing to topic $topic: $e');
     }
   }
 
   Future<void> unsubscribeFromTopic(String topic) async {
     try {
       await _messaging.unsubscribeFromTopic(topic);
-      debugPrint('Unsubscribed from topic: $topic');
+      NumberedLogger.i('Unsubscribed from topic: $topic');
     } catch (e) {
-      debugPrint('Error unsubscribing from topic $topic: $e');
+      NumberedLogger.e('Error unsubscribing from topic $topic: $e');
     }
   }
 
@@ -315,9 +315,10 @@ class NotificationServiceInstance implements INotificationService {
       // Send notification via Firebase Cloud Messaging
       // This would typically be done via a cloud function
       // For now, we'll just log it
-      debugPrint('Sending friend request notification to $toUid from $fromUid');
+      NumberedLogger.i(
+          'Sending friend request notification to $toUid from $fromUid');
     } catch (e) {
-      debugPrint('Error sending friend request notification: $e');
+      NumberedLogger.e('Error sending friend request notification: $e');
     }
   }
 
@@ -333,9 +334,10 @@ class NotificationServiceInstance implements INotificationService {
       // Send notification via Firebase Cloud Messaging
       // This would typically be done via a cloud function
       // For now, we'll just log it
-      debugPrint('Sending game invite notification to $toUid for game $gameId');
+      NumberedLogger.i(
+          'Sending game invite notification to $toUid for game $gameId');
     } catch (e) {
-      debugPrint('Error sending game invite notification: $e');
+      NumberedLogger.e('Error sending game invite notification: $e');
     }
   }
 
@@ -357,11 +359,12 @@ class NotificationServiceInstance implements INotificationService {
           // final String token = tokenSnapshot.value.toString();
           // Send notification via Firebase Cloud Messaging
           // This would typically be done via a cloud function
-          debugPrint('Sending game reminder to $playerId for game $gameId');
+          NumberedLogger.i(
+              'Sending game reminder to $playerId for game $gameId');
         }
       }
     } catch (e) {
-      debugPrint('Error sending game reminder notification: $e');
+      NumberedLogger.e('Error sending game reminder notification: $e');
     }
   }
 
@@ -408,5 +411,5 @@ class NotificationServiceInstance implements INotificationService {
 @pragma('vm:entry-point')
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   // Handle background messages here if needed
-  debugPrint('Background message received: ${message.messageId}');
+  NumberedLogger.d('Background message received: ${message.messageId}');
 }

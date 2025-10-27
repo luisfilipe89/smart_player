@@ -128,12 +128,13 @@ class _GenericSportScreenState extends ConsumerState<GenericSportScreen>
       _userPosition = pos;
 
       final overpassActions = ref.read(overpassActionsProvider);
-      if (overpassActions == null) return;
-      final locations = await overpassActions.fetchFields(
-        areaName: "'s-Hertogenbosch",
-        sportType: widget.sportType,
-        bypassCache: bypassCache,
-      );
+      final locations = await overpassActions
+          .fetchFields(
+            areaName: 's-Hertogenbosch',
+            sportType: widget.sportType,
+            bypassCache: bypassCache,
+          )
+          .timeout(const Duration(seconds: 25));
 
       // Process distance calculations in isolate to avoid blocking UI
       final processedLocations = await compute(_processLocationsIsolate, {
@@ -160,6 +161,11 @@ class _GenericSportScreenState extends ConsumerState<GenericSportScreen>
       setState(() {
         _allLocations = processedLocations;
         _applyFilters();
+        _isLoading = false;
+      });
+    } on TimeoutException {
+      setState(() {
+        _error = 'Request timed out. Please try again later.';
         _isLoading = false;
       });
     } catch (e) {

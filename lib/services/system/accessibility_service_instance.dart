@@ -1,7 +1,8 @@
 // lib/services/accessibility_service_instance.dart
-import 'package:flutter/foundation.dart';
+// import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:async';
+import 'package:move_young/utils/logger.dart';
 
 /// Instance-based AccessibilityService for use with Riverpod dependency injection
 class AccessibilityServiceInstance {
@@ -45,7 +46,7 @@ class AccessibilityServiceInstance {
       }
     } catch (e) {
       // If initialization fails, use default value
-      debugPrint('AccessibilityService initialize error: $e');
+      NumberedLogger.w('AccessibilityService initialize error: $e');
       if (!_highContrastController.isClosed) {
         _highContrastController.add(false);
       }

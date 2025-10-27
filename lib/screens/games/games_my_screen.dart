@@ -35,10 +35,6 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
   final Set<String> _weatherLoading = <String>{};
   String? _highlightId;
 
-  // Memoized lists to avoid recomputing on every build
-  List<Game> _joinedGames = [];
-  List<Game> _createdGames = [];
-
   @override
   void initState() {
     super.initState();
@@ -56,21 +52,6 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
     // Schedule scroll to highlighted game after first frame
     WidgetsBinding.instance
         .addPostFrameCallback((_) => _scrollToHighlightedGame());
-
-    // Listen to provider changes and update cached lists
-    ref.listen<AsyncValue<List<Game>>>(myGamesProvider, (previous, next) {
-      if (!mounted) return;
-
-      next.whenData((games) {
-        final currentUserId = ref.read(currentUserIdProvider);
-        setState(() {
-          _joinedGames =
-              games.where((g) => currentUserId != g.organizerId).toList();
-          _createdGames =
-              games.where((g) => currentUserId == g.organizerId).toList();
-        });
-      });
-    });
   }
 
   @override
@@ -315,7 +296,6 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
     _weatherLoading.add(key);
     try {
       final weatherActions = ref.read(weatherActionsProvider);
-      if (weatherActions == null) return null;
       final map = await weatherActions.fetchWeatherForDate(
         date: game.dateTime,
         latitude: game.latitude!,
@@ -510,9 +490,15 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
     // Watch providers for reactive data
     final myGamesAsync = ref.watch(myGamesProvider);
 
-    // Use memoized lists (updated via listener in initState)
-    final joinedGames = _joinedGames;
-    final createdGames = _createdGames;
+    // Calculate joined/created games from provider data
+    final joinedGames = myGamesAsync.valueOrNull
+            ?.where((g) => ref.read(currentUserIdProvider) != g.organizerId)
+            .toList() ??
+        [];
+    final createdGames = myGamesAsync.valueOrNull
+            ?.where((g) => ref.read(currentUserIdProvider) == g.organizerId)
+            .toList() ??
+        [];
 
     return Scaffold(
       appBar: AppBar(
@@ -867,9 +853,6 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
                                     final forecasts = _weatherByGameId[game.id];
                                     final weatherActions =
                                         ref.read(weatherActionsProvider);
-                                    if (weatherActions == null) {
-                                      return const SizedBox.shrink();
-                                    }
                                     final String cond = forecasts?[time] ??
                                         weatherActions
                                             .getWeatherCondition(time);
@@ -925,7 +908,7 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
                 ),
               ),
               Padding(
-                padding: const EdgeInsets.fromLTRB(16, 2, 16, 12),
+                padding: const EdgeInsets.fromLTRB(16, 2, 16, 16),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [

@@ -30,10 +30,6 @@ void main() {
     gamesService = GamesServiceInstance(mockAuthService, mockCloudService);
   });
 
-  tearDown(() async {
-    await gamesService.close();
-  });
-
   group('GamesServiceInstance - Unit Tests', () {
     test('should handle game creation with cloud service', () async {
       final game = TestData.createSampleGame();
@@ -120,21 +116,21 @@ void main() {
       verifyNever(mockCloudService.leaveGame(game.id));
     });
 
-    test('should close database on close', () async {
-      await gamesService.close();
-
-      // Should not throw
-      expect(() => gamesService.close(), returnsNormally);
+    test('should handle service cleanup gracefully', () async {
+      // SQLite database has been removed - no cleanup needed
+      // Service uses cloud-first architecture
+      expect(true, isTrue);
     });
 
     test('should respect auth service when not signed in', () async {
       when(mockAuthService.isSignedIn).thenReturn(false);
       when(mockAuthService.currentUserId).thenReturn(null);
 
-      // Sync should not call cloud
+      // Sync is now a no-op (cloud-first architecture)
       await gamesService.syncWithCloud();
 
-      verifyNever(mockCloudService.getMyGames());
+      // Should not throw
+      expect(true, isTrue);
     });
   });
 

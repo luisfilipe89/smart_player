@@ -36,6 +36,25 @@ final syncQueueProvider = Provider<List<SyncOperation>>((ref) {
   return syncService.syncQueue;
 });
 
+// Derived providers
+final syncQueueSizeProvider = Provider<int>((ref) {
+  final queue = ref.watch(syncQueueProvider);
+  return queue.length;
+});
+
+final syncFailedCountProvider = Provider<int>((ref) {
+  final queue = ref.watch(syncQueueProvider);
+  return queue.where((op) => op.status == 'failed').length;
+});
+
+final syncStuckOpsProvider = Provider<List<SyncOperation>>((ref) {
+  final syncService = ref.watch(syncServiceProvider);
+  if (syncService == null) return const [];
+  return syncService.getStuckOperations();
+});
+
+final syncLastErrorProvider = StateProvider<String?>((ref) => null);
+
 // Failed operations count provider (reactive)
 final failedOperationsCountProvider = Provider<int>((ref) {
   final syncService = ref.watch(syncServiceProvider);

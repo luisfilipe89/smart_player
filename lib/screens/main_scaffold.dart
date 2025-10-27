@@ -11,6 +11,7 @@ import 'package:move_young/screens/friends/friends_screen.dart';
 import 'package:move_young/widgets/common/offline_banner.dart';
 import 'package:move_young/widgets/common/sync_status_indicator.dart';
 import 'package:easy_localization/easy_localization.dart';
+import 'package:move_young/routes/route_registry.dart';
 
 // ---------------------------- Navigation Controller Scope ----------------------------
 class MainScaffoldController {
@@ -52,6 +53,9 @@ class MainScaffoldController {
 // MainScaffoldController provider
 final mainScaffoldControllerProvider =
     StateProvider<MainScaffoldController?>((ref) => null);
+
+// Tab index provider to standardize state via Riverpod
+final mainTabIndexProvider = StateProvider<int>((ref) => 0);
 
 class MainScaffoldScope extends InheritedWidget {
   const MainScaffoldScope(
@@ -102,7 +106,6 @@ class MainScaffold extends ConsumerStatefulWidget {
 
 class MainScaffoldState extends ConsumerState<MainScaffold> {
   late final ValueNotifier<int> _currentIndexNotifier;
-  int _currentIndex = 0;
 
   final _homeKey = GlobalKey<NavigatorState>();
   final _friendsKey = GlobalKey<NavigatorState>();
@@ -111,16 +114,45 @@ class MainScaffoldState extends ConsumerState<MainScaffold> {
 
   late final MainScaffoldController _controller;
   MyGamesArgs? _myGamesArgs;
+  // expose intent handlers
+  void handleRouteIntent(RouteIntent intent) {
+    if (intent is FriendsIntent) {
+      switchToTab(kTabFriends, popToRoot: true);
+    } else if (intent is AgendaIntent) {
+      switchToTab(kTabAgenda, popToRoot: true);
+    } else if (intent is DiscoverGamesIntent) {
+      switchToTab(kTabJoin, popToRoot: true);
+    } else if (intent is MyGamesIntent) {
+      _myGamesArgs = MyGamesArgs(
+          initialTab: intent.initialTab, highlightGameId: intent.highlightGameId);
+      switchToTab(kTabJoin, popToRoot: true);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final nav = _joinKey.currentState;
+        if (nav != null) {
+          nav.pushReplacement(
+            MaterialPageRoute(
+              builder: (_) => GamesMyScreen(
+                initialTab: intent.initialTab,
+                highlightGameId: intent.highlightGameId,
+              ),
+            ),
+          );
+        }
+      });
+    } else {
+      switchToTab(kTabHome, popToRoot: true);
+    }
+  }
 
   @override
   void initState() {
     super.initState();
-    _currentIndexNotifier = ValueNotifier<int>(0);
+    _currentIndexNotifier = ValueNotifier<int>(ref.read(mainTabIndexProvider));
     _controller = MainScaffoldController(
       (int index, {bool popToRoot = false}) {
         if (popToRoot) _popToRoot(index);
         if (mounted) {
-          _currentIndex = index;
+          ref.read(mainTabIndexProvider.notifier).state = index;
           _currentIndexNotifier.value = index;
         }
       },
@@ -132,7 +164,7 @@ class MainScaffoldState extends ConsumerState<MainScaffold> {
         }
         _myGamesArgs = MyGamesArgs(
             initialTab: initialTab, highlightGameId: highlightGameId);
-        _currentIndex = kTabJoin;
+        ref.read(mainTabIndexProvider.notifier).state = kTabJoin;
         _currentIndexNotifier.value = kTabJoin;
         // Nudge the nested My Games navigator to rebuild and show latest
         WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -170,12 +202,13 @@ class MainScaffoldState extends ConsumerState<MainScaffold> {
 
   void switchToTab(int index, {bool popToRoot = false}) {
     if (popToRoot) _popToRoot(index);
-    _currentIndex = index;
+    ref.read(mainTabIndexProvider.notifier).state = index;
     _currentIndexNotifier.value = index;
   }
 
   NavigatorState? get _maybeCurrentNavigator {
-    switch (_currentIndex) {
+    final currentIndex = ref.watch(mainTabIndexProvider);
+    switch (currentIndex) {
       case kTabHome:
         return _homeKey.currentState;
       case kTabFriends:
@@ -224,8 +257,8 @@ class MainScaffoldState extends ConsumerState<MainScaffold> {
           final popped = await _maybeCurrentNavigator?.maybePop() ?? false;
           if (popped) return;
 
-          if (_currentIndex != 0) {
-            _currentIndex = 0;
+          if (ref.read(mainTabIndexProvider) != 0) {
+            ref.read(mainTabIndexProvider.notifier).state = 0;
             _currentIndexNotifier.value = 0;
             return;
           }
@@ -261,7 +294,7 @@ class MainScaffoldState extends ConsumerState<MainScaffold> {
                         if (index == currentIndex) {
                           _popToRoot(index);
                         } else {
-                          _currentIndex = index;
+                          ref.read(mainTabIndexProvider.notifier).state = index;
                           _currentIndexNotifier.value = index;
                         }
                       },

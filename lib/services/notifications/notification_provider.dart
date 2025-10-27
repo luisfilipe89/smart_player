@@ -3,6 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'notification_service_instance.dart';
 import 'package:move_young/providers/infrastructure/firebase_providers.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:move_young/screens/main_scaffold.dart';
+import 'package:move_young/routes/deep_links.dart';
+import 'package:move_young/routes/route_registry.dart';
 
 // Flutter Local Notifications plugin provider
 final flutterLocalNotificationsProvider =
@@ -24,6 +27,51 @@ final notificationServiceProvider =
     flutterLocalNotifications,
   );
 });
+
+// Deep link dispatcher using a simple provider to route events
+final deepLinkDispatcherProvider = Provider<DeepLinkDispatcher>((ref) {
+  return DeepLinkDispatcher(ref, DeepLinkParser());
+});
+
+class DeepLinkDispatcher {
+  final Ref _ref;
+  final DeepLinkParser _parser;
+  DeepLinkDispatcher(this._ref, this._parser);
+
+  void dispatch(Map<String, dynamic> payload) {
+    try {
+      final intent = _parser.parseFcmData(payload);
+      if (intent == null) return;
+      _routeIntent(intent);
+    } catch (_) {}
+  }
+
+  void dispatchUri(String uri) {
+    final intent = _parser.parseUri(uri);
+    if (intent == null) return;
+    _routeIntent(intent);
+  }
+
+  void _routeIntent(RouteIntent intent) {
+    final controller = _ref.read(mainScaffoldControllerProvider);
+    if (controller == null) return;
+    if (intent is FriendsIntent) {
+      controller.switchToTab(kTabFriends, popToRoot: true);
+    } else if (intent is AgendaIntent) {
+      controller.switchToTab(kTabAgenda, popToRoot: true);
+    } else if (intent is DiscoverGamesIntent) {
+      controller.switchToTab(kTabJoin, popToRoot: true);
+    } else if (intent is MyGamesIntent) {
+      controller.openMyGames(
+        initialTab: intent.initialTab,
+        highlightGameId: intent.highlightGameId,
+        popToRoot: true,
+      );
+    } else {
+      controller.switchToTab(kTabHome, popToRoot: true);
+    }
+  }
+}
 
 // FCM Token provider (reactive)
 final fcmTokenProvider = FutureProvider.autoDispose<String?>((ref) async {

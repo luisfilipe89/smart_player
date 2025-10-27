@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:connectivity_plus/connectivity_plus.dart';
-import 'package:flutter/foundation.dart';
+// import 'package:flutter/foundation.dart';
+import 'package:move_young/utils/logger.dart';
 
 /// Instance-based ConnectivityService for use with Riverpod dependency injection
 class ConnectivityServiceInstance {
@@ -33,7 +34,7 @@ class ConnectivityServiceInstance {
       final results = await _connectivity.checkConnectivity();
       return _updateConnectionStatus(results.first);
     } catch (e) {
-      debugPrint('ConnectivityService: Error checking connectivity: $e');
+      NumberedLogger.w('ConnectivityService: Error checking connectivity: $e');
       return false;
     }
   }
@@ -46,8 +47,7 @@ class ConnectivityServiceInstance {
     // Only emit if status changed
     if (wasConnected != _hasConnection) {
       _connectionController.add(_hasConnection);
-      debugPrint(
-          'ConnectivityService: Connection status changed to ${_hasConnection ? "connected" : "disconnected"}');
+      NumberedLogger.d('ConnectivityService: Connection status changed to ${_hasConnection ? "connected" : "disconnected"}');
     }
 
     return _hasConnection;
@@ -60,7 +60,7 @@ class ConnectivityServiceInstance {
       final results = await _connectivity.checkConnectivity();
       return results.first != ConnectivityResult.none;
     } catch (e) {
-      debugPrint('ConnectivityService: Error checking internet connection: $e');
+      NumberedLogger.w('ConnectivityService: Error checking internet connection: $e');
       return false;
     }
   }

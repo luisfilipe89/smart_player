@@ -8,6 +8,8 @@ import 'package:move_young/models/external/event_model.dart';
 Future<List<Event>> loadEventsFromJson() async {
   try {
     // Try to load from Firebase first with timeout
+    developer.log('Loading events from Firebase...',
+        name: 'loadEventsFromJson');
     final db = FirebaseDatabase.instance.ref('events/latest');
     final snapshot = await db.get().timeout(
       const Duration(seconds: 5),
@@ -18,16 +20,20 @@ Future<List<Event>> loadEventsFromJson() async {
     );
 
     if (snapshot.exists && snapshot.value != null) {
-      final data = snapshot.value as Map<String, dynamic>;
+      final data = Map<String, dynamic>.from(snapshot.value as Map);
       if (data['events'] != null) {
         final events = (data['events'] as List).map((json) {
           final bool isRecurring =
               _isRecurringDateTime(json['date_time'] ?? '');
           return Event.fromJson({...json, 'isRecurring': isRecurring});
         }).toList();
+        developer.log('Loaded ${events.length} events from Firebase',
+            name: 'loadEventsFromJson');
         return events;
       }
     }
+    developer.log('No events found in Firebase, falling back to local file',
+        name: 'loadEventsFromJson');
   } catch (e, stackTrace) {
     developer.log('Error loading from Firebase: $e',
         name: 'loadEventsFromJson', error: e, stackTrace: stackTrace);

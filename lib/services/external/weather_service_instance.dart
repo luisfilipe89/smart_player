@@ -1,11 +1,12 @@
 // lib/services/weather_service_instance.dart
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:move_young/utils/logger.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 class WeatherServiceInstance {
-  final SharedPreferences _prefs;
+  final SharedPreferences? _prefs;
 
   static const _cacheDuration =
       Duration(hours: 2); // Shorter cache for more accurate data
@@ -104,8 +105,7 @@ class WeatherServiceInstance {
     }
 
     // Debug logging for weather conditions
-    debugPrint(
-        'Weather parsed - Time: $time, Precip: $precipitation, Clouds: $cloudCover, IsDay: $isDaytime, Condition: $condition, Color: ${color.toARGB32().toRadixString(16)}');
+    NumberedLogger.d('Weather parsed - Time: $time, Precip: $precipitation, Clouds: $cloudCover, IsDay: $isDaytime, Condition: $condition, Color: ${color.toARGB32().toRadixString(16)}');
 
     return {
       'condition': condition,
@@ -251,7 +251,7 @@ class WeatherServiceInstance {
         'timezone': 'Europe/Amsterdam',
       });
 
-      debugPrint('Fetching Open-Meteo weather data: $url');
+      NumberedLogger.d('🌤️ Fetching Open-Meteo weather data: $url');
 
       final response = await http.get(url);
 
@@ -344,39 +344,39 @@ class WeatherServiceInstance {
         // Cache and return data
         if (weatherData.isNotEmpty) {
           await _cacheData(cacheKey, weatherData);
-          debugPrint(
-              'Open-Meteo weather data fetched successfully: ${weatherData.length} hours');
-          debugPrint('Weather data: $weatherData');
+          NumberedLogger.d('🌤️ Open-Meteo weather data fetched successfully: ${weatherData.length} hours');
+          NumberedLogger.d('🌤️ Weather data: $weatherData');
         } else {
-          debugPrint('No Open-Meteo weather data found for date: $date');
-          debugPrint('API Response: ${response.body}');
+          NumberedLogger.w('No Open-Meteo weather data found for date: $date');
+          NumberedLogger.d('API Response: ${response.body}');
         }
 
         return weatherData;
       } else {
-        debugPrint(
-            'Open-Meteo API error: ${response.statusCode} - ${response.body}');
+        NumberedLogger.w('🌤️ Open-Meteo API error: ${response.statusCode} - ${response.body}');
         return <String, String>{};
       }
     } catch (e) {
-      debugPrint('Error fetching Open-Meteo weather data: $e');
+      NumberedLogger.e('🌤️ Error fetching Open-Meteo weather data: $e');
       return <String, String>{};
     }
   }
 
   // Cache weather data
   Future<void> _cacheData(String key, Map<String, String> data) async {
+    if (_prefs == null) return; // Cache disabled when prefs unavailable
     final entry = {
       'timestamp': DateTime.now().millisecondsSinceEpoch,
       'expiry': DateTime.now().add(_cacheDuration).millisecondsSinceEpoch,
       'data': data,
     };
-    await _prefs.setString(key, jsonEncode(entry));
+    await _prefs!.setString(key, jsonEncode(entry));
   }
 
   // Get cached weather data
   Future<Map<String, String>?> _getCachedData(String key) async {
-    final jsonString = _prefs.getString(key);
+    if (_prefs == null) return null; // No cache
+    final jsonString = _prefs!.getString(key);
     if (jsonString == null) return null;
 
     final Map<String, dynamic> json = jsonDecode(jsonString);

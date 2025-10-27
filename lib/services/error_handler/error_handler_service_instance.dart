@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:easy_localization/easy_localization.dart';
+import 'package:move_young/utils/logger.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import '../../utils/service_error.dart';
 
@@ -8,9 +9,9 @@ import '../../utils/service_error.dart';
 class ErrorHandlerServiceInstance {
   /// Log error to console and potentially to crash reporting service
   void logError(dynamic error, StackTrace? stackTrace) {
-    debugPrint('Error: $error');
+    NumberedLogger.e('Error: $error');
     if (stackTrace != null) {
-      debugPrint('Stack trace: $stackTrace');
+      NumberedLogger.d('Stack trace: $stackTrace');
     }
 
     // Send to Crashlytics in production

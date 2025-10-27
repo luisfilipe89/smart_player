@@ -10,7 +10,7 @@ class DbPaths {
   static const String reports = 'reports';
 
   // Users subpaths
-  static String user(String uid) => '$users/$uid';
+  static String user(String uid) => uid; // For use with _usersRef.child()
   static String userProfile(String uid) => '$users/$uid/profile';
   static String userProfileDisplayName(String uid) =>
       '$users/$uid/profile/displayName';
@@ -23,9 +23,9 @@ class DbPaths {
       '$users/$uid/friendRequests/received';
   static String userFriendRequestsSent(String uid) =>
       '$users/$uid/friendRequests/sent';
-  static String userJoinedGames(String uid) => '$users/$uid/joinedGames';
-  static String userCreatedGames(String uid) => '$users/$uid/createdGames';
-  static String userGameInvites(String uid) => '$users/$uid/gameInvites';
+  static String userJoinedGames(String uid) => '$uid/joinedGames';
+  static String userCreatedGames(String uid) => '$uid/createdGames';
+  static String userGameInvites(String uid) => '$uid/gameInvites';
   static String userSettingsRoot(String uid) => '$users/$uid/settings';
   static String userSettingsProfileRoot(String uid) =>
       '$users/$uid/settings/profile';

@@ -1,8 +1,9 @@
 // lib/providers/services/accessibility_provider.dart
-import 'package:flutter/foundation.dart';
+// import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:move_young/providers/infrastructure/shared_preferences_provider.dart';
 import 'accessibility_service_instance.dart';
+import 'package:move_young/utils/logger.dart';
 
 // AccessibilityService provider with dependency injection
 final accessibilityServiceProvider =
@@ -17,7 +18,7 @@ final accessibilityServiceProvider =
   // Initialize asynchronously but don't await - this will populate the stream
   // Wrap in try-catch to handle any initialization errors gracefully
   service.initialize().catchError((error) {
-    debugPrint('Accessibility service initialization error: $error');
+    NumberedLogger.w('Accessibility service initialization error: $error');
   });
   return service;
 });
@@ -41,13 +42,13 @@ final isHighContrastEnabledProvider = Provider<bool>((ref) {
       loading: () => false,
       error: (error, stack) {
         // Log error but return false to allow app to continue
-        debugPrint('High contrast provider error: $error');
+        NumberedLogger.w('High contrast provider error: $error');
         return false;
       },
     );
   } catch (e) {
     // If provider access fails entirely, return false
-    debugPrint('isHighContrastEnabledProvider error: $e');
+    NumberedLogger.w('isHighContrastEnabledProvider error: $e');
     return false;
   }
 });

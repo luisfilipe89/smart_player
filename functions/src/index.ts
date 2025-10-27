@@ -561,16 +561,16 @@ async function scrapeSportEvents(): Promise<any[]> {
   }
 }
 
-// Scheduled function to fetch sport events weekly
+// Scheduled function to fetch sport events daily
 export const fetchSportEvents = onSchedule(
   {
-    schedule: "0 2 * * 1", // Every Monday at 2 AM
+    schedule: "0 2 * * *", // Every day at 2 AM
     timeZone: "Europe/Amsterdam",
     memory: "1GiB",
     timeoutSeconds: 540, // 9 minutes
   },
   async (event) => {
-    console.log("Starting weekly event scrape...");
+    console.log("Starting daily event scrape...");
 
     try {
       const events = await scrapeSportEvents();

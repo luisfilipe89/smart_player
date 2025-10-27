@@ -10,7 +10,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:move_young/models/external/event_model.dart';
 import 'package:move_young/services/load_events_from_json.dart';
-import 'package:move_young/services/events_service.dart';
 import 'package:move_young/theme/_theme.dart';
 
 class AgendaScreen extends ConsumerStatefulWidget {
@@ -23,7 +22,6 @@ class AgendaScreen extends ConsumerStatefulWidget {
 class _AgendaScreenState extends ConsumerState<AgendaScreen> {
   Set<String> _favoriteTitles = {};
   final TextEditingController _searchController = TextEditingController();
-  final EventsService _eventsService = EventsService();
 
   List<Event> allEvents = [];
   List<Event> filteredEvents = [];
@@ -32,7 +30,6 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
   bool _showRecurring = true;
   bool _showOneTime = true;
   Timer? _debounce;
-  bool _isRefreshing = false;
 
   @override
   void initState() {
@@ -66,68 +63,16 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
         .where((event) => event.imageUrl?.isNotEmpty ?? false)
         .map((event) => event.imageUrl!)
         .toList();
-    await ref.read(imageCacheServiceProvider).preloadImages(context, imageUrls);
-  }
-
-  Future<void> _manualRefreshEvents() async {
-    if (_isRefreshing) return;
-
-    setState(() {
-      _isRefreshing = true;
-    });
-
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('refreshing_events'.tr()),
-          duration: const Duration(seconds: 30),
-        ),
-      );
-    }
-
-    try {
-      final success = await _eventsService.triggerManualRefresh();
-
-      if (mounted) {
-        if (success) {
-          // Wait a moment for Firebase to update
-          await Future.delayed(const Duration(seconds: 2));
-
-          // Reload events from Firebase
-          await loadEvents();
-
-          if (!mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('refresh_success'.tr()),
-              backgroundColor: AppColors.green,
-            ),
-          );
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('refresh_error'.tr()),
-              backgroundColor: AppColors.red,
-            ),
-          );
-        }
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('refresh_error'.tr()),
-            backgroundColor: AppColors.red,
-          ),
-        );
-      }
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isRefreshing = false;
-        });
-      }
-    }
+    // Preload in background with a short timeout to avoid blocking UI/refresh
+    // Ignore errors - images will still load in cards individually
+    // Do not await to ensure pull-to-refresh completes quickly
+    // Note: timeout prevents hanging on slow hosts
+    // ignore: unawaited_futures
+    ref
+        .read(imageCacheServiceProvider)
+        .preloadImages(context, imageUrls)
+        .timeout(const Duration(seconds: 5))
+        .catchError((_) {});
   }
 
   Future<void> _loadFavorites() async {
@@ -170,10 +115,29 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
 
     setState(() => filteredEvents = events);
 
-    // Preload visible filtered images
+    // Preload visible filtered images with normalized URLs
     for (var event in events.take(10)) {
       if (event.imageUrl?.isNotEmpty ?? false) {
-        precacheImage(CachedNetworkImageProvider(event.imageUrl!), context);
+        String normalized = event.imageUrl!;
+        if (normalized.startsWith('//')) {
+          normalized = 'https:$normalized';
+        } else if (normalized.startsWith('/')) {
+          normalized = 'https://www.aanbod.s-port.nl$normalized';
+        } else if (!normalized.startsWith('http')) {
+          normalized = 'https://www.aanbod.s-port.nl/$normalized';
+        }
+        precacheImage(
+          CachedNetworkImageProvider(
+            normalized,
+            headers: const {
+              'User-Agent':
+                  'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36',
+              'Accept': 'image/avif,image/webp,image/apng,image/*,*/*;q=0.8',
+              'Referer': 'https://www.aanbod.s-port.nl/',
+            },
+          ),
+          context,
+        );
       }
     }
   }
@@ -376,21 +340,46 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
         );
       } else {
         // It's a network URL, use ImageCacheServiceInstance
+        // Normalize potential relative URLs from source site
+        String normalized = url;
+        if (normalized.startsWith('//')) {
+          normalized = 'https:$normalized';
+        } else if (normalized.startsWith('/')) {
+          normalized = 'https://www.aanbod.s-port.nl$normalized';
+        } else if (!normalized.startsWith('http')) {
+          normalized = 'https://www.aanbod.s-port.nl/$normalized';
+        }
+
+        // Log the URL we are loading for easier debugging
+        // ignore: avoid_print
+        print('[Agenda] Loading image: ' + normalized);
         return ref.read(imageCacheServiceProvider).getOptimizedImage(
-              imageUrl: url,
+              imageUrl: normalized,
               width: double.infinity,
               height: AppHeights.image,
               fit: BoxFit.cover,
               fadeInDuration: const Duration(milliseconds: 300),
               fadeInCurve: Curves.easeInOut,
+              httpHeaders: const {
+                'User-Agent':
+                    'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36',
+                'Accept': 'image/avif,image/webp,image/apng,image/*,*/*;q=0.8',
+                'Referer': 'https://www.aanbod.s-port.nl/',
+              },
               placeholder: (BuildContext context, String url) =>
                   _buildShimmerPlaceholder(),
-              errorWidget: (BuildContext context, String url, dynamic error) =>
-                  Container(
-                height: AppHeights.image,
-                color: AppColors.lightgrey,
-                child: const Icon(Icons.broken_image),
-              ),
+              errorWidget: (BuildContext context, String url, dynamic error) {
+                // ignore: avoid_print
+                print('[Agenda] Image failed: ' +
+                    url +
+                    ' err: ' +
+                    error.toString());
+                return Container(
+                  height: AppHeights.image,
+                  color: AppColors.lightgrey,
+                  child: const Icon(Icons.broken_image),
+                );
+              },
             );
       }
     }
@@ -569,19 +558,6 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
       appBar: AppBar(
         leading: const AppBackButton(goHome: true),
         title: Text('agenda'.tr()),
-        actions: [
-          IconButton(
-            icon: _isRefreshing
-                ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.refresh),
-            onPressed: _isRefreshing ? null : _manualRefreshEvents,
-            tooltip: 'refresh_events'.tr(),
-          ),
-        ],
       ),
       body: Padding(
         padding: AppPaddings.symmHorizontalReg,
@@ -616,9 +592,10 @@ class _PinnedHeaderDelegate extends SliverPersistentHeaderDelegate {
   _PinnedHeaderDelegate({required this.child});
 
   @override
-  double get maxExtent => 200; // match sport screen
+  double get maxExtent =>
+      240; // increased to prevent overflow on smaller screens
   @override
-  double get minExtent => 200;
+  double get minExtent => 240;
 
   @override
   Widget build(

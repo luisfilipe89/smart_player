@@ -1,119 +1,101 @@
 // lib/services/cache_service_instance.dart
 import 'dart:convert';
-import 'package:sqflite/sqflite.dart';
-import 'package:path/path.dart';
-import 'package:flutter/foundation.dart' show debugPrint;
+import 'package:shared_preferences/shared_preferences.dart';
+// import 'package:flutter/foundation.dart' show debugPrint;
+import 'package:move_young/utils/logger.dart';
 
-/// Instance-based CacheService for use with Riverpod dependency injection
+/// Simple cache service using in-memory + SharedPreferences
+/// No SQLite, no platform channels, works everywhere
 class CacheServiceInstance {
-  Database? _database;
-  static const String _userProfilesTable = 'cached_user_profiles';
-  static const String _gameDetailsTable = 'cached_game_details';
+  final SharedPreferences _prefs;
+
+  // In-memory cache for faster access
+  final Map<String, CachedEntry> _memoryCache = {};
 
   // TTL settings
   static const Duration _userProfileTTL = Duration(hours: 1);
   static const Duration _gameDetailsTTL = Duration(minutes: 30);
   static const Duration _publicGamesTTL = Duration(minutes: 5);
 
-  /// Initialize the cache database
-  Future<Database> get database async {
-    if (_database != null) return _database!;
-    _database = await _initDatabase();
-    return _database!;
+  CacheServiceInstance(this._prefs);
+
+  /// Get cache key for SharedPreferences
+  String _key(String prefix, String id) => 'cache_${prefix}_$id';
+
+  /// Check if cached data is expired
+  bool _isExpired(String key, Duration ttl) {
+    final cached = _memoryCache[key];
+    if (cached == null) return true;
+    return DateTime.now().difference(cached.timestamp) > ttl;
   }
 
-  Future<Database> _initDatabase() async {
+  /// Try to get from memory first, then SharedPreferences
+  CachedEntry? _getEntry(String key, Duration ttl) {
+    // Check memory cache first
+    if (!_isExpired(key, ttl)) {
+      return _memoryCache[key];
+    }
+
+    // Try SharedPreferences
     try {
-      String path = join(await getDatabasesPath(), 'cache.db');
-      final db = await openDatabase(
-        path,
-        version: 1,
-        onCreate: _onCreate,
-      );
-      return db;
+      final data = _prefs.getString(key);
+      final timestampStr = _prefs.getString('${key}_ts');
+
+      if (data == null || timestampStr == null) return null;
+
+      final timestamp = DateTime.parse(timestampStr);
+      final entry = CachedEntry(data, timestamp);
+
+      if (DateTime.now().difference(timestamp) > ttl) {
+        _prefs.remove(key);
+        _prefs.remove('${key}_ts');
+        return null;
+      }
+
+      // Update memory cache
+      _memoryCache[key] = entry;
+      return entry;
     } catch (e) {
-      rethrow;
+      NumberedLogger.w('Failed to read cache: $e');
+      return null;
     }
   }
 
-  Future<void> _onCreate(Database db, int version) async {
-    // Create user profiles cache table
-    await db.execute('''
-      CREATE TABLE $_userProfilesTable(
-        uid TEXT PRIMARY KEY,
-        displayName TEXT,
-        photoURL TEXT,
-        email TEXT,
-        lastUpdated INTEGER NOT NULL
-      )
-    ''');
+  /// Write to both memory and SharedPreferences
+  Future<void> _setEntry(String key, String data) async {
+    try {
+      final now = DateTime.now();
+      final entry = CachedEntry(data, now);
 
-    // Create game details cache table
-    await db.execute('''
-      CREATE TABLE $_gameDetailsTable(
-        gameId TEXT PRIMARY KEY,
-        details TEXT NOT NULL,
-        lastUpdated INTEGER NOT NULL
-      )
-    ''');
+      // Update memory
+      _memoryCache[key] = entry;
+
+      // Update SharedPreferences
+      await _prefs.setString(key, data);
+      await _prefs.setString('${key}_ts', now.toIso8601String());
+    } catch (e) {
+      NumberedLogger.w('Failed to write cache: $e');
+    }
   }
 
   /// Cache user profile data
   Future<void> cacheUserProfile(String uid, Map<String, dynamic> data) async {
-    try {
-      final db = await database;
-      await db.insert(
-        _userProfilesTable,
-        {
-          'uid': uid,
-          'displayName': data['displayName'],
-          'photoURL': data['photoURL'],
-          'email': data['email'],
-          'lastUpdated': DateTime.now().millisecondsSinceEpoch,
-        },
-        conflictAlgorithm: ConflictAlgorithm.replace,
-      );
-    } catch (e) {
-      // Cache failures should not break the app
-      debugPrint('Failed to cache user profile: $e');
-    }
+    final key = _key('user_profile', uid);
+    final json = jsonEncode(data);
+    await _setEntry(key, json);
   }
 
   /// Get cached user profile if not expired
   Future<Map<String, dynamic>?> getCachedUserProfile(String uid) async {
+    final key = _key('user_profile', uid);
+    final entry = _getEntry(key, _userProfileTTL);
+
+    if (entry == null) return null;
+
     try {
-      final db = await database;
-      final result = await db.query(
-        _userProfilesTable,
-        where: 'uid = ?',
-        whereArgs: [uid],
-      );
-
-      if (result.isEmpty) return null;
-
-      final profile = result.first;
-      final lastUpdated =
-          DateTime.fromMillisecondsSinceEpoch(profile['lastUpdated'] as int);
-      final now = DateTime.now();
-
-      // Check if cache is expired
-      if (now.difference(lastUpdated) > _userProfileTTL) {
-        // Remove expired cache
-        await db.delete(
-          _userProfilesTable,
-          where: 'uid = ?',
-          whereArgs: [uid],
-        );
-        return null;
-      }
-
-      return {
-        'displayName': profile['displayName'],
-        'photoURL': profile['photoURL'],
-        'email': profile['email'],
-      };
+      return jsonDecode(entry.data) as Map<String, dynamic>;
     } catch (e) {
-      debugPrint('Failed to get cached user profile: $e');
+      NumberedLogger.w('Failed to decode cached profile: $e');
       return null;
     }
   }
@@ -121,248 +103,158 @@ class CacheServiceInstance {
   /// Cache multiple user profiles in batch
   Future<void> cacheUserProfiles(
       Map<String, Map<String, dynamic>> profiles) async {
-    try {
-      final db = await database;
-      final batch = db.batch();
-      final now = DateTime.now().millisecondsSinceEpoch;
+    final batch = <String, String>{};
+    final timestamp = DateTime.now().toIso8601String();
 
-      for (final entry in profiles.entries) {
-        final uid = entry.key;
-        final data = entry.value;
+    for (final entry in profiles.entries) {
+      final uid = entry.key;
+      final data = entry.value;
+      final key = _key('user_profile', uid);
+      final json = jsonEncode(data);
 
-        batch.insert(
-          _userProfilesTable,
-          {
-            'uid': uid,
-            'displayName': data['displayName'],
-            'photoURL': data['photoURL'],
-            'email': data['email'],
-            'lastUpdated': now,
-          },
-          conflictAlgorithm: ConflictAlgorithm.replace,
-        );
+      batch[key] = json;
+      batch['${key}_ts'] = timestamp;
+    }
+
+    // Write all at once
+    for (final keyValue in batch.entries) {
+      try {
+        await _prefs.setString(keyValue.key, keyValue.value);
+
+        // Update memory
+        final key = keyValue.key.replaceFirst('_ts', '');
+        if (!keyValue.key.endsWith('_ts')) {
+          _memoryCache[key] = CachedEntry(
+            keyValue.value,
+            DateTime.parse(timestamp),
+          );
+        }
+      } catch (e) {
+        NumberedLogger.w('Failed to batch cache: $e');
       }
-
-      await batch.commit();
-    } catch (e) {
-      debugPrint('Failed to cache user profiles: $e');
     }
   }
 
   /// Get multiple cached user profiles
   Future<Map<String, Map<String, dynamic>>> getCachedUserProfiles(
       List<String> uids) async {
-    try {
-      final db = await database;
-      final placeholders = uids.map((_) => '?').join(',');
-      final result = await db.query(
-        _userProfilesTable,
-        where: 'uid IN ($placeholders)',
-        whereArgs: uids,
-      );
+    final profiles = <String, Map<String, dynamic>>{};
 
-      final profiles = <String, Map<String, dynamic>>{};
-      final now = DateTime.now();
-      final expiredUids = <String>[];
-
-      for (final row in result) {
-        final uid = row['uid'] as String;
-        final lastUpdated =
-            DateTime.fromMillisecondsSinceEpoch(row['lastUpdated'] as int);
-
-        if (now.difference(lastUpdated) > _userProfileTTL) {
-          expiredUids.add(uid);
-        } else {
-          profiles[uid] = {
-            'displayName': row['displayName'],
-            'photoURL': row['photoURL'],
-            'email': row['email'],
-          };
-        }
+    for (final uid in uids) {
+      final profile = await getCachedUserProfile(uid);
+      if (profile != null) {
+        profiles[uid] = profile;
       }
-
-      // Remove expired entries
-      if (expiredUids.isNotEmpty) {
-        final expiredPlaceholders = expiredUids.map((_) => '?').join(',');
-        await db.delete(
-          _userProfilesTable,
-          where: 'uid IN ($expiredPlaceholders)',
-          whereArgs: expiredUids,
-        );
-      }
-
-      return profiles;
-    } catch (e) {
-      debugPrint('Failed to get cached user profiles: $e');
-      return {};
     }
+
+    return profiles;
   }
 
   /// Cache game details
   Future<void> cacheGameDetails(
       String gameId, Map<String, dynamic> details) async {
-    try {
-      final db = await database;
-      await db.insert(
-        _gameDetailsTable,
-        {
-          'gameId': gameId,
-          'details': jsonEncode(details),
-          'lastUpdated': DateTime.now().millisecondsSinceEpoch,
-        },
-        conflictAlgorithm: ConflictAlgorithm.replace,
-      );
-    } catch (e) {
-      debugPrint('Failed to cache game details: $e');
-    }
+    final key = _key('game_details', gameId);
+    final json = jsonEncode(details);
+    await _setEntry(key, json);
   }
 
   /// Get cached game details if not expired
   Future<Map<String, dynamic>?> getCachedGameDetails(String gameId) async {
+    final key = _key('game_details', gameId);
+    final entry = _getEntry(key, _gameDetailsTTL);
+
+    if (entry == null) return null;
+
     try {
-      final db = await database;
-      final result = await db.query(
-        _gameDetailsTable,
-        where: 'gameId = ?',
-        whereArgs: [gameId],
-      );
-
-      if (result.isEmpty) return null;
-
-      final row = result.first;
-      final lastUpdated =
-          DateTime.fromMillisecondsSinceEpoch(row['lastUpdated'] as int);
-      final now = DateTime.now();
-
-      // Check if cache is expired
-      if (now.difference(lastUpdated) > _gameDetailsTTL) {
-        // Remove expired cache
-        await db.delete(
-          _gameDetailsTable,
-          where: 'gameId = ?',
-          whereArgs: [gameId],
-        );
-        return null;
-      }
-
-      return jsonDecode(row['details'] as String) as Map<String, dynamic>;
+      return jsonDecode(entry.data) as Map<String, dynamic>;
     } catch (e) {
-      debugPrint('Failed to get cached game details: $e');
+      NumberedLogger.w('Failed to decode cached game: $e');
       return null;
     }
   }
 
   /// Cache public games list
   Future<void> cachePublicGames(List<Map<String, dynamic>> games) async {
-    try {
-      final db = await database;
-      await db.insert(
-        _gameDetailsTable,
-        {
-          'gameId': 'public_games_list',
-          'details': jsonEncode(games),
-          'lastUpdated': DateTime.now().millisecondsSinceEpoch,
-        },
-        conflictAlgorithm: ConflictAlgorithm.replace,
-      );
-    } catch (e) {
-      debugPrint('Failed to cache public games: $e');
-    }
+    final key = 'cache_public_games';
+    final json = jsonEncode(games);
+    await _setEntry(key, json);
   }
 
   /// Get cached public games list if not expired
   Future<List<Map<String, dynamic>>?> getCachedPublicGames() async {
+    const key = 'cache_public_games';
+    final entry = _getEntry(key, _publicGamesTTL);
+
+    if (entry == null) return null;
+
     try {
-      final db = await database;
-      final result = await db.query(
-        _gameDetailsTable,
-        where: 'gameId = ?',
-        whereArgs: ['public_games_list'],
-      );
-
-      if (result.isEmpty) return null;
-
-      final row = result.first;
-      final lastUpdated =
-          DateTime.fromMillisecondsSinceEpoch(row['lastUpdated'] as int);
-      final now = DateTime.now();
-
-      // Check if cache is expired (shorter TTL for public games)
-      if (now.difference(lastUpdated) > _publicGamesTTL) {
-        // Remove expired cache
-        await db.delete(
-          _gameDetailsTable,
-          where: 'gameId = ?',
-          whereArgs: ['public_games_list'],
-        );
-        return null;
-      }
-
-      final gamesJson = jsonDecode(row['details'] as String) as List;
-      return gamesJson.cast<Map<String, dynamic>>();
+      final games = jsonDecode(entry.data) as List;
+      return games.cast<Map<String, dynamic>>();
     } catch (e) {
-      debugPrint('Failed to get cached public games: $e');
+      NumberedLogger.w('Failed to decode cached public games: $e');
       return null;
     }
   }
 
   /// Clear expired cache entries
   Future<void> clearExpiredCache() async {
-    try {
-      final db = await database;
-      final now = DateTime.now().millisecondsSinceEpoch;
-      final userProfileExpiry = now - _userProfileTTL.inMilliseconds;
-      final gameDetailsExpiry = now - _gameDetailsTTL.inMilliseconds;
-      final publicGamesExpiry = now - _publicGamesTTL.inMilliseconds;
+    final now = DateTime.now();
+    final expiredKeys = <String>[];
 
-      // Clear expired user profiles
-      await db.delete(
-        _userProfilesTable,
-        where: 'lastUpdated < ?',
-        whereArgs: [userProfileExpiry],
-      );
+    // Check memory cache
+    for (final entry in _memoryCache.entries) {
+      final age = now.difference(entry.value.timestamp);
+      if (age > _userProfileTTL &&
+          age > _gameDetailsTTL &&
+          age > _publicGamesTTL) {
+        expiredKeys.add(entry.key);
+      }
+    }
 
-      // Clear expired game details (except public games list)
-      await db.delete(
-        _gameDetailsTable,
-        where: 'lastUpdated < ? AND gameId != ?',
-        whereArgs: [gameDetailsExpiry, 'public_games_list'],
-      );
+    // Remove expired entries
+    for (final key in expiredKeys) {
+      _memoryCache.remove(key);
 
-      // Clear expired public games list
-      await db.delete(
-        _gameDetailsTable,
-        where: 'lastUpdated < ? AND gameId = ?',
-        whereArgs: [publicGamesExpiry, 'public_games_list'],
-      );
-    } catch (e) {
-      debugPrint('Failed to clear expired cache: $e');
+      // Remove from SharedPreferences too
+      try {
+        await _prefs.remove(key);
+        await _prefs.remove('${key}_ts');
+      } catch (e) {
+        NumberedLogger.w('Failed to clear expired cache: $e');
+      }
     }
   }
 
   /// Clear all cache
   Future<void> clearAllCache() async {
+    _memoryCache.clear();
+
     try {
-      final db = await database;
-      await db.delete(_userProfilesTable);
-      await db.delete(_gameDetailsTable);
+      final keys = _prefs.getKeys();
+      for (final key in keys) {
+        if (key.startsWith('cache_')) {
+          await _prefs.remove(key);
+        }
+      }
     } catch (e) {
-      debugPrint('Failed to clear all cache: $e');
+      NumberedLogger.w('Failed to clear all cache: $e');
     }
   }
 
   /// Get cache statistics
   Future<Map<String, dynamic>> getCacheStats() async {
     try {
-      final db = await database;
+      final keys = _prefs.getKeys();
+      int userProfilesCount = 0;
+      int gameDetailsCount = 0;
 
-      final userProfilesCount = Sqflite.firstIntValue(
-              await db.rawQuery('SELECT COUNT(*) FROM $_userProfilesTable')) ??
-          0;
-
-      final gameDetailsCount = Sqflite.firstIntValue(
-              await db.rawQuery('SELECT COUNT(*) FROM $_gameDetailsTable')) ??
-          0;
+      for (final key in keys) {
+        if (key.contains('user_profile') && !key.endsWith('_ts')) {
+          userProfilesCount++;
+        } else if (key.contains('game_details') && !key.endsWith('_ts')) {
+          gameDetailsCount++;
+        }
+      }
 
       return {
         'userProfilesCount': userProfilesCount,
@@ -370,7 +262,7 @@ class CacheServiceInstance {
         'totalCacheEntries': userProfilesCount + gameDetailsCount,
       };
     } catch (e) {
-      debugPrint('Failed to get cache stats: $e');
+      NumberedLogger.w('Failed to get cache stats: $e');
       return {
         'userProfilesCount': 0,
         'gameDetailsCount': 0,
@@ -378,13 +270,12 @@ class CacheServiceInstance {
       };
     }
   }
+}
 
-  /// Close database connection
-  Future<void> close() async {
-    final db = _database;
-    if (db != null) {
-      await db.close();
-      _database = null;
-    }
-  }
+/// In-memory cache entry with timestamp
+class CachedEntry {
+  final String data;
+  final DateTime timestamp;
+
+  CachedEntry(this.data, this.timestamp);
 }

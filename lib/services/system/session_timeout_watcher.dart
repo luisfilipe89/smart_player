@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
+import 'package:move_young/utils/logger.dart';
 
 /// Watches for user inactivity and automatically signs out after timeout
 class SessionTimeoutWatcher {
@@ -40,8 +41,7 @@ class SessionTimeoutWatcher {
 
     _inactivityTimer?.cancel();
     _inactivityTimer = Timer(_timeout, () {
-      debugPrint(
-          'Session timeout: User inactive for ${_timeout.inMinutes} minutes');
+      NumberedLogger.d('Session timeout: User inactive for ${_timeout.inMinutes} minutes');
       _handleTimeout();
     });
   }
@@ -56,11 +56,11 @@ class SessionTimeoutWatcher {
     // Check if user is still authenticated
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
-      debugPrint('Session timeout: User already signed out');
+      NumberedLogger.w('Session timeout: User already signed out');
       return;
     }
 
-    debugPrint('Session timeout: Signing out user ${user.uid}');
+    NumberedLogger.w('Session timeout: Signing out user ${user.uid}');
     onTimeout();
   }
 

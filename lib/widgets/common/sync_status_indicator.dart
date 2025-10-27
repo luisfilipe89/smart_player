@@ -53,10 +53,17 @@ class _SyncStatusIndicatorState extends ConsumerState<SyncStatusIndicator> {
 
   @override
   Widget build(BuildContext context) {
+    final failed = ref.watch(syncFailedCountProvider);
     return Stack(
       children: [
         widget.child,
-        if (_currentStatus != SyncStatus.synced)
+        if (_currentStatus == SyncStatus.pending)
+          Positioned(
+            top: 4,
+            right: 4,
+            child: _buildStatusIcon(),
+          ),
+        if (_currentStatus == SyncStatus.failed && failed > 0)
           Positioned(
             top: 4,
             right: 4,

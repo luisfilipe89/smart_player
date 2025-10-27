@@ -4,7 +4,8 @@ import 'package:crypto/crypto.dart' as crypto;
 import 'dart:convert' show utf8;
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_database/firebase_database.dart';
-import 'package:flutter/foundation.dart' show debugPrint;
+// import 'package:flutter/foundation.dart' show debugPrint;
+import 'package:move_young/utils/logger.dart';
 import 'package:move_young/db/db_paths.dart';
 import 'package:move_young/models/infrastructure/cached_data.dart';
 import 'package:move_young/services/firebase_error_handler.dart';
@@ -30,12 +31,12 @@ class FriendsServiceInstance {
   Future<DataSnapshot> _safeGet(String path) async {
     try {
       final snap = await _db.ref(path).get();
-      debugPrint('🔍 READ OK: $path (exists: ${snap.exists})');
+      NumberedLogger.d('🔍 READ OK: $path (exists: ${snap.exists})');
       return snap;
     } catch (e) {
-      debugPrint('🔍 READ FAIL: $path -> $e');
+      NumberedLogger.w('🔍 READ FAIL: $path -> $e');
       if (FirebaseErrorHandler.requiresAuthRefresh(e)) {
-        debugPrint('🔍 Auth refresh required for: $path');
+        NumberedLogger.w('🔍 Auth refresh required for: $path');
         // Could trigger auth refresh here if needed
       }
       rethrow;
@@ -79,10 +80,9 @@ class FriendsServiceInstance {
     try {
       await _db.ref().update(updates);
     } catch (e) {
-      debugPrint('🔍 Index update failed: $e');
+      NumberedLogger.w('🔍 Index update failed: $e');
       if (FirebaseErrorHandler.isPermissionDenied(e)) {
-        debugPrint(
-            '🔍 Permission denied for user indexing - this is expected for some users');
+        NumberedLogger.w('🔍 Permission denied for user indexing - this is expected for some users');
       }
       // Swallow permission errors so UI doesn't break on best-effort indexing
     }
@@ -118,7 +118,7 @@ class FriendsServiceInstance {
       }
       return [];
     } catch (e) {
-      debugPrint('Error getting friends for $uid: $e');
+      NumberedLogger.e('Error getting friends for $uid: $e');
       return [];
     }
   }
@@ -133,7 +133,7 @@ class FriendsServiceInstance {
       }
       return [];
     } catch (e) {
-      debugPrint('Error getting sent friend requests for $uid: $e');
+      NumberedLogger.e('Error getting sent friend requests for $uid: $e');
       return [];
     }
   }
@@ -148,7 +148,7 @@ class FriendsServiceInstance {
       }
       return [];
     } catch (e) {
-      debugPrint('Error getting received friend requests for $uid: $e');
+      NumberedLogger.e('Error getting received friend requests for $uid: $e');
       return [];
     }
   }
@@ -185,7 +185,7 @@ class FriendsServiceInstance {
 
       return true;
     } catch (e) {
-      debugPrint('Error sending friend request: $e');
+      NumberedLogger.e('Error sending friend request: $e');
       return false;
     }
   }
@@ -217,7 +217,7 @@ class FriendsServiceInstance {
 
       return true;
     } catch (e) {
-      debugPrint('Error accepting friend request: $e');
+      NumberedLogger.e('Error accepting friend request: $e');
       return false;
     }
   }
@@ -240,7 +240,7 @@ class FriendsServiceInstance {
 
       return true;
     } catch (e) {
-      debugPrint('Error declining friend request: $e');
+      NumberedLogger.e('Error declining friend request: $e');
       return false;
     }
   }
@@ -263,7 +263,7 @@ class FriendsServiceInstance {
 
       return true;
     } catch (e) {
-      debugPrint('Error removing friend: $e');
+      NumberedLogger.e('Error removing friend: $e');
       return false;
     }
   }
@@ -299,7 +299,7 @@ class FriendsServiceInstance {
 
       return true;
     } catch (e) {
-      debugPrint('Error blocking friend: $e');
+      NumberedLogger.e('Error blocking friend: $e');
       return false;
     }
   }
@@ -321,7 +321,7 @@ class FriendsServiceInstance {
       }
       return [];
     } catch (e) {
-      debugPrint('Error searching users by email: $e');
+      NumberedLogger.e('Error searching users by email: $e');
       return [];
     }
   }
@@ -347,7 +347,7 @@ class FriendsServiceInstance {
       }
       return [];
     } catch (e) {
-      debugPrint('Error searching users by display name: $e');
+      NumberedLogger.e('Error searching users by display name: $e');
       return [];
     }
   }
@@ -366,7 +366,7 @@ class FriendsServiceInstance {
       }
       return null;
     } catch (e) {
-      debugPrint('Error getting user profile for $uid: $e');
+      NumberedLogger.e('Error getting user profile for $uid: $e');
       return null;
     }
   }
@@ -389,7 +389,7 @@ class FriendsServiceInstance {
         'photoURL': null,
       };
     } catch (e) {
-      debugPrint('Error fetching minimal profile for $uid: $e');
+      NumberedLogger.e('Error fetching minimal profile for $uid: $e');
       return {
         'uid': uid,
         'displayName': null,
@@ -454,7 +454,7 @@ class FriendsServiceInstance {
       }
       return null;
     } catch (e) {
-      debugPrint('Invalid timestamp format: $value');
+      NumberedLogger.w('Invalid timestamp format: $value');
       return null;
     }
   }
@@ -483,7 +483,7 @@ class FriendsServiceInstance {
       }
       return _maxRequestsPerHour;
     } catch (e) {
-      debugPrint('Error getting remaining requests for $uid: $e');
+      NumberedLogger.e('Error getting remaining requests for $uid: $e');
       return _maxRequestsPerHour;
     }
   }
@@ -516,7 +516,7 @@ class FriendsServiceInstance {
       }
       return Duration.zero;
     } catch (e) {
-      debugPrint('Error getting remaining cooldown for $uid: $e');
+      NumberedLogger.e('Error getting remaining cooldown for $uid: $e');
       return Duration.zero;
     }
   }
@@ -540,7 +540,7 @@ class FriendsServiceInstance {
             requestData,
       });
     } catch (e) {
-      debugPrint('Error recording friend request for $uid: $e');
+      NumberedLogger.e('Error recording friend request for $uid: $e');
     }
   }
 
@@ -575,7 +575,7 @@ class FriendsServiceInstance {
       final snap = await _safeGet('friendTokens/$token');
 
       if (!snap.exists) {
-        debugPrint('Friend token not found: $token');
+        NumberedLogger.w('Friend token not found: $token');
         return false;
       }
 
@@ -583,7 +583,7 @@ class FriendsServiceInstance {
       final expiry = DateTime.fromMillisecondsSinceEpoch(data['expiry'] as int);
 
       if (DateTime.now().isAfter(expiry)) {
-        debugPrint('Friend token expired: $token');
+        NumberedLogger.w('Friend token expired: $token');
         return false;
       }
 
@@ -591,7 +591,7 @@ class FriendsServiceInstance {
       final user = _auth.currentUser;
 
       if (user == null || user.uid == fromUid) {
-        debugPrint('Cannot add self as friend');
+        NumberedLogger.w('Cannot add self as friend');
         return false;
       }
 
@@ -603,7 +603,7 @@ class FriendsServiceInstance {
 
       return true;
     } catch (e) {
-      debugPrint('Error consuming friend token: $e');
+      NumberedLogger.e('Error consuming friend token: $e');
       return false;
     }
   }
@@ -653,7 +653,7 @@ class FriendsServiceInstance {
 
       return suggestions.take(10).toList(); // Return top 10 suggestions
     } catch (e) {
-      debugPrint('Error getting suggested friends: $e');
+      NumberedLogger.e('Error getting suggested friends: $e');
       return [];
     }
   }
@@ -675,7 +675,7 @@ class FriendsServiceInstance {
 
       return mutualCount;
     } catch (e) {
-      debugPrint('Error getting mutual friends count: $e');
+      NumberedLogger.e('Error getting mutual friends count: $e');
       return 0;
     }
   }
