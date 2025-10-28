@@ -6,7 +6,6 @@ import 'package:move_young/utils/logger.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:move_young/models/core/game.dart';
 import 'package:timezone/data/latest_all.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
 import 'notification_interface.dart';
@@ -306,17 +305,15 @@ class NotificationServiceInstance implements INotificationService {
   Future<void> sendFriendRequestNotification(
       String toUid, String fromUid) async {
     try {
-      // Get friend's FCM token
-      final tokenSnapshot = await _db.ref('users/$toUid/fcmToken').get();
-      if (!tokenSnapshot.exists) return;
-
-      // final String token = tokenSnapshot.value.toString();
-
-      // Send notification via Firebase Cloud Messaging
-      // This would typically be done via a cloud function
-      // For now, we'll just log it
-      NumberedLogger.i(
-          'Sending friend request notification to $toUid from $fromUid');
+      // Write a message for Cloud Functions to pick up and send FCM
+      // functions path: /mail/notifications/...
+      await _db.ref('mail/notifications').push().set({
+        'type': 'friend_request',
+        'toUid': toUid,
+        'fromUid': fromUid,
+        'ts': DateTime.now().toIso8601String(),
+      });
+      NumberedLogger.i('Queued friend request notification to $toUid');
     } catch (e) {
       NumberedLogger.e('Error sending friend request notification: $e');
     }
@@ -325,17 +322,13 @@ class NotificationServiceInstance implements INotificationService {
   @override
   Future<void> sendGameInviteNotification(String toUid, String gameId) async {
     try {
-      // Get friend's FCM token
-      final tokenSnapshot = await _db.ref('users/$toUid/fcmToken').get();
-      if (!tokenSnapshot.exists) return;
-
-      // final String token = tokenSnapshot.value.toString();
-
-      // Send notification via Firebase Cloud Messaging
-      // This would typically be done via a cloud function
-      // For now, we'll just log it
-      NumberedLogger.i(
-          'Sending game invite notification to $toUid for game $gameId');
+      await _db.ref('mail/notifications').push().set({
+        'type': 'game_invite',
+        'toUid': toUid,
+        'gameId': gameId,
+        'ts': DateTime.now().toIso8601String(),
+      });
+      NumberedLogger.i('Queued game invite notification to $toUid');
     } catch (e) {
       NumberedLogger.e('Error sending game invite notification: $e');
     }
@@ -345,24 +338,13 @@ class NotificationServiceInstance implements INotificationService {
   Future<void> sendGameReminderNotification(
       String gameId, DateTime gameTime) async {
     try {
-      // Get game details
-      final gameSnapshot = await _db.ref('games/$gameId').get();
-      if (!gameSnapshot.exists) return;
-
-      final gameData = gameSnapshot.value as Map<dynamic, dynamic>;
-      final game = Game.fromJson(Map<String, dynamic>.from(gameData));
-
-      // Get all players' FCM tokens
-      for (final playerId in game.players) {
-        final tokenSnapshot = await _db.ref('users/$playerId/fcmToken').get();
-        if (tokenSnapshot.exists) {
-          // final String token = tokenSnapshot.value.toString();
-          // Send notification via Firebase Cloud Messaging
-          // This would typically be done via a cloud function
-          NumberedLogger.i(
-              'Sending game reminder to $playerId for game $gameId');
-        }
-      }
+      await _db.ref('mail/notifications').push().set({
+        'type': 'game_reminder',
+        'gameId': gameId,
+        'scheduled': gameTime.toIso8601String(),
+        'ts': DateTime.now().toIso8601String(),
+      });
+      NumberedLogger.i('Queued game reminder for game $gameId');
     } catch (e) {
       NumberedLogger.e('Error sending game reminder notification: $e');
     }

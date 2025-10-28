@@ -4,13 +4,13 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:move_young/utils/logger.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../games/cloud_games_service_instance.dart';
-import '../friends/friends_service_instance.dart';
+import '../games/games_service.dart';
+import '../friends/friends_service.dart';
 
 /// Instance-based SyncService for use with Riverpod dependency injection
 class SyncServiceInstance {
-  final CloudGamesServiceInstance _cloudGamesService;
-  final FriendsServiceInstance _friendsService;
+  final IGamesService _cloudGamesService;
+  final IFriendsService _friendsService;
   final SharedPreferences? _prefs;
 
   static const String _syncQueueKey = 'sync_queue';
@@ -154,6 +154,15 @@ class SyncServiceInstance {
   /// Get failed operations count
   int get failedOperationsCount =>
       _syncQueue.where((op) => op.status == _statusFailed).length;
+
+  /// Returns operations older than [_stuckThreshold]
+  List<SyncOperation> getStuckOperations() {
+    final now = DateTime.now();
+    return _syncQueue.where((op) {
+      if (op.status != _statusPending) return false;
+      return now.difference(op.timestamp) > _stuckThreshold;
+    }).toList(growable: false);
+  }
 
   /// Clear all operations
   Future<void> clearAll() async {

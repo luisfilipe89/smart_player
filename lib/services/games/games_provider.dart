@@ -1,13 +1,14 @@
 // lib/providers/services/games_provider.dart
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'games_service_instance.dart';
+import 'games_service.dart';
 import 'package:move_young/models/core/game.dart';
 import '../auth/auth_provider.dart';
 import 'cloud_games_provider.dart';
 import 'cloud_games_service_instance.dart';
 
 // GamesService provider with dependency injection
-final gamesServiceProvider = Provider<GamesServiceInstance>((ref) {
+final gamesServiceProvider = Provider<IGamesService>((ref) {
   final authService = ref.watch(authServiceProvider);
   final cloudGamesService = ref.watch(cloudGamesServiceProvider);
   return GamesServiceInstance(authService, cloudGamesService);
@@ -59,7 +60,7 @@ final gameByIdProvider =
 
 // Helper class for games actions
 class GamesActions {
-  final GamesServiceInstance _gamesService;
+  final IGamesService _gamesService;
   final CloudGamesServiceInstance _cloudGamesService;
 
   GamesActions(this._gamesService, this._cloudGamesService);

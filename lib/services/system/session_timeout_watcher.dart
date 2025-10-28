@@ -41,7 +41,8 @@ class SessionTimeoutWatcher {
 
     _inactivityTimer?.cancel();
     _inactivityTimer = Timer(_timeout, () {
-      NumberedLogger.d('Session timeout: User inactive for ${_timeout.inMinutes} minutes');
+      NumberedLogger.d(
+          'Session timeout: User inactive for ${_timeout.inMinutes} minutes');
       _handleTimeout();
     });
   }

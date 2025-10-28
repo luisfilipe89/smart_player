@@ -11,9 +11,10 @@ import 'package:move_young/models/infrastructure/cached_data.dart';
 import 'package:move_young/services/firebase_error_handler.dart';
 import '../notifications/notification_interface.dart';
 import '../../utils/service_error.dart';
+import 'friends_service.dart';
 
 /// Instance-based FriendsService for use with Riverpod dependency injection
-class FriendsServiceInstance {
+class FriendsServiceInstance implements IFriendsService {
   final FirebaseAuth _auth;
   final FirebaseDatabase _db;
   final INotificationService _notificationService;
@@ -82,7 +83,8 @@ class FriendsServiceInstance {
     } catch (e) {
       NumberedLogger.w('🔍 Index update failed: $e');
       if (FirebaseErrorHandler.isPermissionDenied(e)) {
-        NumberedLogger.w('🔍 Permission denied for user indexing - this is expected for some users');
+        NumberedLogger.w(
+            '🔍 Permission denied for user indexing - this is expected for some users');
       }
       // Swallow permission errors so UI doesn't break on best-effort indexing
     }
@@ -97,6 +99,7 @@ class FriendsServiceInstance {
   }
 
   // Get user's friends list
+  @override
   Future<List<String>> getUserFriends(String uid) async {
     final cacheKey = 'friends_$uid';
 
@@ -124,6 +127,7 @@ class FriendsServiceInstance {
   }
 
   // Get user's friend requests (sent)
+  @override
   Future<List<String>> getUserFriendRequestsSent(String uid) async {
     try {
       final snapshot = await _safeGet(DbPaths.userFriendRequestsSent(uid));
@@ -139,6 +143,7 @@ class FriendsServiceInstance {
   }
 
   // Get user's friend requests (received)
+  @override
   Future<List<String>> getUserFriendRequestsReceived(String uid) async {
     try {
       final snapshot = await _safeGet(DbPaths.userFriendRequestsReceived(uid));
@@ -154,6 +159,7 @@ class FriendsServiceInstance {
   }
 
   // Send friend request
+  @override
   Future<bool> sendFriendRequest(String toUid) async {
     try {
       final fromUid = _auth.currentUser?.uid;
@@ -191,6 +197,7 @@ class FriendsServiceInstance {
   }
 
   // Accept friend request
+  @override
   Future<bool> acceptFriendRequest(String fromUid) async {
     try {
       final toUid = _auth.currentUser?.uid;
@@ -223,6 +230,7 @@ class FriendsServiceInstance {
   }
 
   // Decline friend request
+  @override
   Future<bool> declineFriendRequest(String fromUid) async {
     try {
       final toUid = _auth.currentUser?.uid;
@@ -246,6 +254,7 @@ class FriendsServiceInstance {
   }
 
   // Remove friend
+  @override
   Future<bool> removeFriend(String friendUid) async {
     try {
       final currentUid = _auth.currentUser?.uid;
@@ -269,6 +278,7 @@ class FriendsServiceInstance {
   }
 
   // Block friend
+  @override
   Future<bool> blockFriend(String friendUid) async {
     try {
       final currentUid = _auth.currentUser?.uid;
@@ -305,6 +315,7 @@ class FriendsServiceInstance {
   }
 
   // Search users by email
+  @override
   Future<List<Map<String, String>>> searchUsersByEmail(String email) async {
     try {
       final emailLower = email.trim().toLowerCase();
@@ -327,6 +338,7 @@ class FriendsServiceInstance {
   }
 
   // Search users by display name
+  @override
   Future<List<Map<String, String>>> searchUsersByDisplayName(
       String name) async {
     try {
@@ -372,6 +384,7 @@ class FriendsServiceInstance {
   }
 
   // Get minimal profile for a user
+  @override
   Future<Map<String, String?>> fetchMinimalProfile(String uid) async {
     try {
       final snapshot = await _safeGet('users/$uid/profile');
@@ -399,6 +412,7 @@ class FriendsServiceInstance {
   }
 
   // Watch friends list
+  @override
   Stream<List<String>> watchUserFriends(String uid) {
     return _db.ref(DbPaths.userFriends(uid)).onValue.map((event) {
       if (event.snapshot.exists) {
@@ -410,6 +424,7 @@ class FriendsServiceInstance {
   }
 
   // Watch friend requests received
+  @override
   Stream<List<String>> watchUserFriendRequestsReceived(String uid) {
     return _db
         .ref(DbPaths.userFriendRequestsReceived(uid))
@@ -424,6 +439,7 @@ class FriendsServiceInstance {
   }
 
   // Watch friend requests sent
+  @override
   Stream<List<String>> watchUserFriendRequestsSent(String uid) {
     return _db.ref(DbPaths.userFriendRequestsSent(uid)).onValue.map((event) {
       if (event.snapshot.exists) {
@@ -435,11 +451,13 @@ class FriendsServiceInstance {
   }
 
   // Clear cache
+  @override
   void clearCache() {
     _friendsCache.clear();
   }
 
   // Clear expired cache entries
+  @override
   void clearExpiredCache() {
     _friendsCache.removeWhere((key, value) => value.isExpired);
   }
@@ -464,6 +482,7 @@ class FriendsServiceInstance {
   static const Duration _rateLimitWindow = Duration(hours: 1);
 
   // Get remaining friend requests for a user
+  @override
   Future<int> getRemainingRequests(String uid) async {
     try {
       final snapshot = await _safeGet('users/$uid/rateLimit');
@@ -489,6 +508,7 @@ class FriendsServiceInstance {
   }
 
   // Get remaining cooldown time for a user
+  @override
   Future<Duration> getRemainingCooldown(String uid) async {
     try {
       final snapshot = await _safeGet('users/$uid/rateLimit');
@@ -522,6 +542,7 @@ class FriendsServiceInstance {
   }
 
   // Check if user can send friend request
+  @override
   Future<bool> canSendFriendRequest(String uid) async {
     final remaining = await getRemainingRequests(uid);
     return remaining > 0;
@@ -545,6 +566,7 @@ class FriendsServiceInstance {
   }
 
   // Generate friend token for QR code
+  @override
   Future<String> generateFriendToken() async {
     final user = _auth.currentUser;
     if (user == null) throw AuthException('Not signed in');
@@ -570,6 +592,7 @@ class FriendsServiceInstance {
   }
 
   // Consume friend token from QR scan
+  @override
   Future<bool> consumeFriendToken(String token) async {
     try {
       final snap = await _safeGet('friendTokens/$token');
@@ -609,6 +632,7 @@ class FriendsServiceInstance {
   }
 
   // Get suggested friends based on mutual friends
+  @override
   Future<List<Map<String, String>>> getSuggestedFriends() async {
     final user = _auth.currentUser;
     if (user == null) return [];
@@ -659,6 +683,7 @@ class FriendsServiceInstance {
   }
 
   // Get mutual friends count with another user
+  @override
   Future<int> fetchMutualFriendsCount(String uid) async {
     final user = _auth.currentUser;
     if (user == null) return 0;
@@ -681,6 +706,7 @@ class FriendsServiceInstance {
   }
 
   // Stream that emits when a new friend request is received
+  @override
   Stream<void> watchFriendRequestReceived(String uid) {
     final receivedRef = _db.ref('users/$uid/friendRequests/received');
     return receivedRef.limitToLast(1).onChildAdded.map((_) {});

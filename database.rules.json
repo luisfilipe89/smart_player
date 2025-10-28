@@ -116,6 +116,18 @@
             "$requestId": {
                 ".write": "auth != null"
             }
+        },
+        "mail": {
+            "notifications": {
+                "$id": {
+                    ".read": "false",
+                    ".write": "auth != null && (
+                        (newData.child('type').val() === 'friend_request' && newData.child('toUid').isString() && newData.child('fromUid').val() === auth.uid) ||
+                        (newData.child('type').val() === 'game_invite' && newData.child('toUid').isString() && newData.child('gameId').isString() && newData.child('fromUid').val() === auth.uid) ||
+                        (newData.child('type').val() === 'game_reminder' && newData.child('gameId').isString())
+                    )",".validate": "newData.hasChild('type') && newData.child('type').isString()"
+                }
+            }
         }
     }
 }

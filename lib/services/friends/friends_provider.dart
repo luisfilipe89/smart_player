@@ -1,6 +1,7 @@
 // lib/providers/services/friends_provider.dart
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'friends_service_instance.dart';
+import 'friends_service.dart';
 import '../auth/auth_provider.dart';
 import '../notifications/notification_provider.dart';
 import 'package:move_young/providers/infrastructure/firebase_providers.dart';
@@ -15,7 +16,7 @@ import 'package:move_young/providers/infrastructure/firebase_providers.dart';
 // Use the centralized cache service provider
 
 // FriendsService provider with dependency injection
-final friendsServiceProvider = Provider<FriendsServiceInstance>((ref) {
+final friendsServiceProvider = Provider<IFriendsService>((ref) {
   final firebaseAuth = ref.watch(firebaseAuthProvider);
   final firebaseDatabase = ref.watch(firebaseDatabaseProvider);
   final notificationService = ref.watch(notificationServiceProvider);
@@ -88,7 +89,7 @@ final watchFriendRequestsSentProvider =
 
 // Helper class for friends actions
 class FriendsActions {
-  final FriendsServiceInstance _friendsService;
+  final IFriendsService _friendsService;
 
   FriendsActions(this._friendsService);
 

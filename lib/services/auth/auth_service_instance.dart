@@ -4,25 +4,30 @@ import 'dart:async';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:move_young/utils/logger.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'auth_service.dart';
 import '../../utils/service_error.dart';
 import '../firebase_error_handler.dart';
 
 /// Instance-based AuthService for use with Riverpod dependency injection
-class AuthServiceInstance {
+class AuthServiceInstance implements IAuthService {
   final FirebaseAuth _auth;
 
   AuthServiceInstance(this._auth);
 
   // Get current user
+  @override
   User? get currentUser => _auth.currentUser;
 
   // Check if user is signed in
+  @override
   bool get isSignedIn => _auth.currentUser != null;
 
   // Get current user ID
+  @override
   String? get currentUserId => _auth.currentUser?.uid;
 
   // Get current user nickname
+  @override
   String get currentUserDisplayName {
     final user = _auth.currentUser;
     if (user == null) return 'Anonymous User';
@@ -52,17 +57,21 @@ class AuthServiceInstance {
   }
 
   // Stream methods
+  @override
   Stream<User?> get authStateChanges => _auth.authStateChanges();
+  @override
   Stream<User?> get userChanges => _auth.userChanges();
 
   // Sign in anonymously
+  @override
   Future<UserCredential> signInAnonymously() async {
     try {
       NumberedLogger.d('Auth: signInAnonymously start');
       final userCredential = await _auth.signInAnonymously().timeout(
-        const Duration(seconds: 12),
-      );
-      NumberedLogger.d('Auth: signInAnonymously success uid=${userCredential.user?.uid}');
+            const Duration(seconds: 12),
+          );
+      NumberedLogger.d(
+          'Auth: signInAnonymously success uid=${userCredential.user?.uid}');
       return userCredential;
     } on TimeoutException catch (e) {
       throw NetworkException('network_error', originalError: e);
@@ -74,6 +83,7 @@ class AuthServiceInstance {
   }
 
   // Sign in with Google
+  @override
   Future<UserCredential?> signInWithGoogle() async {
     try {
       // Web uses Firebase Auth popup provider
@@ -123,6 +133,7 @@ class AuthServiceInstance {
   }
 
   // Sign in with email and password
+  @override
   Future<UserCredential> signInWithEmailAndPassword(
     String email,
     String password,
@@ -147,6 +158,7 @@ class AuthServiceInstance {
   }
 
   // Create account with email and password
+  @override
   Future<UserCredential> createUserWithEmailAndPassword(
     String email,
     String password,
@@ -172,6 +184,7 @@ class AuthServiceInstance {
   }
 
   // Sign out
+  @override
   Future<void> signOut() async {
     try {
       await _auth.signOut();
@@ -182,6 +195,7 @@ class AuthServiceInstance {
   }
 
   // Update user profile
+  @override
   Future<void> updateProfile({String? displayName, String? photoURL}) async {
     try {
       final user = _auth.currentUser;
@@ -202,6 +216,7 @@ class AuthServiceInstance {
   }
 
   // Update email
+  @override
   Future<void> updateEmail(String newEmail) async {
     try {
       final user = _auth.currentUser;
@@ -216,6 +231,7 @@ class AuthServiceInstance {
   }
 
   // Update nickname
+  @override
   Future<void> updateDisplayName(String displayName) async {
     try {
       final user = _auth.currentUser;
@@ -237,6 +253,7 @@ class AuthServiceInstance {
   }
 
   // Delete user account
+  @override
   Future<bool> deleteAccount() async {
     try {
       final user = _auth.currentUser;
@@ -256,6 +273,7 @@ class AuthServiceInstance {
   }
 
   // Change password
+  @override
   Future<void> changePassword(
     String currentPassword,
     String newPassword,
@@ -287,6 +305,7 @@ class AuthServiceInstance {
   }
 
   // Send password reset email
+  @override
   Future<void> sendPasswordResetEmail(String email) async {
     try {
       await _auth.sendPasswordResetEmail(email: email);
@@ -302,6 +321,7 @@ class AuthServiceInstance {
   }
 
   // Change email
+  @override
   Future<void> changeEmail({
     required String currentPassword,
     required String newEmail,
@@ -333,6 +353,7 @@ class AuthServiceInstance {
   }
 
   // Check if user has password provider
+  @override
   bool get hasPasswordProvider {
     final user = _auth.currentUser;
     if (user == null) return false;

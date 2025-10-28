@@ -10,10 +10,8 @@ class CrashlyticsHelper {
   static void recordError(dynamic error, StackTrace stack,
       {String? reason, bool fatal = false}) {
     try {
-      FirebaseCrashlytics.instance.recordError(error, stack,
-          reason: reason, fatal: fatal);
+      FirebaseCrashlytics.instance
+          .recordError(error, stack, reason: reason, fatal: fatal);
     } catch (_) {}
   }
 }
-
-

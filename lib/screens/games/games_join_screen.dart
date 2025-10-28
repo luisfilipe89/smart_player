@@ -245,7 +245,7 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('game_creation_failed'.tr()),
+            content: Text('game_cancellation_failed'.tr()),
             backgroundColor: AppColors.red,
           ),
         );

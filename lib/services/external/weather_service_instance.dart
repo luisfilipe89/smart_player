@@ -105,7 +105,8 @@ class WeatherServiceInstance {
     }
 
     // Debug logging for weather conditions
-    NumberedLogger.d('Weather parsed - Time: $time, Precip: $precipitation, Clouds: $cloudCover, IsDay: $isDaytime, Condition: $condition, Color: ${color.toARGB32().toRadixString(16)}');
+    NumberedLogger.d(
+        'Weather parsed - Time: $time, Precip: $precipitation, Clouds: $cloudCover, IsDay: $isDaytime, Condition: $condition, Color: ${color.toARGB32().toRadixString(16)}');
 
     return {
       'condition': condition,
@@ -344,7 +345,8 @@ class WeatherServiceInstance {
         // Cache and return data
         if (weatherData.isNotEmpty) {
           await _cacheData(cacheKey, weatherData);
-          NumberedLogger.d('🌤️ Open-Meteo weather data fetched successfully: ${weatherData.length} hours');
+          NumberedLogger.d(
+              '🌤️ Open-Meteo weather data fetched successfully: ${weatherData.length} hours');
           NumberedLogger.d('🌤️ Weather data: $weatherData');
         } else {
           NumberedLogger.w('No Open-Meteo weather data found for date: $date');
@@ -353,7 +355,8 @@ class WeatherServiceInstance {
 
         return weatherData;
       } else {
-        NumberedLogger.w('🌤️ Open-Meteo API error: ${response.statusCode} - ${response.body}');
+        NumberedLogger.w(
+            '🌤️ Open-Meteo API error: ${response.statusCode} - ${response.body}');
         return <String, String>{};
       }
     } catch (e) {

@@ -25,5 +25,3 @@ class ErrorMapping {
     return 'Something went wrong. Please try again.';
   }
 }
-
-

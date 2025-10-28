@@ -2,17 +2,18 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'auth_service_instance.dart';
+import 'auth_service.dart';
 import 'package:move_young/providers/infrastructure/firebase_providers.dart';
 
 // AuthService provider with dependency injection
-final authServiceProvider = Provider<AuthServiceInstance>((ref) {
+final authServiceProvider = Provider<IAuthService>((ref) {
   final firebaseAuth = ref.watch(firebaseAuthProvider);
   return AuthServiceInstance(firebaseAuth);
 });
 
 // Current user provider (reactive)
 final currentUserProvider = StreamProvider<User?>((ref) {
-  final authService = ref.watch(authServiceProvider);
+  final authService = ref.watch(authServiceProvider) as AuthServiceInstance;
   return authService.authStateChanges;
 });
 
@@ -79,7 +80,7 @@ final authActionsProvider = Provider<AuthActions>((ref) {
 
 // Helper class for auth actions
 class AuthActions {
-  final AuthServiceInstance _authService;
+  final IAuthService _authService;
 
   AuthActions(this._authService);
 

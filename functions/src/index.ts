@@ -9,6 +9,86 @@ import * as puppeteer from "puppeteer";
 admin.initializeApp();
 setGlobalOptions({ region: "europe-west1" });
 
+// Consume client-queued notifications at /mail/notifications and fan-out
+// to per-user notifications that are then pushed via sendNotification above.
+export const onMailNotificationCreate = onValueCreated(
+  "/mail/notifications/{notificationId}",
+  async (event) => {
+    const payload = event.data.val() || {};
+    const notificationId = event.params.notificationId as string;
+    try {
+      const type = (payload.type || "").toString();
+      const toUid = (payload.toUid || "").toString();
+      const fromUid = (payload.fromUid || "").toString();
+      const gameId = (payload.gameId || "").toString();
+      const scheduled = (payload.scheduled || "").toString();
+
+      const db = admin.database();
+      // Idempotency: skip if already processed
+      const processedRef = db.ref(`/mail/processed/${notificationId}`);
+      const processedSnap = await processedRef.once("value");
+      if (processedSnap.exists()) {
+        await db.ref(`/mail/notifications/${notificationId}`).remove();
+        return;
+      }
+      const now = Date.now();
+
+      if (type === "friend_request" && toUid) {
+        // Resolve fromName best-effort
+        let fromName = "Someone";
+        if (fromUid) {
+          try {
+            const user = await admin.auth().getUser(fromUid);
+            if (user.displayName) fromName = user.displayName;
+          } catch (_) { }
+        }
+
+        await db.ref(`/users/${toUid}/notifications/${notificationId}`).set({
+          type: "friend_request",
+          data: { fromUid, fromName },
+          timestamp: now,
+          read: false,
+        });
+      } else if (type === "game_invite" && toUid && gameId) {
+        await db.ref(`/users/${toUid}/notifications/${notificationId}`).set({
+          type: "game_invite",
+          data: { gameId },
+          timestamp: now,
+          read: false,
+        });
+      } else if (type === "game_reminder" && gameId) {
+        // Fan-out reminder to all players of the game
+        const gameSnap = await db.ref(`/games/${gameId}`).once("value");
+        if (gameSnap.exists()) {
+          const game = gameSnap.val() || {};
+          const players: string[] = Array.isArray(game.players)
+            ? game.players
+            : Object.values(game.players || {}).map((v: any) => String(v));
+          const updates: { [path: string]: any } = {};
+          for (const uid of players) {
+            const path = `/users/${uid}/notifications/${notificationId}`;
+            updates[path] = {
+              type: "game_reminder",
+              data: { gameId, scheduled },
+              timestamp: now,
+              read: false,
+            };
+          }
+          if (Object.keys(updates).length) {
+            await db.ref().update(updates);
+          }
+        }
+      }
+
+      // Mark as processed and remove the queued mail notification
+      await processedRef.set({ ts: now, type });
+      await db.ref(`/mail/notifications/${notificationId}`).remove();
+    } catch (e) {
+      console.error("Error processing mail notification:", e);
+    }
+  }
+);
+
 // Process notification requests and write to user's notifications
 export const processNotificationRequest = onValueCreated(
   "/notification_requests/{requestId}",

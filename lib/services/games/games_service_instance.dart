@@ -2,19 +2,21 @@
 // import 'package:flutter/foundation.dart';
 import 'package:move_young/utils/logger.dart';
 import 'package:move_young/models/core/game.dart';
-import '../auth/auth_service_instance.dart';
+import '../auth/auth_service.dart';
+import 'games_service.dart';
 import 'cloud_games_service_instance.dart';
 import '../../utils/service_error.dart';
 
 /// Instance-based GamesService - cloud-first, no SQLite
 /// All game data is managed through Firebase Realtime Database
-class GamesServiceInstance {
-  final AuthServiceInstance _authService;
+class GamesServiceInstance implements IGamesService {
+  final IAuthService _authService;
   final CloudGamesServiceInstance _cloudGamesService;
 
   GamesServiceInstance(this._authService, this._cloudGamesService);
 
   // Create a new game
+  @override
   Future<String> createGame(Game game) async {
     try {
       final userId = _authService.currentUserId;
@@ -33,6 +35,7 @@ class GamesServiceInstance {
   }
 
   // Get user's games
+  @override
   Future<List<Game>> getMyGames() async {
     try {
       final userId = _authService.currentUserId;
@@ -47,6 +50,7 @@ class GamesServiceInstance {
   }
 
   // Get games that user can join
+  @override
   Future<List<Game>> getJoinableGames() async {
     try {
       final userId = _authService.currentUserId;
@@ -61,6 +65,7 @@ class GamesServiceInstance {
   }
 
   // Get game by ID
+  @override
   Future<Game?> getGameById(String gameId) async {
     try {
       // Fetch from cloud
@@ -72,6 +77,7 @@ class GamesServiceInstance {
   }
 
   // Update game
+  @override
   Future<void> updateGame(Game game) async {
     try {
       await _cloudGamesService.updateGame(game);
@@ -82,6 +88,7 @@ class GamesServiceInstance {
   }
 
   // Delete game
+  @override
   Future<void> deleteGame(String gameId) async {
     try {
       await _cloudGamesService.deleteGame(gameId);
@@ -92,6 +99,7 @@ class GamesServiceInstance {
   }
 
   // Join a game
+  @override
   Future<void> joinGame(String gameId) async {
     try {
       final userId = _authService.currentUserId;
@@ -108,6 +116,7 @@ class GamesServiceInstance {
   }
 
   // Leave a game
+  @override
   Future<void> leaveGame(String gameId) async {
     try {
       final userId = _authService.currentUserId;
@@ -124,6 +133,7 @@ class GamesServiceInstance {
   }
 
   // Sync games with cloud (no-op since we're always cloud-first now)
+  @override
   Future<void> syncWithCloud() async {
     // No-op: we're always synced with cloud
     NumberedLogger.d('syncWithCloud called (no-op - already cloud-first)');

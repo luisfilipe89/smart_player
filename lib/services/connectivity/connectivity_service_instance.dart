@@ -47,7 +47,8 @@ class ConnectivityServiceInstance {
     // Only emit if status changed
     if (wasConnected != _hasConnection) {
       _connectionController.add(_hasConnection);
-      NumberedLogger.d('ConnectivityService: Connection status changed to ${_hasConnection ? "connected" : "disconnected"}');
+      NumberedLogger.d(
+          'ConnectivityService: Connection status changed to ${_hasConnection ? "connected" : "disconnected"}');
     }
 
     return _hasConnection;
@@ -60,7 +61,8 @@ class ConnectivityServiceInstance {
       final results = await _connectivity.checkConnectivity();
       return results.first != ConnectivityResult.none;
     } catch (e) {
-      NumberedLogger.w('ConnectivityService: Error checking internet connection: $e');
+      NumberedLogger.w(
+          'ConnectivityService: Error checking internet connection: $e');
       return false;
     }
   }

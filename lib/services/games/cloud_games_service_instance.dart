@@ -40,7 +40,40 @@ class CloudGamesServiceInstance {
   String? get _currentUserId => _auth.currentUser?.uid;
 
   // --- Helpers for slot keys ---
-  // These helpers will be added when needed for slot management
+  // Format yyyy-MM-dd in local time for date partitioning
+  String _dateKey(DateTime dt) {
+    final local = dt.toLocal();
+    final y = local.year.toString().padLeft(4, '0');
+    final m = local.month.toString().padLeft(2, '0');
+    final d = local.day.toString().padLeft(2, '0');
+    return '$y-$m-$d';
+  }
+
+  // Format HHmm in local time for time partitioning (avoid ':' in keys)
+  String _timeKey(DateTime dt) {
+    final local = dt.toLocal();
+    final h = local.hour.toString().padLeft(2, '0');
+    final m = local.minute.toString().padLeft(2, '0');
+    return '$h$m';
+  }
+
+  // Compute a stable field key. Prefer explicit fieldId; else lat,lon; else sanitized name
+  String _fieldKeyForGame(Game game) {
+    if ((game.fieldId ?? '').toString().trim().isNotEmpty) {
+      return game.fieldId!.trim();
+    }
+    if (game.latitude != null && game.longitude != null) {
+      final lat = game.latitude!.toStringAsFixed(5).replaceAll('.', '_');
+      final lon = game.longitude!.toStringAsFixed(5).replaceAll('.', '_');
+      return '${lat}_${lon}';
+    }
+    final name = (game.location).toLowerCase();
+    final sanitized = name
+        .replaceAll(RegExp(r'[^a-z0-9]+'), '_')
+        .replaceAll(RegExp(r'_+'), '_')
+        .trim();
+    return sanitized.isEmpty ? 'unknown_field' : sanitized;
+  }
 
   // Create a new game in the cloud
   Future<String> createGame(Game game) async {
@@ -53,26 +86,35 @@ class CloudGamesServiceInstance {
       // Ensure the user has a profile
       await _ensureUserProfile(userId);
 
-      // Create the game
+      // Create the game id now for an atomic multi-location update
       final gameRef = _gamesRef.push();
       final gameId = gameRef.key!;
 
       // Update game with the generated ID
       final gameWithId = game.copyWith(id: gameId);
 
-      // Save to Firebase
-      await gameRef.set(gameWithId.toJson());
+      // Compute unique slot keys
+      final dateKey = _dateKey(gameWithId.dateTime);
+      final timeKey = _timeKey(gameWithId.dateTime);
+      final fieldKey = _fieldKeyForGame(gameWithId);
 
-      // Update user's created games index
-      await _usersRef
-          .child(DbPaths.userCreatedGames(userId))
-          .child(gameId)
-          .set({
-        'sport': gameWithId.sport,
-        'dateTime': gameWithId.dateTime.toIso8601String(),
-        'location': gameWithId.location,
-        'maxPlayers': gameWithId.maxPlayers,
-      });
+      // Prepare atomic multi-path update:
+      // - games/{id}
+      // - users/{uid}/createdGames/{id}
+      // - slots/{dateKey}/{fieldKey}/{timeKey} = true
+      final Map<String, Object?> updates = {
+        '${DbPaths.games}/$gameId': gameWithId.toCloudJson(),
+        'users/$userId/createdGames/$gameId': {
+          'sport': gameWithId.sport,
+          'dateTime': gameWithId.dateTime.toIso8601String(),
+          'location': gameWithId.location,
+          'maxPlayers': gameWithId.maxPlayers,
+        },
+        'slots/$dateKey/$fieldKey/$timeKey': true,
+      };
+
+      // Atomic commit; will fail if slot already exists due to security rules
+      await _database.ref().update(updates);
 
       // Send notifications to invited friends
       // This will be implemented when we add friend invites functionality
@@ -84,6 +126,11 @@ class CloudGamesServiceInstance {
     } catch (e, st) {
       NumberedLogger.e('Error creating game: $e');
       CrashlyticsHelper.recordError(e, st, reason: 'game_create_fail');
+      // Surface a clearer error message for slot collisions
+      if (e.toString().toLowerCase().contains('permission') ||
+          e.toString().toLowerCase().contains('denied')) {
+        throw ValidationException('new_slot_unavailable');
+      }
       rethrow;
     }
   }
@@ -105,19 +152,52 @@ class CloudGamesServiceInstance {
     }
   }
 
-  // Update a game
+  // Update a game (atomically move slot if date/field/time changed)
   Future<void> updateGame(Game game) async {
     try {
-      await _gamesRef.child(game.id).update(game.toJson());
-      _clearCache(); // Invalidate cache
+      // Load existing game to compute old slot
+      final existingSnap = await _gamesRef.child(game.id).get();
+      if (!existingSnap.exists) {
+        throw NotFoundException('Game not found');
+      }
+      final existing =
+          Game.fromJson(Map<String, dynamic>.from(existingSnap.value as Map));
+
+      final oldDateKey = _dateKey(existing.dateTime);
+      final oldTimeKey = _timeKey(existing.dateTime);
+      final oldFieldKey = _fieldKeyForGame(existing);
+
+      final newDateKey = _dateKey(game.dateTime);
+      final newTimeKey = _timeKey(game.dateTime);
+      final newFieldKey = _fieldKeyForGame(game);
+
+      final Map<String, Object?> updates = {
+        '${DbPaths.games}/${game.id}': game.toCloudJson(),
+      };
+
+      final slotChanged = oldDateKey != newDateKey ||
+          oldTimeKey != newTimeKey ||
+          oldFieldKey != newFieldKey;
+      if (slotChanged) {
+        // Free old slot and claim new slot
+        updates['slots/$oldDateKey/$oldFieldKey/$oldTimeKey'] = null;
+        updates['slots/$newDateKey/$newFieldKey/$newTimeKey'] = true;
+      }
+
+      await _database.ref().update(updates);
+      _clearCache();
     } catch (e, st) {
       NumberedLogger.e('Error updating game: $e');
       CrashlyticsHelper.recordError(e, st, reason: 'game_update_fail');
+      if (e.toString().toLowerCase().contains('permission') ||
+          e.toString().toLowerCase().contains('denied')) {
+        throw ValidationException('new_slot_unavailable');
+      }
       rethrow;
     }
   }
 
-  // Delete a game
+  // Delete a game (also free its slot)
   Future<void> deleteGame(String gameId) async {
     try {
       final userId = _currentUserId;
@@ -125,16 +205,31 @@ class CloudGamesServiceInstance {
         throw AuthException('User not authenticated');
       }
 
-      // Remove the game
-      await _gamesRef.child(gameId).remove();
+      // Load existing game for slot
+      final existingSnap = await _gamesRef.child(gameId).get();
+      if (!existingSnap.exists) {
+        // Nothing to delete
+        await _usersRef
+            .child(DbPaths.userCreatedGames(userId))
+            .child(gameId)
+            .remove();
+        _clearCache();
+        return;
+      }
+      final existing =
+          Game.fromJson(Map<String, dynamic>.from(existingSnap.value as Map));
+      final dateKey = _dateKey(existing.dateTime);
+      final timeKey = _timeKey(existing.dateTime);
+      final fieldKey = _fieldKeyForGame(existing);
 
-      // Remove from user's created games index
-      await _usersRef
-          .child(DbPaths.userCreatedGames(userId))
-          .child(gameId)
-          .remove();
+      final Map<String, Object?> updates = {
+        '${DbPaths.games}/$gameId': null,
+        'users/$userId/createdGames/$gameId': null,
+        'slots/$dateKey/$fieldKey/$timeKey': null,
+      };
 
-      _clearCache(); // Invalidate cache
+      await _database.ref().update(updates);
+      _clearCache();
     } catch (e, st) {
       NumberedLogger.e('Error deleting game: $e');
       CrashlyticsHelper.recordError(e, st, reason: 'game_delete_fail');

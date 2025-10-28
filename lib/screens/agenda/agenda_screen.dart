@@ -134,6 +134,7 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
                   'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36',
               'Accept': 'image/avif,image/webp,image/apng,image/*,*/*;q=0.8',
               'Referer': 'https://www.aanbod.s-port.nl/',
+              'Accept-Language': 'en-US,en;q=0.9,nl;q=0.8',
             },
           ),
           context,
@@ -353,34 +354,39 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
         // Log the URL we are loading for easier debugging
         // ignore: avoid_print
         print('[Agenda] Loading image: ' + normalized);
-        return ref.read(imageCacheServiceProvider).getOptimizedImage(
-              imageUrl: normalized,
-              width: double.infinity,
+        return Image.network(
+          normalized,
+          width: double.infinity,
+          height: AppHeights.image,
+          fit: BoxFit.cover,
+          headers: const {
+            'User-Agent':
+                'Mozilla/5.0 (Linux; Android 14; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Mobile Safari/537.36',
+            'Accept': 'image/avif,image/webp,image/apng,image/*,*/*;q=0.8',
+            'Referer': 'https://www.aanbod.s-port.nl/',
+            'Accept-Language': 'en-US,en;q=0.9,nl;q=0.8',
+            'Cookie': 'locale=en',
+          },
+          gaplessPlayback: true,
+          loadingBuilder:
+              (BuildContext context, Widget child, ImageChunkEvent? progress) {
+            if (progress == null) return child;
+            return _buildShimmerPlaceholder();
+          },
+          errorBuilder:
+              (BuildContext context, Object error, StackTrace? stackTrace) {
+            // ignore: avoid_print
+            print('[Agenda] Image failed: ' +
+                normalized +
+                ' err: ' +
+                error.toString());
+            return Container(
               height: AppHeights.image,
-              fit: BoxFit.cover,
-              fadeInDuration: const Duration(milliseconds: 300),
-              fadeInCurve: Curves.easeInOut,
-              httpHeaders: const {
-                'User-Agent':
-                    'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36',
-                'Accept': 'image/avif,image/webp,image/apng,image/*,*/*;q=0.8',
-                'Referer': 'https://www.aanbod.s-port.nl/',
-              },
-              placeholder: (BuildContext context, String url) =>
-                  _buildShimmerPlaceholder(),
-              errorWidget: (BuildContext context, String url, dynamic error) {
-                // ignore: avoid_print
-                print('[Agenda] Image failed: ' +
-                    url +
-                    ' err: ' +
-                    error.toString());
-                return Container(
-                  height: AppHeights.image,
-                  color: AppColors.lightgrey,
-                  child: const Icon(Icons.broken_image),
-                );
-              },
+              color: AppColors.lightgrey,
+              child: const Icon(Icons.broken_image),
             );
+          },
+        );
       }
     }
     return Container(

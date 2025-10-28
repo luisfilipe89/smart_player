@@ -124,7 +124,8 @@ class MainScaffoldState extends ConsumerState<MainScaffold> {
       switchToTab(kTabJoin, popToRoot: true);
     } else if (intent is MyGamesIntent) {
       _myGamesArgs = MyGamesArgs(
-          initialTab: intent.initialTab, highlightGameId: intent.highlightGameId);
+          initialTab: intent.initialTab,
+          highlightGameId: intent.highlightGameId);
       switchToTab(kTabJoin, popToRoot: true);
       WidgetsBinding.instance.addPostFrameCallback((_) {
         final nav = _joinKey.currentState;

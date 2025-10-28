@@ -38,23 +38,51 @@ class DeepLinkDispatcher {
   final DeepLinkParser _parser;
   DeepLinkDispatcher(this._ref, this._parser);
 
+  // Queue to hold intents until MainScaffold controller is ready
+  final List<RouteIntent> _pendingIntents = <RouteIntent>[];
+  bool _isDraining = false;
+
   void dispatch(Map<String, dynamic> payload) {
     try {
       final intent = _parser.parseFcmData(payload);
       if (intent == null) return;
-      _routeIntent(intent);
+      _routeOrQueue(intent);
     } catch (_) {}
   }
 
   void dispatchUri(String uri) {
     final intent = _parser.parseUri(uri);
     if (intent == null) return;
-    _routeIntent(intent);
+    _routeOrQueue(intent);
   }
 
-  void _routeIntent(RouteIntent intent) {
+  void _routeOrQueue(RouteIntent intent) {
     final controller = _ref.read(mainScaffoldControllerProvider);
-    if (controller == null) return;
+    if (controller == null) {
+      _pendingIntents.add(intent);
+      _scheduleDrain();
+      return;
+    }
+    _routeIntent(controller, intent);
+  }
+
+  void _scheduleDrain() {
+    if (_isDraining) return;
+    _isDraining = true;
+    // Drain after next frame when controller is likely to be set
+    Future<void>.delayed(const Duration(milliseconds: 50), () {
+      _isDraining = false;
+      final controller = _ref.read(mainScaffoldControllerProvider);
+      if (controller == null || _pendingIntents.isEmpty) return;
+      final intents = List<RouteIntent>.from(_pendingIntents);
+      _pendingIntents.clear();
+      for (final intent in intents) {
+        _routeIntent(controller, intent);
+      }
+    });
+  }
+
+  void _routeIntent(MainScaffoldController controller, RouteIntent intent) {
     if (intent is FriendsIntent) {
       controller.switchToTab(kTabFriends, popToRoot: true);
     } else if (intent is AgendaIntent) {

@@ -11,6 +11,8 @@ import 'package:move_young/services/external/weather_provider.dart';
 import 'package:move_young/services/external/overpass_provider.dart';
 import 'package:move_young/services/system/haptics_provider.dart';
 import 'package:move_young/widgets/friends/friend_picker_widget.dart';
+import 'package:move_young/screens/main_scaffold.dart';
+import 'package:move_young/providers/infrastructure/firebase_providers.dart';
 
 class GameOrganizeScreen extends ConsumerStatefulWidget {
   final Game? initialGame;
@@ -431,14 +433,18 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
             backgroundColor: AppColors.green,
           ),
         );
-        Navigator.of(context).pop();
+        // Navigate to My Games → Organized and highlight the updated game
+        final ctrl = MainScaffoldController.maybeOf(context);
+        ctrl?.openMyGames(
+            initialTab: 1, highlightGameId: updatedGame.id, popToRoot: true);
       }
     } catch (e) {
       if (mounted) {
         String errorMsg = 'game_creation_failed'.tr();
-        if (e.toString().contains('new_slot_unavailable')) {
+        final es = e.toString();
+        if (es.contains('new_slot_unavailable')) {
           errorMsg = 'time_slot_unavailable'.tr();
-        } else if (e.toString().contains('not_authorized')) {
+        } else if (es.contains('not_authorized')) {
           errorMsg = 'not_authorized'.tr();
         }
 
@@ -462,11 +468,49 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
   Future<void> _loadBookedSlots() async {
     if (_selectedField == null || _selectedDate == null) return;
     try {
-      final name = (_selectedField?['name'] as String?) ?? '';
-      if (name.isEmpty) return;
-      // Load booked slots - this would need to be implemented in the provider
-      // For now, we'll leave it empty
+      // Compute dateKey = yyyy-MM-dd
+      final d = _selectedDate!;
+      final y = d.year.toString().padLeft(4, '0');
+      final m = d.month.toString().padLeft(2, '0');
+      final day = d.day.toString().padLeft(2, '0');
+      final dateKey = '$y-$m-$day';
+
+      // Compute fieldKey (prefer id, else lat_lon with underscores, else sanitized name)
+      String fieldKey = '';
+      final id = _selectedField?['id']?.toString();
+      if (id != null && id.trim().isNotEmpty) {
+        fieldKey = id.trim();
+      } else if (_selectedField?['latitude'] != null &&
+          _selectedField?['longitude'] != null) {
+        final lat = (_selectedField?['latitude'] as num).toDouble();
+        final lon = (_selectedField?['longitude'] as num).toDouble();
+        final latFixed = lat.toStringAsFixed(5).replaceAll('.', '_');
+        final lonFixed = lon.toStringAsFixed(5).replaceAll('.', '_');
+        fieldKey = '${latFixed}_${lonFixed}';
+      } else {
+        final name = (_selectedField?['name']?.toString() ?? '').toLowerCase();
+        final sanitized = name
+            .replaceAll(RegExp(r'[^a-z0-9]+'), '_')
+            .replaceAll(RegExp(r'_+'), '_')
+            .trim();
+        fieldKey = sanitized.isEmpty ? 'unknown_field' : sanitized;
+      }
+
+      final db = ref.read(firebaseDatabaseProvider);
+      final snapshot = await db.ref('slots/$dateKey/$fieldKey').get();
+
       final times = <String>{};
+      if (snapshot.exists && snapshot.value is Map) {
+        final map = Map<dynamic, dynamic>.from(snapshot.value as Map);
+        for (final k in map.keys) {
+          var t = k.toString();
+          // Convert compact HHmm to UI format HH:mm
+          if (t.length == 4) {
+            t = '${t.substring(0, 2)}:${t.substring(2)}';
+          }
+          times.add(t);
+        }
+      }
       if (mounted) {
         setState(() {
           _bookedTimes
@@ -594,7 +638,7 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
         players: [userId], // Creator is counted as the first player
       );
 
-      await ref.read(gamesActionsProvider).createGame(game);
+      final createdId = await ref.read(gamesActionsProvider).createGame(game);
 
       if (mounted) {
         ref.read(hapticsActionsProvider)?.lightImpact();
@@ -615,17 +659,21 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
           }
         }
 
-        if (mounted) {
-          Navigator.of(context).pop();
-        }
+        // Navigate to My Games → Organized and highlight the created game
+        final ctrl = MainScaffoldController.maybeOf(context);
+        ctrl?.openMyGames(
+            initialTab: 1, highlightGameId: createdId, popToRoot: true);
       }
     } catch (e) {
       if (mounted) {
+        String errorMsg = 'game_creation_failed'.tr();
+        final es = e.toString();
+        if (es.contains('new_slot_unavailable')) {
+          errorMsg = 'time_slot_unavailable'.tr();
+        }
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(
-              '${'game_creation_failed'.tr()}: $e',
-            ),
+            content: Text(errorMsg),
             backgroundColor: AppColors.red,
             duration: const Duration(seconds: 5),
           ),

@@ -4,7 +4,6 @@ import 'package:flutter/services.dart';
 // No explicit DartPluginRegistrant import; rely on default plugin registration
 import 'package:easy_localization/easy_localization.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -16,6 +15,7 @@ import 'package:move_young/providers/infrastructure/shared_preferences_provider.
 import 'package:move_young/providers/locale_controller.dart';
 import 'package:move_young/widgets/common/sync_status_indicator.dart';
 import 'firebase_options.dart';
+import 'package:move_young/config/app_bootstrap.dart';
 import 'package:move_young/utils/logger.dart';
 import 'package:move_young/services/notifications/notification_provider.dart';
 
@@ -31,26 +31,15 @@ void main() async {
       WidgetsFlutterBinding.ensureInitialized();
       NumberedLogger.install();
 
-      // Initialize Firebase BEFORE runApp to avoid plugin/channel races during auth
-      try {
-        await Firebase.initializeApp(
-          options: DefaultFirebaseOptions.currentPlatform,
-        );
-      } catch (_) {}
-
-      // Register background message handler early
-      try {
-        FirebaseMessaging.onBackgroundMessage(
-          _firebaseMessagingBackgroundHandler,
-        );
-      } catch (_) {}
+      // Centralized bootstrap for Firebase, AppCheck, Crashlytics, and BG messaging
+      await AppBootstrap.initialize();
 
       // SharedPreferences will be initialized after first frame
       // to avoid platform channel errors during app startup
 
-      // Handle errors gracefully
+      // Handle errors gracefully and report to Crashlytics when available
       FlutterError.onError = (FlutterErrorDetails details) {
-        // Log platform channel errors but don't crash the app
+        // Filter platform channel noise
         if (details.exception is PlatformException) {
           final error = details.exception as PlatformException;
           if (error.code == 'channel-error') {
@@ -58,14 +47,23 @@ void main() async {
             return;
           }
         }
-        // Ignore any remaining SQLite references (no longer used)
-        if (details.exception.toString().contains('sqflite') ||
-            details.exception.toString().contains('getDatabasesPath')) {
-          // No longer using SQLite - can ignore
+        // Ignore legacy SQLite noise
+        final exceptionText = details.exception.toString();
+        if (exceptionText.contains('sqflite') ||
+            exceptionText.contains('getDatabasesPath')) {
           return;
         }
-        // Let other errors be handled normally
+
+        // Present error to default handler
         FlutterError.presentError(details);
+
+        // Best-effort Crashlytics reporting without assuming initialization order
+        try {
+          // Use fatal for framework-level errors
+          FirebaseCrashlytics.instance.recordFlutterFatalError(details);
+        } catch (_) {
+          // Crashlytics not ready; ignore
+        }
       };
 
       // Defer EasyLocalization initialization; the widget will handle loading
@@ -104,34 +102,7 @@ void main() async {
         ),
       );
 
-      // Kick off AppCheck and Crashlytics init asynchronously (non-blocking)
-      unawaited(
-        Future(() async {
-          try {
-            await FirebaseAppCheck.instance.activate(
-              androidProvider: kDebugMode
-                  ? AndroidProvider.debug
-                  : AndroidProvider.playIntegrity,
-              appleProvider: kDebugMode
-                  ? AppleProvider.debug
-                  : AppleProvider.deviceCheck,
-              webProvider: ReCaptchaV3Provider('auto'),
-            );
-          } catch (_) {}
-
-          // Initialize Crashlytics
-          try {
-            await FirebaseCrashlytics.instance.setCrashlyticsCollectionEnabled(
-              true,
-            );
-            FlutterError.onError = (errorDetails) {
-              FirebaseCrashlytics.instance.recordFlutterFatalError(
-                errorDetails,
-              );
-            };
-          } catch (_) {}
-        }),
-      );
+      // AppCheck and Crashlytics are initialized by AppBootstrap
     },
     (error, stack) {
       // Handle uncaught errors gracefully
@@ -146,6 +117,10 @@ void main() async {
         debugPrint('Ignoring SQLite-related error (no longer used)');
         return;
       }
+      // Best-effort Crashlytics reporting for uncaught async errors
+      try {
+        FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
+      } catch (_) {}
       // Re-throw other errors
       throw error;
     },

@@ -39,3 +39,6 @@ Notes
 - Functions `fetchSportEvents` can be left as fallback or removed
 - Agenda screen already reads from `events/latest` with local fallback
 
+
+
+

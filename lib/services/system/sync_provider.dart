@@ -1,13 +1,13 @@
 // lib/providers/services/sync_provider.dart
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'sync_service_instance.dart';
-import '../games/cloud_games_provider.dart';
+import '../games/games_provider.dart';
 import '../friends/friends_provider.dart';
 import '../../providers/infrastructure/shared_preferences_provider.dart';
 
 // SyncService provider with dependency injection
 final syncServiceProvider = Provider<SyncServiceInstance?>((ref) {
-  final cloudGamesService = ref.watch(cloudGamesServiceProvider);
+  final cloudGamesService = ref.watch(gamesServiceProvider);
   final friendsService = ref.watch(friendsServiceProvider);
   final prefs = ref.watch(sharedPreferencesProvider);
 

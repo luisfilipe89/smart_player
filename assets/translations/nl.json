@@ -165,6 +165,7 @@
     "permission_storage_denied": "Opslag toestemming geweigerd",
     "game_created_successfully": "Spel succesvol aangemaakt!",
     "game_creation_failed": "Spel aanmaken mislukt. Probeer opnieuw.",
+    "game_cancellation_failed": "Spel annuleren mislukt. Probeer opnieuw.",
     "game_description": "Spelbeschrijving",
     "game_full": "Spel Vol",
     "cancel_game": "Spel annuleren",
