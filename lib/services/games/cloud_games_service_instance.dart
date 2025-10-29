@@ -1302,11 +1302,22 @@ class CloudGamesServiceInstance {
       // Remove user from the game
       final updatedPlayers = List<String>.from(game.players)..remove(userId);
 
+      // Prepare atomic updates
+      final Map<String, Object?> updates = {};
+
       // Update the game
-      await _gamesRef.child(gameId).update({
-        'players': updatedPlayers,
-        'currentPlayers': updatedPlayers.length,
-      });
+      updates['${DbPaths.games}/$gameId/players'] = updatedPlayers;
+      updates['${DbPaths.games}/$gameId/currentPlayers'] = updatedPlayers.length;
+
+      // Update invite status to 'left' if invite exists (so organizer sees red cross)
+      final inviteCheckSnapshot =
+          await _gamesRef.child(gameId).child('invites').child(userId).get();
+      if (inviteCheckSnapshot.exists) {
+        updates['${DbPaths.games}/$gameId/invites/$userId/status'] = 'left';
+      }
+
+      // Commit updates atomically
+      await _database.ref().update(updates);
 
       // Remove game from user's joined games
       await _usersRef

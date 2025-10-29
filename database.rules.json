@@ -29,7 +29,7 @@
                         ".read": "auth != null && ($uid === auth.uid || root.child('games/'+$gameId+'/organizerId').val() === auth.uid)",
                         ".write": "auth != null && ($uid === auth.uid || root.child('games/'+$gameId+'/organizerId').val() === auth.uid)",
                         "status": {
-                            ".validate": "newData.isString() && (newData.val() == 'pending' || newData.val() == 'accepted' || newData.val() == 'declined')"
+                            ".validate": "newData.isString() && (newData.val() == 'pending' || newData.val() == 'accepted' || newData.val() == 'declined' || newData.val() == 'left')"
                         }
                     }
                 }
