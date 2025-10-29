@@ -175,6 +175,22 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
         return;
       }
 
+      // Check if this is a rejoin (user previously left)
+      final inviteStatuses = await ref
+          .read(cloudGamesActionsProvider)
+          .getGameInviteStatuses(game.id);
+      final bool isRejoin = inviteStatuses[currentUserId] == 'left';
+
+      // If rejoining, navigate immediately BEFORE joining to avoid transient state
+      if (isRejoin) {
+        final ctrl = MainScaffoldController.maybeOf(context);
+        ctrl?.openMyGames(
+          initialTab: 0, // Joining tab (index 0)
+          highlightGameId: game.id,
+          popToRoot: true,
+        );
+      }
+
       await ref.read(cloudGamesActionsProvider).joinGame(game.id);
 
       ref.read(hapticsActionsProvider)?.lightImpact();
@@ -183,7 +199,19 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
         setState(() {
           _games.removeWhere((g) => g.id == game.id);
         });
-        _showJoinedSnack();
+
+        // Show success message
+        if (isRejoin) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Rejoined ${game.sport} game!'),
+              backgroundColor: AppColors.green,
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        } else {
+          _showJoinedSnack();
+        }
       }
       if (mounted) {
         await _loadGames(); // Refresh the list (defensive)
@@ -635,8 +663,14 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
         : invitedGames.where((g) => !g.players.contains(myUid)).toList();
     final bool isInvitedPending = filteredInvited.any((g) => g.id == game.id);
 
+    // Check if user previously left this game (for rejoin option)
+    final inviteStatusesAsync = ref.watch(gameInviteStatusesProvider(game.id));
+    final bool hasLeftGame = inviteStatusesAsync.valueOrNull != null &&
+        myUid != null &&
+        inviteStatusesAsync.valueOrNull![myUid] == 'left';
+
     debugPrint(
-        '🎮 Game ${game.id}: isInvitedPending=$isInvitedPending, isJoined=$isJoined, invitedGames.length=${filteredInvited.length}');
+        '🎮 Game ${game.id}: isInvitedPending=$isInvitedPending, isJoined=$isJoined, hasLeftGame=$hasLeftGame, invitedGames.length=${filteredInvited.length}');
 
     if (isInvitedPending && !isJoined) {
       return Row(
@@ -644,20 +678,20 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
           Expanded(
             child: ElevatedButton(
               onPressed: () async {
+                // Navigate immediately BEFORE accepting to avoid transient state
+                final ctrl = MainScaffoldController.maybeOf(context);
+                ctrl?.openMyGames(
+                  initialTab: 0, // Joining tab (index 0)
+                  highlightGameId: game.id,
+                  popToRoot: true,
+                );
+
                 try {
                   await ref
                       .read(cloudGamesActionsProvider)
                       .acceptGameInvite(game.id);
 
                   if (mounted) {
-                    // Navigate to My Games > Joining tab and highlight the game
-                    final ctrl = MainScaffoldController.maybeOf(context);
-                    ctrl?.openMyGames(
-                      initialTab: 0, // Joining tab (index 0)
-                      highlightGameId: game.id,
-                      popToRoot: true,
-                    );
-
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
                         content: Text('Joined ${game.sport} game!'),
@@ -764,6 +798,27 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
           elevation: 0,
         ),
         child: Text('leave_game'.tr()),
+      );
+    }
+
+    // Show "Rejoin" button if user previously left this game
+    if (hasLeftGame) {
+      return ElevatedButton(
+        onPressed: game.hasSpace ? () => _joinGame(game) : null,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: game.hasSpace ? Colors.orange : AppColors.grey,
+          foregroundColor: Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppRadius.card),
+          ),
+          elevation: 0,
+        ),
+        child: Text(
+          game.hasSpace ? 'rejoin_game'.tr() : 'game_full'.tr(),
+          style: AppTextStyles.cardTitle.copyWith(
+            color: Colors.white,
+          ),
+        ),
       );
     }
 

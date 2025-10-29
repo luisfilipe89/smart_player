@@ -612,7 +612,82 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
         // Continue to fallback
       }
 
-      // Fallback: infer from games if slots node is empty
+      // Always verify slots against active games to filter out cancelled games
+      // This ensures stale slots from cancelled games don't show as occupied
+      try {
+        final gamesService = ref.read(gamesServiceProvider);
+        final myGames = await gamesService.getMyGames();
+        final joinable = await gamesService.getJoinableGames();
+        final all = <dynamic>[]
+          ..addAll(myGames)
+          ..addAll(joinable);
+
+        String sanitizeName(String s) => s
+            .toLowerCase()
+            .replaceAll(RegExp(r'[^a-z0-9]+'), '_')
+            .replaceAll(RegExp(r'_+'), '_')
+            .trim();
+
+        bool sameField(dynamic g) {
+          final gLat = (g.latitude);
+          final gLon = (g.longitude);
+          final hasCoords = gLat != null && gLon != null;
+          final gKey = hasCoords
+              ? '${gLat.toStringAsFixed(5).replaceAll('.', '_')}_${gLon.toStringAsFixed(5).replaceAll('.', '_')}'
+              : sanitizeName(g.location);
+          if (gKey == fieldKey) return true;
+          if (hasCoords &&
+              _selectedField?['latitude'] != null &&
+              _selectedField?['longitude'] != null) {
+            final sLat = (_selectedField?['latitude'] as num).toDouble();
+            final sLon = (_selectedField?['longitude'] as num).toDouble();
+            if ((gLat - sLat).abs() < 1e-5 && (gLon - sLon).abs() < 1e-5) {
+              return true;
+            }
+          }
+          return sanitizeName(g.location) ==
+              sanitizeName(_selectedField?['name']?.toString() ?? '');
+        }
+
+        // Build set of actual active game times for this date/field
+        final activeGameTimes = <String>{};
+        for (final g in all) {
+          // Skip cancelled games - they've freed their slots
+          if (!g.isActive) {
+            debugPrint(
+                '🔍 Verification skipping cancelled game ${g.id} at ${g.location}');
+            continue;
+          }
+          final gDateKey =
+              '${g.dateTime.year.toString().padLeft(4, '0')}-${g.dateTime.month.toString().padLeft(2, '0')}-${g.dateTime.day.toString().padLeft(2, '0')}';
+          if (gDateKey != dateKey) continue;
+          if (!sameField(g)) continue;
+          final hh = g.dateTime.hour.toString().padLeft(2, '0');
+          final mm = g.dateTime.minute.toString().padLeft(2, '0');
+          final timeStr = '$hh:$mm';
+          activeGameTimes.add(timeStr);
+          debugPrint(
+              '🔍 Verification found active game time: $timeStr from game ${g.id} at ${g.location}');
+        }
+
+        // Filter out slots that don't belong to active games
+        // Use active games as source of truth to avoid stale cancelled game slots
+        final removedTimes = times.difference(activeGameTimes);
+        if (removedTimes.isNotEmpty) {
+          debugPrint(
+              '🔍 Filtered out ${removedTimes.length} stale slots from cancelled games: $removedTimes');
+        }
+        // Use active games as the authoritative source (they already include Firebase slots if correct)
+        times.clear();
+        times.addAll(activeGameTimes);
+        debugPrint(
+            '🔍 After verification: ${times.length} valid booked times (from ${activeGameTimes.length} active games)');
+      } catch (e) {
+        debugPrint('🔍 Verification error: $e');
+        // If verification fails, fall back to original behavior
+      }
+
+      // Fallback: infer from games if slots node is empty (original logic preserved)
       if (times.isEmpty) {
         debugPrint('🔍 Slots empty, trying fallback from games...');
         try {
