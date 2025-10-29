@@ -653,6 +653,12 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
           }
 
           for (final g in all) {
+            // Skip cancelled games - they've freed their slots
+            if (!g.isActive) {
+              debugPrint(
+                  '🔍 Fallback skipping cancelled game ${g.id} at ${g.location}');
+              continue;
+            }
             final gDateKey =
                 '${g.dateTime.year.toString().padLeft(4, '0')}-${g.dateTime.month.toString().padLeft(2, '0')}-${g.dateTime.day.toString().padLeft(2, '0')}';
             if (gDateKey != dateKey) continue;
