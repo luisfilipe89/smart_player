@@ -24,11 +24,8 @@ class OverpassActions {
     required String sportType,
     bool bypassCache = false,
   }) async {
-    return await _overpassService.fetchFields(
-      areaName: areaName,
-      sportType: sportType,
-      bypassCache: bypassCache,
-    );
+    // Overpass disabled: return empty to ensure no network call even if referenced
+    return <Map<String, dynamic>>[];
   }
 
   Future<List<Map<String, dynamic>>> fetchMultipleFields({
@@ -36,10 +33,7 @@ class OverpassActions {
     required List<String> sportTypes,
     bool bypassCache = false,
   }) async {
-    return await _overpassService.fetchMultipleFields(
-      areaName: areaName,
-      sportTypes: sportTypes,
-      bypassCache: bypassCache,
-    );
+    // Overpass disabled
+    return <Map<String, dynamic>>[];
   }
 }

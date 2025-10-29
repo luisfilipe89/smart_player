@@ -111,6 +111,7 @@ flutter:
     - assets/images/
     - assets/events/
     - assets/translations/
+    - assets/fields/
   fonts:
     - family: Poppins
       fonts:

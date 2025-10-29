@@ -8,7 +8,7 @@ import 'package:move_young/services/auth/auth_provider.dart';
 import 'package:move_young/services/games/games_provider.dart';
 import 'package:move_young/services/games/cloud_games_provider.dart';
 import 'package:move_young/services/external/weather_provider.dart';
-import 'package:move_young/services/external/overpass_provider.dart';
+import 'package:move_young/services/fields/fields_provider.dart';
 import 'package:move_young/services/system/haptics_provider.dart';
 import 'package:move_young/widgets/friends/friend_picker_widget.dart';
 import 'package:move_young/screens/main_scaffold.dart';
@@ -220,13 +220,13 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
     }
 
     try {
-      final overpassActions = ref.read(overpassActionsProvider);
+      final fieldsActions = ref.read(fieldsActionsProvider);
 
       // Only support soccer and basketball and keep 's-Hertogenbosch'
       final sportType =
           _selectedSport == 'basketball' ? 'basketball' : 'soccer';
 
-      final rawFields = await overpassActions.fetchFields(
+      final rawFields = await fieldsActions.fetchFields(
         areaName: 's-Hertogenbosch',
         sportType: sportType,
         bypassCache: true, // Force fresh fetch to debug
@@ -248,6 +248,7 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
             final lon = f['lon'] ?? f['longitude'];
             final lit = f['lit'] ?? f['lighting'];
             return {
+              'id': f['id'],
               'name': name,
               'address': address,
               'latitude': lat,
@@ -434,10 +435,12 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
 
         if (newInvites.isNotEmpty) {
           try {
-            // Note: invitePlayers method not found in provider, may need to implement
-            // await ref.read(cloudGamesActionsProvider).invitePlayers(...);
-          } catch (_) {
-            // Silent fail for invites - game update succeeded
+            await ref
+                .read(cloudGamesActionsProvider)
+                .sendGameInvitesToFriends(current.id, newInvites);
+          } catch (e) {
+            // Log error but don't fail game update
+            debugPrint('Failed to send game invites: $e');
           }
         }
       }
@@ -487,7 +490,12 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
   }
 
   Future<void> _loadBookedSlots() async {
-    if (_selectedField == null || _selectedDate == null) return;
+    debugPrint('🔍 _loadBookedSlots() called');
+    if (_selectedField == null || _selectedDate == null) {
+      debugPrint(
+          '🔍 _loadBookedSlots() early return: field=${_selectedField?.toString()}, date=${_selectedDate?.toString()}');
+      return;
+    }
     try {
       // Compute dateKey = yyyy-MM-dd
       final d = _selectedDate!;
@@ -518,28 +526,108 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
       }
 
       final db = ref.read(firebaseDatabaseProvider);
-      final snapshot = await db.ref('slots/$dateKey/$fieldKey').get();
+      final path = 'slots/$dateKey/$fieldKey';
+      debugPrint(
+          '🔍 Loading booked slots: dateKey=$dateKey, fieldKey=$fieldKey, path=$path');
+      debugPrint(
+          '🔍 Selected field: ${_selectedField?['name']}, id=${_selectedField?['id']}, lat=${_selectedField?['latitude']}, lon=${_selectedField?['longitude']}');
 
       final times = <String>{};
-      if (snapshot.exists && snapshot.value is Map) {
-        final map = Map<dynamic, dynamic>.from(snapshot.value as Map);
-        for (final k in map.keys) {
-          var t = k.toString();
-          // Convert compact HHmm to UI format HH:mm
-          if (t.length == 4) {
-            t = '${t.substring(0, 2)}:${t.substring(2)}';
+      try {
+        final snapshot = await db.ref(path).get();
+
+        if (snapshot.exists && snapshot.value is Map) {
+          final map = Map<dynamic, dynamic>.from(snapshot.value as Map);
+          debugPrint('🔍 Found ${map.keys.length} booked slots in Firebase');
+          for (final k in map.keys) {
+            var t = k.toString();
+            if (t.length == 4) {
+              t = '${t.substring(0, 2)}:${t.substring(2)}';
+            }
+            final normalizedTime = t.trim();
+            times.add(normalizedTime);
+            debugPrint(
+                '🔍 Found booked time: $normalizedTime (raw: ${k.toString()})');
           }
-          times.add(t);
+        } else {
+          debugPrint(
+              '🔍 No slots found at path: $path (exists=${snapshot.exists})');
+        }
+      } catch (e) {
+        debugPrint(
+            '🔍 Firebase slots read failed (may be permission denied): $e');
+        // Continue to fallback
+      }
+
+      // Fallback: infer from games if slots node is empty
+      if (times.isEmpty) {
+        debugPrint('🔍 Slots empty, trying fallback from games...');
+        try {
+          final gamesService = ref.read(gamesServiceProvider);
+          final myGames = await gamesService.getMyGames();
+          final joinable = await gamesService.getJoinableGames();
+          final all = <dynamic>[]
+            ..addAll(myGames)
+            ..addAll(joinable);
+          debugPrint(
+              '🔍 Checking ${all.length} games (${myGames.length} my, ${joinable.length} joinable)');
+
+          String sanitizeName(String s) => s
+              .toLowerCase()
+              .replaceAll(RegExp(r'[^a-z0-9]+'), '_')
+              .replaceAll(RegExp(r'_+'), '_')
+              .trim();
+
+          bool sameField(dynamic g) {
+            final gLat = (g.latitude);
+            final gLon = (g.longitude);
+            final hasCoords = gLat != null && gLon != null;
+            final gKey = hasCoords
+                ? '${gLat.toStringAsFixed(5).replaceAll('.', '_')}_${gLon.toStringAsFixed(5).replaceAll('.', '_')}'
+                : sanitizeName(g.location);
+            if (gKey == fieldKey) return true;
+            if (hasCoords &&
+                _selectedField?['latitude'] != null &&
+                _selectedField?['longitude'] != null) {
+              final sLat = (_selectedField?['latitude'] as num).toDouble();
+              final sLon = (_selectedField?['longitude'] as num).toDouble();
+              if ((gLat - sLat).abs() < 1e-5 && (gLon - sLon).abs() < 1e-5) {
+                return true;
+              }
+            }
+            return sanitizeName(g.location) ==
+                sanitizeName(_selectedField?['name']?.toString() ?? '');
+          }
+
+          for (final g in all) {
+            final gDateKey =
+                '${g.dateTime.year.toString().padLeft(4, '0')}-${g.dateTime.month.toString().padLeft(2, '0')}-${g.dateTime.day.toString().padLeft(2, '0')}';
+            if (gDateKey != dateKey) continue;
+            if (!sameField(g)) continue;
+            final hh = g.dateTime.hour.toString().padLeft(2, '0');
+            final mm = g.dateTime.minute.toString().padLeft(2, '0');
+            final timeStr = '$hh:$mm';
+            times.add(timeStr);
+            debugPrint(
+                '🔍 Fallback found booked time: $timeStr from game ${g.id} at ${g.location}');
+          }
+          debugPrint('🔍 Fallback found ${times.length} booked times total');
+        } catch (e) {
+          debugPrint('🔍 Fallback error: $e');
         }
       }
       if (mounted) {
+        debugPrint('🔍 Setting _bookedTimes to: ${times.toList()}');
         setState(() {
           _bookedTimes
             ..clear()
             ..addAll(times);
         });
+        debugPrint('🔍 _bookedTimes after setState: ${_bookedTimes.toList()}');
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('🔍 Error loading booked slots: $e');
+    }
   }
 
   // Localized day of week and month abbreviations
@@ -677,10 +765,11 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
         // Send in-app invites to selected friends (if signed in)
         if (_selectedFriendUids.isNotEmpty) {
           try {
-            // invitePlayers would need to be implemented in cloudGamesActionsProvider
-            // await ref.read(cloudGamesActionsProvider).invitePlayers(...);
+            await ref.read(cloudGamesActionsProvider).sendGameInvitesToFriends(
+                createdId, _selectedFriendUids.toList());
           } catch (e) {
-            // Silent fail for invites
+            // Log error but don't fail game creation
+            debugPrint('Failed to send game invites: $e');
           }
         }
 
@@ -881,6 +970,7 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
   Widget _buildWeatherTimeCard({
     required String time,
     required bool isSelected,
+    bool isDisabled = false,
     required bool hasWeatherData,
     required String? weatherCondition,
     required IconData? weatherIcon,
@@ -894,20 +984,27 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
         borderRadius: BorderRadius.circular(AppRadius.smallCard),
         color: isSelected
             ? AppColors.blue.withValues(alpha: 0.06)
-            : AppColors.white,
+            : (isDisabled
+                ? AppColors.lightgrey.withValues(alpha: 0.18)
+                : AppColors.white),
         border: isSelected
             ? Border.all(color: AppColors.blue, width: 2)
-            : Border.all(
-                color: AppColors.grey.withValues(alpha: 0.3),
-                width: 1,
-              ),
+            : (isDisabled
+                ? Border.all(
+                    color: AppColors.grey.withValues(alpha: 0.5),
+                    width: 1,
+                  )
+                : Border.all(
+                    color: AppColors.grey.withValues(alpha: 0.3),
+                    width: 1,
+                  )),
       ),
       child: Material(
         color: Colors.transparent,
         borderRadius: BorderRadius.circular(AppRadius.smallCard),
         child: InkWell(
           borderRadius: BorderRadius.circular(AppRadius.smallCard),
-          onTap: onTap,
+          onTap: isDisabled ? null : onTap,
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
             child: Column(
@@ -918,14 +1015,16 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                   width: 24,
                   height: 24,
                   decoration: BoxDecoration(
-                    color: hasWeatherData && weatherIcon != null
-                        ? (weatherColor?.withValues(alpha: 0.15) ??
-                            AppColors.lightgrey.withValues(alpha: 0.15))
-                        : AppColors.lightgrey.withValues(alpha: 0.15),
+                    color: isDisabled
+                        ? AppColors.lightgrey.withValues(alpha: 0.25)
+                        : (hasWeatherData && weatherIcon != null
+                            ? (weatherColor?.withValues(alpha: 0.15) ??
+                                AppColors.lightgrey.withValues(alpha: 0.15))
+                            : AppColors.lightgrey.withValues(alpha: 0.15)),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Center(
-                    child: hasWeatherData && weatherIcon != null
+                    child: hasWeatherData && weatherIcon != null && !isDisabled
                         ? Icon(
                             weatherIcon,
                             color: weatherColor ?? AppColors.grey,
@@ -945,7 +1044,9 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                 Text(
                   time,
                   style: AppTextStyles.smallCardTitle.copyWith(
-                    color: isSelected ? AppColors.blue : AppColors.blackText,
+                    color: isDisabled
+                        ? AppColors.grey
+                        : (isSelected ? AppColors.blue : AppColors.blackText),
                     fontSize: 14, // Reduced font size
                     fontWeight: FontWeight.w600,
                   ),
@@ -1484,6 +1585,10 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                                                 _selectedTime == time;
                                             final isBooked =
                                                 _bookedTimes.contains(time);
+                                            if (index == 0) {
+                                              debugPrint(
+                                                  '🔍 UI: First time slot check - time=$time, isBooked=$isBooked, _bookedTimes=${_bookedTimes.toList()}');
+                                            }
                                             // Only show weather if data is available
                                             final hasWeatherData =
                                                 _weatherData.isNotEmpty;
@@ -1522,14 +1627,13 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                                                 child: _buildWeatherTimeCard(
                                                   time: time,
                                                   isSelected: isSelected,
+                                                  isDisabled: isBooked,
                                                   hasWeatherData:
                                                       hasWeatherData,
                                                   weatherCondition:
                                                       weatherCondition,
                                                   weatherIcon: weatherIcon,
-                                                  weatherColor: isBooked
-                                                      ? AppColors.lightgrey
-                                                      : weatherColor,
+                                                  weatherColor: weatherColor,
                                                   onTap: () {
                                                     if (isBooked) {
                                                       ScaffoldMessenger.of(

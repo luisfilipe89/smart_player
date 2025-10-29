@@ -34,11 +34,11 @@ class _HomeScreenNewState extends ConsumerState<HomeScreenNew> {
   _LoadState _state = _LoadState.idle;
   int _pendingInvites = 0;
   StreamSubscription<int>? _invitesSub;
+  bool _didInit = false;
 
   @override
   void initState() {
     super.initState();
-    _fetch();
     _refreshInvites();
     // Watch real-time pending invites count
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -48,6 +48,15 @@ class _HomeScreenNewState extends ConsumerState<HomeScreenNew> {
       precacheImage(
           const AssetImage('assets/images/general_public.jpg'), context);
     });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_didInit) {
+      _didInit = true;
+      _fetch();
+    }
   }
 
   @override

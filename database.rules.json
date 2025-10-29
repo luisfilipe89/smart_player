@@ -38,10 +38,11 @@
         "slots": {
             "$date": {
                 "$field": {
+                    ".read": "auth != null",
                     "$hhmm": {
                         ".read": "auth != null",
-                        ".write": "auth != null && ((newData.val() === true && !data.exists()) || newData.val() == null)",
-                        ".validate": "(newData.val() == null) || (newData.isBoolean() && newData.val() === true && !data.exists())"
+                        ".write": "auth != null && (!data.exists() || newData.val() == null)",
+                        ".validate": "newData.val() === true || newData.val() == null"
                     }
                 }
             }

@@ -743,19 +743,63 @@ class CloudGamesServiceInstance {
   }
 
   // Send game invites to friends
-  // This will be implemented when we add friend invites functionality
-  // For now, we'll just log it
   Future<void> sendGameInvitesToFriends(
       String gameId, List<String> friendUids) async {
     try {
-      for (final friendUid in friendUids) {
-        await _notificationService.sendGameInviteNotification(
-            friendUid, gameId);
+      if (friendUids.isEmpty) return;
+
+      final userId = _currentUserId;
+      if (userId == null) {
+        throw AuthException('User not authenticated');
       }
+
+      // Get game details to include in invites
+      final game = await getGameById(gameId);
+      if (game == null) {
+        throw NotFoundException('Game not found: $gameId');
+      }
+
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final inviteDateString = game.dateTime.toIso8601String();
+
+      // Prepare atomic multi-path update for all invites
+      final Map<String, Object?> updates = {};
+
+      for (final friendUid in friendUids) {
+        // Write to games/{gameId}/invites/{uid}: {status: 'pending'}
+        updates['${DbPaths.games}/$gameId/invites/$friendUid'] = {
+          'status': 'pending',
+        };
+
+        // Write to users/{uid}/gameInvites/{gameId}: {status, ts, organizerId, sport, date}
+        updates['users/$friendUid/gameInvites/$gameId'] = {
+          'status': 'pending',
+          'ts': timestamp,
+          'organizerId': game.organizerId,
+          'sport': game.sport,
+          'date': inviteDateString,
+        };
+      }
+
+      // Atomic commit all invites
+      await _database.ref().update(updates);
+
+      // Send notifications after successfully writing to DB
+      for (final friendUid in friendUids) {
+        try {
+          await _notificationService.sendGameInviteNotification(
+              friendUid, gameId);
+        } catch (e) {
+          // Log notification errors but don't fail the entire operation
+          NumberedLogger.w('Failed to send notification to $friendUid: $e');
+        }
+      }
+
       NumberedLogger.i(
           'Game invites sent to ${friendUids.length} friends for game $gameId');
     } catch (e) {
       NumberedLogger.e('Error sending game invites: $e');
+      rethrow;
     }
   }
 

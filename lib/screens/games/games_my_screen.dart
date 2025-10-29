@@ -499,6 +499,8 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
             ?.where((g) => ref.read(currentUserIdProvider) == g.organizerId)
             .toList() ??
         [];
+    // Sort organized games by upcoming time (earliest first)
+    createdGames.sort((a, b) => a.dateTime.compareTo(b.dateTime));
 
     return Scaffold(
       appBar: AppBar(

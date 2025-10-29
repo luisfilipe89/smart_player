@@ -85,6 +85,7 @@
     "favorites": "Favorites",
     "favorites_coming_soon": "Favorites coming soon!",
     "failed_events": "Failed to load events",
+    "events_load_failed": "Failed to load events.",
     "failed_location": "Failed to get your location.",
     "location_services_disabled": "Location services are disabled. Please turn them on.",
     "find_location_exercise": "Find location for your exercise",

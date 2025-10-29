@@ -30,12 +30,21 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
   bool _showRecurring = true;
   bool _showOneTime = true;
   Timer? _debounce;
+  bool _didInit = false;
 
   @override
   void initState() {
     super.initState();
-    loadEvents();
-    _loadFavorites();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_didInit) {
+      _didInit = true;
+      loadEvents();
+      _loadFavorites();
+    }
   }
 
   @override

@@ -7,7 +7,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:move_young/services/cache/favorites_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:move_young/services/external/overpass_provider.dart';
+import 'package:move_young/services/fields/fields_provider.dart';
 import 'package:move_young/screens/maps/gmaps_screen.dart';
 import 'package:move_young/widgets/navigation/reverse_geocoding.dart';
 import 'package:move_young/widgets/sports/sport_field_card.dart';
@@ -127,8 +127,8 @@ class _GenericSportScreenState extends ConsumerState<GenericSportScreen>
           .getCurrentPosition(accuracy: LocationAccuracy.best);
       _userPosition = pos;
 
-      final overpassActions = ref.read(overpassActionsProvider);
-      final locations = await overpassActions
+      final fieldsActions = ref.read(fieldsActionsProvider);
+      final locations = await fieldsActions
           .fetchFields(
             areaName: 's-Hertogenbosch',
             sportType: widget.sportType,
