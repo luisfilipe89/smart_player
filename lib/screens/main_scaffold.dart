@@ -12,7 +12,6 @@ import 'package:move_young/widgets/common/offline_banner.dart';
 import 'package:move_young/widgets/common/sync_status_indicator.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:move_young/routes/route_registry.dart';
-import 'package:animations/animations.dart';
 import 'package:move_young/services/system/haptics_provider.dart';
 import 'package:move_young/widgets/navigation/navigation_utils.dart';
 
@@ -273,35 +272,25 @@ class MainScaffoldState extends ConsumerState<MainScaffold> {
               valueListenable: _currentIndexNotifier,
               builder: (context, currentIndex, child) {
                 return Scaffold(
-                  body: PageTransitionSwitcher(
-                    duration: const Duration(milliseconds: 250),
-                    transitionBuilder: (child, animation, secondaryAnimation) {
-                      return FadeThroughTransition(
-                        animation: animation,
-                        secondaryAnimation: secondaryAnimation,
-                        child: child,
-                      );
-                    },
-                    child: KeyedSubtree(
-                      key: ValueKey(currentIndex),
-                      child: IndexedStack(
-                        index: currentIndex,
-                        children: <Widget>[
-                          HeroMode(
-                              enabled: currentIndex == kTabHome,
-                              child: _HomeFlow(navigatorKey: _homeKey)),
-                          HeroMode(
-                              enabled: currentIndex == kTabFriends,
-                              child: _FriendsFlow(navigatorKey: _friendsKey)),
-                          HeroMode(
-                              enabled: currentIndex == kTabJoin,
-                              child: _MyGamesFlow(
-                                  navigatorKey: _joinKey, args: _myGamesArgs)),
-                          HeroMode(
-                              enabled: currentIndex == kTabAgenda,
-                              child: _AgendaFlow(navigatorKey: _agendaKey)),
-                        ],
-                      ),
+                  body: KeyedSubtree(
+                    key: ValueKey(currentIndex),
+                    child: IndexedStack(
+                      index: currentIndex,
+                      children: <Widget>[
+                        HeroMode(
+                            enabled: currentIndex == kTabHome,
+                            child: _HomeFlow(navigatorKey: _homeKey)),
+                        HeroMode(
+                            enabled: currentIndex == kTabFriends,
+                            child: _FriendsFlow(navigatorKey: _friendsKey)),
+                        HeroMode(
+                            enabled: currentIndex == kTabJoin,
+                            child: _MyGamesFlow(
+                                navigatorKey: _joinKey, args: _myGamesArgs)),
+                        HeroMode(
+                            enabled: currentIndex == kTabAgenda,
+                            child: _AgendaFlow(navigatorKey: _agendaKey)),
+                      ],
                     ),
                   ),
                   bottomNavigationBar: SafeArea(

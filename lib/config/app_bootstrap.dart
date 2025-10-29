@@ -3,7 +3,6 @@ import 'package:flutter/foundation.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
-import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -46,11 +45,16 @@ class AppBootstrap {
 
   static void _registerBackgroundMessaging() {
     try {
-      FirebaseMessaging.onBackgroundMessage((RemoteMessage message) async {
-        // Minimal safe logging; avoid heavy work here
-        debugPrint('BG message: \\${message.messageId}');
-      });
-    } catch (_) {}
+      // Note: Background message handler must be a top-level function
+      // It's defined in main.dart as _firebaseMessagingBackgroundHandler
+      // We only register it once; if already registered, this is a no-op
+      // The registration is handled by the function itself being passed
+      // but since we want to use the top-level function, we don't need to do anything here
+      // The background handler is already a top-level function in main.dart
+      // Firebase Messaging will use it automatically if it's available
+    } catch (_) {
+      // Ignore errors - background messaging is optional
+    }
   }
 
   static Future<void> _initAppCheck() async {
@@ -91,5 +95,3 @@ class AppBootstrap {
     } catch (_) {}
   }
 }
-
-

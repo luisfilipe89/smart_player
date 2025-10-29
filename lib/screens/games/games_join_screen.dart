@@ -23,12 +23,10 @@ class GamesJoinScreen extends ConsumerStatefulWidget {
 
 class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
   List<Game> _games = [];
-  List<Game> _invitedGames = [];
   bool _isLoading = true;
   String _selectedSport = 'all';
   String _searchQuery = '';
   late final TextEditingController _searchController;
-  DateTime? _lastRefreshTime;
   static const String _adminEmail = 'luisfccfigueiredo@gmail.com';
   final ScrollController _listController = ScrollController();
   final Map<String, GlobalKey> _itemKeys = {};
@@ -50,24 +48,7 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
     _searchController = TextEditingController(text: _searchQuery);
     _highlightId = widget.highlightGameId;
     _loadGames();
-    _loadInvitedGames();
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    // Refresh invited games when screen becomes visible (throttled to once per second)
-    final now = DateTime.now();
-    if (_lastRefreshTime == null ||
-        now.difference(_lastRefreshTime!).inSeconds >= 1) {
-      _lastRefreshTime = now;
-      // Invalidate cache and reload fresh data when screen becomes visible
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          _refreshInvitedGames();
-        }
-      });
-    }
+    // Invited games now come from stream provider, no need to load manually
   }
 
   // Try a few times to ensure the list is built before scrolling
@@ -102,6 +83,7 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
   }
 
   Future<void> _loadGames() async {
+    if (!mounted) return;
     setState(() {
       _isLoading = true;
     });
@@ -131,6 +113,7 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
         games = games.where((g) => !g.players.contains(myUid)).toList();
       }
 
+      if (!mounted) return;
       setState(() {
         _games = games;
         _isLoading = false;
@@ -141,9 +124,11 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
         _scrollToHighlightedGame();
       }
     } catch (e) {
-      setState(() {
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -175,43 +160,7 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
     );
   }
 
-  Future<void> _loadInvitedGames() async {
-    try {
-      final cloudGamesService = ref.read(cloudGamesServiceProvider);
-      // Force refresh by bypassing cache with a very short TTL (essentially force fresh)
-      final invited = await cloudGamesService.getInvitedGamesForCurrentUser(
-          ttl: const Duration(seconds: 0));
-      if (!mounted) return;
-      // Exclude if already joined (defensive)
-      final String? myUid = ref.read(currentUserIdProvider);
-      final filtered = myUid == null
-          ? invited
-          : invited.where((g) => !g.players.contains(myUid)).toList();
-
-      debugPrint(
-          '📩 Loaded ${filtered.length} invited games: ${filtered.map((g) => g.id).join(', ')}');
-
-      setState(() {
-        _invitedGames = filtered;
-      });
-    } catch (e) {
-      debugPrint('❌ Error loading invited games: $e');
-    }
-  }
-
-  Future<void> _refreshInvitedGames() async {
-    try {
-      // Invalidate cache first to ensure fresh data
-      final cloudGamesService = ref.read(cloudGamesServiceProvider);
-      cloudGamesService.invalidateAllCache();
-      debugPrint('🔄 Invalidated cache, refreshing invited games...');
-
-      // Then reload with fresh data
-      await _loadInvitedGames();
-    } catch (e) {
-      debugPrint('❌ Error refreshing invited games: $e');
-    }
-  }
+  // Invited games now come from stream provider - no manual loading needed
 
   Future<void> _joinGame(Game game) async {
     try {
@@ -233,11 +182,13 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
         // Optimistically remove from lists so it disappears immediately
         setState(() {
           _games.removeWhere((g) => g.id == game.id);
-          _invitedGames.removeWhere((g) => g.id == game.id);
         });
         _showJoinedSnack();
       }
-      _loadGames(); // Refresh the list (defensive)
+      if (mounted) {
+        await _loadGames(); // Refresh the list (defensive)
+      }
+      // Invited games will update automatically via stream provider
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -316,8 +267,35 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
   }
 
   Widget _buildGameCard(Game game) {
-    final bool isHighlighted = game.id == _highlightId;
-    final bool isInvited = _invitedGames.any((g) => g.id == game.id);
+    // Watch this specific game for real-time updates (when organizer edits)
+    final gameStream = ref.watch(gameByIdProvider(game.id));
+    // Watch invited games stream for real-time updates
+    final invitedGamesAsync = ref.watch(invitedGamesProvider);
+
+    final invitedGames = invitedGamesAsync.valueOrNull ?? [];
+    final String? myUid = ref.read(currentUserIdProvider);
+    final filteredInvited = myUid == null
+        ? invitedGames
+        : invitedGames.where((g) => !g.players.contains(myUid)).toList();
+
+    // Get the most up-to-date game: use the version from invitedGames stream if available
+    // (it has real-time updates including cancellations), otherwise use gameById stream,
+    // finally fall back to the passed parameter
+    final Game? gameFromInvitedStream =
+        filteredInvited.where((g) => g.id == game.id).firstOrNull;
+
+    final Game currentGame;
+    if (gameFromInvitedStream != null) {
+      // Use the game from invitedGames stream (most up-to-date, includes cancellation status)
+      currentGame = gameFromInvitedStream;
+    } else {
+      // Not an invited game, use gameById stream or fallback
+      currentGame = gameStream.valueOrNull ?? game;
+    }
+
+    final bool isHighlighted = currentGame.id == _highlightId;
+    final bool isInvited = filteredInvited.any((g) => g.id == currentGame.id);
+
     return Card(
       margin: const EdgeInsets.only(bottom: AppHeights.reg),
       elevation: 0,
@@ -401,18 +379,18 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
                 Row(
                   children: [
                     Hero(
-                      tag: 'game-${game.id}-icon',
+                      tag: 'game-${currentGame.id}-icon',
                       child: Container(
                         padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
-                          color:
-                              _getSportColor(game.sport).withValues(alpha: 0.1),
+                          color: _getSportColor(currentGame.sport)
+                              .withValues(alpha: 0.1),
                           borderRadius:
                               BorderRadius.circular(AppRadius.smallCard),
                         ),
                         child: Icon(
-                          _getSportIcon(game.sport),
-                          color: _getSportColor(game.sport),
+                          _getSportIcon(currentGame.sport),
+                          color: _getSportColor(currentGame.sport),
                           size: 24,
                         ),
                       ),
@@ -422,19 +400,75 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            game.sport.toUpperCase(),
-                            style: AppTextStyles.smallCardTitle.copyWith(
-                              color: _getSportColor(game.sport),
-                              fontWeight: FontWeight.bold,
-                            ),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  currentGame.sport.toUpperCase(),
+                                  style: AppTextStyles.smallCardTitle.copyWith(
+                                    color: _getSportColor(currentGame.sport),
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                              // Show "Cancelled" (red) or "Modified" (orange) badge
+                              if (!currentGame.isActive)
+                                Container(
+                                  margin: const EdgeInsets.only(left: 4),
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: Colors.red.withValues(alpha: 0.1),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.cancel,
+                                          size: 10, color: Colors.red.shade800),
+                                      const SizedBox(width: 2),
+                                      Text('Cancelled',
+                                          style: AppTextStyles.superSmall
+                                              .copyWith(
+                                                  color: Colors.red.shade800,
+                                                  fontWeight: FontWeight.bold)),
+                                    ],
+                                  ),
+                                )
+                              else if (currentGame.updatedAt != null &&
+                                  currentGame.updatedAt!
+                                      .isAfter(currentGame.createdAt))
+                                Container(
+                                  margin: const EdgeInsets.only(left: 4),
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: Colors.orange.withValues(alpha: 0.1),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.edit,
+                                          size: 10,
+                                          color: Colors.orange.shade800),
+                                      const SizedBox(width: 2),
+                                      Text('Modified',
+                                          style: AppTextStyles.superSmall
+                                              .copyWith(
+                                                  color: Colors.orange.shade800,
+                                                  fontWeight: FontWeight.bold)),
+                                    ],
+                                  ),
+                                ),
+                            ],
                           ),
                           Text(
-                            game.location,
+                            currentGame.location,
                             style: AppTextStyles.cardTitle,
                           ),
                           Text(
-                            '${game.formattedDate} at ${game.formattedTime}',
+                            '${currentGame.formattedDate} at ${currentGame.formattedTime}',
                             style: AppTextStyles.body.copyWith(
                               color: AppColors.grey,
                             ),
@@ -448,7 +482,7 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
                         vertical: 4,
                       ),
                       decoration: BoxDecoration(
-                        color: game.hasSpace
+                        color: currentGame.hasSpace
                             ? AppColors.green.withValues(alpha: 0.1)
                             : AppColors.red.withValues(alpha: 0.1),
                         borderRadius:
@@ -458,16 +492,17 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Icon(
-                            game.isPublic ? Icons.lock_open : Icons.lock,
+                            currentGame.isPublic ? Icons.lock_open : Icons.lock,
                             size: 14,
-                            color:
-                                game.hasSpace ? AppColors.green : AppColors.red,
+                            color: currentGame.hasSpace
+                                ? AppColors.green
+                                : AppColors.red,
                           ),
                           const SizedBox(width: 4),
                           Text(
-                            '${game.currentPlayers}/${game.maxPlayers}',
+                            '${currentGame.currentPlayers}/${currentGame.maxPlayers}',
                             style: AppTextStyles.small.copyWith(
-                              color: game.hasSpace
+                              color: currentGame.hasSpace
                                   ? AppColors.green
                                   : AppColors.red,
                               fontWeight: FontWeight.bold,
@@ -480,9 +515,9 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
                   ],
                 ),
                 const SizedBox(height: AppHeights.reg),
-                if (game.description.isNotEmpty) ...[
+                if (currentGame.description.isNotEmpty) ...[
                   Text(
-                    game.description,
+                    currentGame.description,
                     style: AppTextStyles.body,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
@@ -499,13 +534,13 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
                     const SizedBox(width: 4),
                     Expanded(
                       child: Text(
-                        (_invitedGames.any((g) => g.id == game.id))
-                            ? 'Invited by ${game.organizerName}'
+                        isInvited
+                            ? 'Invited by ${currentGame.organizerName}'
                             : (ref.read(currentUserIdProvider) != null &&
                                     ref.read(currentUserIdProvider) ==
-                                        game.organizerId)
+                                        currentGame.organizerId)
                                 ? 'Organized by me'
-                                : 'Organized by ${game.organizerName}',
+                                : 'Organized by ${currentGame.organizerName}',
                         style: AppTextStyles.small.copyWith(
                           color: AppColors.grey,
                         ),
@@ -514,7 +549,8 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
                     ),
                     const SizedBox(width: AppWidths.regular),
                     if (ref.read(currentUserIdProvider) != null &&
-                        ref.read(currentUserIdProvider) == game.organizerId)
+                        ref.read(currentUserIdProvider) ==
+                            currentGame.organizerId)
                       TextButton.icon(
                         style: TextButton.styleFrom(
                           padding: const EdgeInsets.symmetric(
@@ -526,7 +562,7 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
                           ref.read(hapticsActionsProvider)?.selectionClick();
                           Navigator.of(context).pushNamed(
                             '/organize-game',
-                            arguments: game,
+                            arguments: currentGame,
                           );
                         },
                         icon: const Icon(Icons.edit, size: 16),
@@ -537,7 +573,7 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
                 const SizedBox(height: AppHeights.reg),
                 SizedBox(
                   width: double.infinity,
-                  child: _buildGameActions(game),
+                  child: _buildGameActions(currentGame),
                 ),
               ],
             ),
@@ -553,6 +589,22 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
         (currentUserId == game.organizerId ||
             (ref.read(currentUserProvider).valueOrNull?.email?.toLowerCase() ==
                 _adminEmail));
+
+    // If the game was cancelled, show a disabled red indicator
+    if (!game.isActive) {
+      return ElevatedButton(
+        onPressed: null,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: AppColors.red.withValues(alpha: 0.2),
+          foregroundColor: Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppRadius.card),
+          ),
+          elevation: 0,
+        ),
+        child: Text('Cancelled', style: AppTextStyles.cardTitle),
+      );
+    }
 
     if (isOwnerOrAdmin) {
       return ElevatedButton(
@@ -576,10 +628,15 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
 
     final String? myUid = ref.read(currentUserIdProvider);
     final bool isJoined = myUid != null && game.players.contains(myUid);
-    final bool isInvitedPending = _invitedGames.any((g) => g.id == game.id);
+    final invitedGamesAsync = ref.watch(invitedGamesProvider);
+    final invitedGames = invitedGamesAsync.valueOrNull ?? [];
+    final filteredInvited = myUid == null
+        ? invitedGames
+        : invitedGames.where((g) => !g.players.contains(myUid)).toList();
+    final bool isInvitedPending = filteredInvited.any((g) => g.id == game.id);
 
     debugPrint(
-        '🎮 Game ${game.id}: isInvitedPending=$isInvitedPending, isJoined=$isJoined, _invitedGames.length=${_invitedGames.length}');
+        '🎮 Game ${game.id}: isInvitedPending=$isInvitedPending, isJoined=$isJoined, invitedGames.length=${filteredInvited.length}');
 
     if (isInvitedPending && !isJoined) {
       return Row(
@@ -591,10 +648,6 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
                   await ref
                       .read(cloudGamesActionsProvider)
                       .acceptGameInvite(game.id);
-
-                  // Invalidate caches to ensure fresh data
-                  ref.read(cloudGamesServiceProvider).invalidateAllCache();
-                  ref.invalidate(myGamesProvider);
 
                   if (mounted) {
                     // Navigate to My Games > Joining tab and highlight the game
@@ -623,8 +676,10 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
                     );
                   }
                 }
-                await _loadInvitedGames();
-                await _loadGames();
+                if (mounted) {
+                  await _loadGames();
+                  // Invited games will update automatically via stream provider
+                }
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.green,
@@ -656,7 +711,7 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
                 } catch (e) {
                   // Silent fail
                 }
-                await _loadInvitedGames();
+                // Invited games will update automatically via stream provider
               },
               style: OutlinedButton.styleFrom(
                 foregroundColor: AppColors.red,
@@ -695,8 +750,10 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
               );
             }
           }
-          await _loadGames();
-          await _loadInvitedGames();
+          if (mounted) {
+            await _loadGames();
+          }
+          // Invited games will update automatically via stream provider
         },
         style: ElevatedButton.styleFrom(
           backgroundColor: AppColors.red,
@@ -829,71 +886,82 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
                   Expanded(
                     child: Padding(
                       padding: AppPaddings.symmHorizontalReg,
-                      child: _isLoading
-                          ? const _GamesSkeleton()
-                          : (_games.isEmpty && _invitedGames.isEmpty)
-                              ? Center(
-                                  child: Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      const Icon(Icons.sports_soccer,
-                                          size: 64, color: AppColors.grey),
-                                      const SizedBox(height: AppHeights.reg),
-                                      Text(
-                                        'no_games_found'.tr(),
-                                        style: AppTextStyles.title.copyWith(
-                                          color: AppColors.grey,
+                      child: Builder(builder: (context) {
+                        final invitedGamesAsync =
+                            ref.watch(invitedGamesProvider);
+                        final invitedGames =
+                            invitedGamesAsync.valueOrNull ?? [];
+                        final String? myUid = ref.read(currentUserIdProvider);
+                        final filteredInvited = myUid == null
+                            ? invitedGames
+                            : invitedGames
+                                .where((g) => !g.players.contains(myUid))
+                                .toList();
+
+                        return _isLoading
+                            ? const _GamesSkeleton()
+                            : (_games.isEmpty && filteredInvited.isEmpty)
+                                ? Center(
+                                    child: Column(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: [
+                                        const Icon(Icons.sports_soccer,
+                                            size: 64, color: AppColors.grey),
+                                        const SizedBox(height: AppHeights.reg),
+                                        Text(
+                                          'no_games_found'.tr(),
+                                          style: AppTextStyles.title.copyWith(
+                                            color: AppColors.grey,
+                                          ),
                                         ),
-                                      ),
-                                      const SizedBox(height: AppHeights.small),
-                                      Text(
-                                        'no_games_found_description'.tr(),
-                                        style: AppTextStyles.body.copyWith(
-                                          color: AppColors.grey,
+                                        const SizedBox(
+                                            height: AppHeights.small),
+                                        Text(
+                                          'no_games_found_description'.tr(),
+                                          style: AppTextStyles.body.copyWith(
+                                            color: AppColors.grey,
+                                          ),
+                                          textAlign: TextAlign.center,
                                         ),
-                                        textAlign: TextAlign.center,
-                                      ),
-                                    ],
-                                  ),
-                                )
-                              : RefreshIndicator(
-                                  onRefresh: () async {
-                                    // Invalidate cache and refresh both lists
-                                    ref
-                                        .read(cloudGamesServiceProvider)
-                                        .invalidateAllCache();
-                                    await _loadGames();
-                                    await _refreshInvitedGames();
-                                  },
-                                  child: Builder(builder: (context) {
-                                    // Merge lists with invited first, then sort non-invited games chronologically
-                                    final List<Game> nonInvited = _games
-                                        .where((g) => !_invitedGames
-                                            .any((i) => i.id == g.id))
-                                        .toList();
-                                    // Sort non-invited games by date (earliest first)
-                                    nonInvited.sort((a, b) =>
-                                        a.dateTime.compareTo(b.dateTime));
-                                    final List<Game> merged = [
-                                      ..._invitedGames,
-                                      ...nonInvited,
-                                    ];
-                                    return ListView.builder(
-                                      controller: _listController,
-                                      padding: EdgeInsets.zero,
-                                      itemCount: merged.length,
-                                      itemBuilder: (context, index) {
-                                        final game = merged[index];
-                                        final key = _itemKeys.putIfAbsent(
-                                            game.id, () => GlobalKey());
-                                        return KeyedSubtree(
-                                          key: key,
-                                          child: _buildGameCard(game),
-                                        );
-                                      },
-                                    );
-                                  }),
-                                ),
+                                      ],
+                                    ),
+                                  )
+                                : RefreshIndicator(
+                                    onRefresh: () async {
+                                      await _loadGames();
+                                      // Invited games will update automatically via stream provider
+                                    },
+                                    child: Builder(builder: (context) {
+                                      // Merge lists with invited first, then sort non-invited games chronologically
+                                      final List<Game> nonInvited = _games
+                                          .where((g) => !filteredInvited
+                                              .any((i) => i.id == g.id))
+                                          .toList();
+                                      // Sort non-invited games by date (earliest first)
+                                      nonInvited.sort((a, b) =>
+                                          a.dateTime.compareTo(b.dateTime));
+                                      final List<Game> merged = [
+                                        ...filteredInvited,
+                                        ...nonInvited,
+                                      ];
+                                      return ListView.builder(
+                                        controller: _listController,
+                                        padding: EdgeInsets.zero,
+                                        itemCount: merged.length,
+                                        itemBuilder: (context, index) {
+                                          final game = merged[index];
+                                          final key = _itemKeys.putIfAbsent(
+                                              game.id, () => GlobalKey());
+                                          return KeyedSubtree(
+                                            key: key,
+                                            child: _buildGameCard(game),
+                                          );
+                                        },
+                                      );
+                                    }),
+                                  );
+                      }),
                     ),
                   ),
                 ],

@@ -16,7 +16,6 @@ final cloudGamesServiceProvider = Provider<CloudGamesServiceInstance>((ref) {
     firebaseDatabase,
     firebaseAuth,
     notificationService,
-    gamesTtl: const Duration(minutes: 5),
   );
 });
 
@@ -61,4 +60,8 @@ class CloudGamesActions {
   Future<void> sendGameInvitesToFriends(
           String gameId, List<String> friendUids) =>
       _cloudGamesService.sendGameInvitesToFriends(gameId, friendUids);
+  Future<void> removeFromMyCreated(String gameId) =>
+      _cloudGamesService.removeFromMyCreated(gameId);
+  Future<void> removeFromMyJoined(String gameId) =>
+      _cloudGamesService.removeFromMyJoined(gameId);
 }

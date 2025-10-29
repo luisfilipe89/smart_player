@@ -14,31 +14,30 @@ final gamesServiceProvider = Provider<IGamesService>((ref) {
   return GamesServiceInstance(authService, cloudGamesService);
 });
 
-// My games provider (reactive)
-final myGamesProvider = FutureProvider.autoDispose<List<Game>>((ref) async {
-  final gamesService = ref.watch(gamesServiceProvider);
-  final list = await gamesService.getMyGames();
-  // Invalidate on auth/user change is handled via providers; explicit invalidation occurs on actions
-  return list;
-});
-
-// Joinable games provider (reactive)
-final joinableGamesProvider =
-    FutureProvider.autoDispose<List<Game>>((ref) async {
-  final gamesService = ref.watch(gamesServiceProvider);
-  final list = await gamesService.getJoinableGames();
-  return list;
-});
-
-// Invited games provider (reactive)
-final invitedGamesProvider =
-    FutureProvider.autoDispose<List<Game>>((ref) async {
+// My games provider (reactive) - using stream for real-time updates
+final myGamesProvider = StreamProvider.autoDispose<List<Game>>((ref) {
   final cloudGamesService = ref.watch(cloudGamesServiceProvider);
   final userId = ref.watch(currentUserIdProvider);
 
-  if (userId == null) return [];
+  if (userId == null) return Stream.value([]);
 
-  return await cloudGamesService.getInvitedGamesForCurrentUser();
+  return cloudGamesService.watchMyGames();
+});
+
+// Joinable games provider (reactive stream)
+final joinableGamesProvider = StreamProvider<List<Game>>((ref) {
+  final cloudGamesService = ref.watch(cloudGamesServiceProvider);
+  return cloudGamesService.watchJoinableGames();
+});
+
+// Invited games provider (reactive stream for real-time updates)
+final invitedGamesProvider = StreamProvider<List<Game>>((ref) {
+  final cloudGamesService = ref.watch(cloudGamesServiceProvider);
+  final userId = ref.watch(currentUserIdProvider);
+
+  if (userId == null) return Stream.value([]);
+
+  return cloudGamesService.watchInvitedGames();
 });
 
 // Pending invites count provider (reactive stream)
@@ -51,11 +50,18 @@ final pendingInvitesCountProvider = StreamProvider.autoDispose<int>((ref) {
   return cloudGamesService.watchPendingInvitesCount();
 });
 
-// Game by ID provider
+// Game by ID provider (stream for real-time updates)
 final gameByIdProvider =
-    FutureProvider.family.autoDispose<Game?, String>((ref, gameId) async {
-  final gamesService = ref.watch(gamesServiceProvider);
-  return await gamesService.getGameById(gameId);
+    StreamProvider.family.autoDispose<Game?, String>((ref, gameId) {
+  final cloudGamesService = ref.watch(cloudGamesServiceProvider);
+  return cloudGamesService.watchGame(gameId);
+});
+
+// Game invite statuses provider (stream for real-time updates)
+final gameInviteStatusesProvider = StreamProvider.family
+    .autoDispose<Map<String, String>, String>((ref, gameId) {
+  final cloudGamesService = ref.watch(cloudGamesServiceProvider);
+  return cloudGamesService.watchGameInviteStatuses(gameId);
 });
 
 // Helper class for games actions

@@ -31,7 +31,12 @@ void main() async {
       WidgetsFlutterBinding.ensureInitialized();
       NumberedLogger.install();
 
-      // Centralized bootstrap for Firebase, AppCheck, Crashlytics, and BG messaging
+      // Register background message handler BEFORE Firebase initialization
+      // This must be a top-level function and registered early
+      FirebaseMessaging.onBackgroundMessage(
+          _firebaseMessagingBackgroundHandler);
+
+      // Centralized bootstrap for Firebase, AppCheck, Crashlytics
       await AppBootstrap.initialize();
 
       // SharedPreferences will be initialized after first frame
@@ -137,6 +142,8 @@ class MoveYoungApp extends ConsumerStatefulWidget {
 class _MoveYoungAppState extends ConsumerState<MoveYoungApp>
     with WidgetsBindingObserver {
   bool _isInitialized = false;
+  bool _notificationServiceInitialized =
+      false; // Guard to prevent multiple notification initializations
   ProviderSubscription? _prefsSubscription;
 
   @override
@@ -225,15 +232,26 @@ class _MoveYoungAppState extends ConsumerState<MoveYoungApp>
           isHighContrast = false;
         }
 
-        // Initialize notifications with deep-link dispatcher once after init
-        WidgetsBinding.instance.addPostFrameCallback((_) async {
-          try {
-            final dispatcher = ref.read(deepLinkDispatcherProvider);
-            await ref
-                .read(notificationActionsProvider)
-                .initialize(onDeepLinkNavigation: dispatcher.dispatch);
-          } catch (_) {}
-        });
+        // Initialize notifications with deep-link dispatcher after app is fully loaded
+        // Defer significantly to avoid blocking UI during startup
+        // Permission requests will happen after user sees the app
+        // Only initialize once (build() can be called multiple times)
+        if (!_notificationServiceInitialized) {
+          _notificationServiceInitialized = true;
+          Future.delayed(const Duration(seconds: 2), () async {
+            if (!mounted) return;
+            try {
+              final dispatcher = ref.read(deepLinkDispatcherProvider);
+              // Initialize without blocking - permission requests are now non-blocking
+              unawaited(ref
+                  .read(notificationActionsProvider)
+                  .initialize(onDeepLinkNavigation: dispatcher.dispatch));
+            } catch (e) {
+              debugPrint(
+                  'Notification initialization error (non-critical): $e');
+            }
+          });
+        }
 
         return MaterialApp(
           navigatorKey: navigatorKey,

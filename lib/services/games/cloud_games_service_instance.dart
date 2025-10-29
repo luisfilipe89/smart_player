@@ -1,12 +1,11 @@
 // lib/services/cloud_games_service_instance.dart
+import 'dart:async';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:move_young/models/core/game.dart';
 import 'package:move_young/db/db_paths.dart';
 // import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:move_young/utils/logger.dart';
-import 'package:move_young/models/infrastructure/cached_data.dart';
-// Cache TTL configurable via constructor if needed
 import '../notifications/notification_interface.dart';
 import '../../utils/service_error.dart';
 import 'package:move_young/utils/crashlytics_helper.dart';
@@ -18,20 +17,13 @@ class CloudGamesServiceInstance {
   final FirebaseDatabase _database;
   final FirebaseAuth _auth;
   final INotificationService _notificationService;
-  final Duration _gamesTtl;
 
   // Query limits to prevent memory issues
   static const int _maxJoinableGames = 50;
   static const int _maxMyGames = 100;
 
   CloudGamesServiceInstance(
-      this._database, this._auth, this._notificationService,
-      {Duration? gamesTtl})
-      : _gamesTtl = gamesTtl ?? const Duration(minutes: 5);
-
-  // Cache for games data
-  final Map<String, CachedData<List<Game>>> _gameCache = {};
-  // default TTL retained for reference
+      this._database, this._auth, this._notificationService);
 
   // Database references
   DatabaseReference get _gamesRef => _database.ref(DbPaths.games);
@@ -91,20 +83,32 @@ class CloudGamesServiceInstance {
       final gameRef = _gamesRef.push();
       final gameId = gameRef.key!;
 
-      // Update game with the generated ID
-      final gameWithId = game.copyWith(id: gameId);
+      // Update game with the generated ID and initialize updatedAt to createdAt
+      final gameWithId = game.copyWith(
+        id: gameId,
+        updatedAt: game.createdAt,
+        updatedBy: userId,
+      );
 
       // Compute unique slot keys
       final dateKey = _dateKey(gameWithId.dateTime);
       final timeKey = _timeKey(gameWithId.dateTime);
       final fieldKey = _fieldKeyForGame(gameWithId);
 
+      // Prepare game data with slot keys for reliable cancellation
+      final gameData = gameWithId.toCloudJson();
+      final nowMs = DateTime.now().millisecondsSinceEpoch;
+      gameData['lastOrganizerEditAt'] = nowMs; // Track organizer edits
+      gameData['slotDate'] = dateKey;
+      gameData['slotField'] = fieldKey;
+      gameData['slotTime'] = timeKey;
+
       // Prepare atomic multi-path update:
       // - games/{id}
       // - users/{uid}/createdGames/{id}
       // - slots/{dateKey}/{fieldKey}/{timeKey} = true
       final Map<String, Object?> updates = {
-        '${DbPaths.games}/$gameId': gameWithId.toCloudJson(),
+        '${DbPaths.games}/$gameId': gameData,
         'users/$userId/createdGames/$gameId': {
           'sport': gameWithId.sport,
           'dateTime': gameWithId.dateTime.toIso8601String(),
@@ -164,6 +168,10 @@ class CloudGamesServiceInstance {
       final existing =
           Game.fromJson(Map<String, dynamic>.from(existingSnap.value as Map));
 
+      // Preserve isActive state - never resurrect cancelled games
+      final bool existingIsActive = existing.isActive;
+      final existingData = Map<String, dynamic>.from(existingSnap.value as Map);
+
       final oldDateKey = _dateKey(existing.dateTime);
       final oldTimeKey = _timeKey(existing.dateTime);
       final oldFieldKey = _fieldKeyForGame(existing);
@@ -172,21 +180,53 @@ class CloudGamesServiceInstance {
       final newTimeKey = _timeKey(game.dateTime);
       final newFieldKey = _fieldKeyForGame(game);
 
-      final Map<String, Object?> updates = {
-        '${DbPaths.games}/${game.id}': game.toCloudJson(),
-      };
+      // Ensure updatedAt and updatedBy are set, and preserve isActive state
+      final now = DateTime.now();
+      final gameToUpdate = game.copyWith(
+        updatedAt: now,
+        updatedBy: _currentUserId,
+        isActive: existingIsActive, // Never resurrect cancelled games
+      );
 
       final slotChanged = oldDateKey != newDateKey ||
           oldTimeKey != newTimeKey ||
           oldFieldKey != newFieldKey;
+
+      // Prepare game data with updated slot keys and lastOrganizerEditAt
+      final gameData = gameToUpdate.toCloudJson();
+      final nowMs = now.millisecondsSinceEpoch;
+      gameData['lastOrganizerEditAt'] = nowMs; // Track organizer edits
+
       if (slotChanged) {
-        // Free old slot and claim new slot
+        // Update slot keys in game data
+        gameData['slotDate'] = newDateKey;
+        gameData['slotField'] = newFieldKey;
+        gameData['slotTime'] = newTimeKey;
+      } else {
+        // Preserve existing slot keys if slot didn't change
+        if (existingData['slotDate'] != null) {
+          gameData['slotDate'] = existingData['slotDate'];
+        }
+        if (existingData['slotField'] != null) {
+          gameData['slotField'] = existingData['slotField'];
+        }
+        if (existingData['slotTime'] != null) {
+          gameData['slotTime'] = existingData['slotTime'];
+        }
+      }
+
+      final Map<String, Object?> updates = {
+        '${DbPaths.games}/${game.id}': gameData,
+      };
+
+      if (slotChanged) {
+        // Free old slot and claim new slot atomically
         updates['slots/$oldDateKey/$oldFieldKey/$oldTimeKey'] = null;
         updates['slots/$newDateKey/$newFieldKey/$newTimeKey'] = true;
       }
 
       await _database.ref().update(updates);
-      _clearCache();
+      // Streams will update automatically - no cache clearing needed
     } catch (e, st) {
       NumberedLogger.e('Error updating game: $e');
       CrashlyticsHelper.recordError(e, st, reason: 'game_update_fail');
@@ -198,7 +238,9 @@ class CloudGamesServiceInstance {
     }
   }
 
-  // Delete a game (also free its slot)
+  // Cancel a game (mark inactive) and free its slot
+  // Step 1: Cancel shows "Cancelled" to everyone and hides from Join screen
+  // Step 2: Each user can use Remove to hide it from their My Games
   Future<void> deleteGame(String gameId) async {
     try {
       final userId = _currentUserId;
@@ -209,28 +251,47 @@ class CloudGamesServiceInstance {
       // Load existing game for slot
       final existingSnap = await _gamesRef.child(gameId).get();
       if (!existingSnap.exists) {
-        // Nothing to delete
+        // Nothing to delete - just remove from user's createdGames index
         await _usersRef
             .child(DbPaths.userCreatedGames(userId))
             .child(gameId)
             .remove();
-        _clearCache();
+        // Streams will update automatically - no cache clearing needed
         return;
       }
-      final existing =
-          Game.fromJson(Map<String, dynamic>.from(existingSnap.value as Map));
-      final dateKey = _dateKey(existing.dateTime);
-      final timeKey = _timeKey(existing.dateTime);
-      final fieldKey = _fieldKeyForGame(existing);
+      final existingData = Map<String, dynamic>.from(existingSnap.value as Map);
+      final existing = Game.fromJson(existingData);
 
+      // Get slot keys from stored data (preferred) or compute from game
+      String? dateKey = existingData['slotDate']?.toString();
+      String? fieldKey = existingData['slotField']?.toString();
+      String? timeKey = existingData['slotTime']?.toString();
+
+      // Fallback to computing if not stored (legacy games)
+      dateKey ??= _dateKey(existing.dateTime);
+      timeKey ??= _timeKey(existing.dateTime);
+      fieldKey ??= _fieldKeyForGame(existing);
+
+      final now = DateTime.now();
+      final nowMs = now.millisecondsSinceEpoch;
+
+      // STEP 1: Mark game as inactive so it:
+      // - Shows "Cancelled" badge to everyone (invited users)
+      // - Hides from "Join a Game" screen (isActive=false filter)
+      // - Stays in My Games lists so users can see it was cancelled
+      // DO NOT remove from createdGames/joinedGames yet - let users decide when to remove
       final Map<String, Object?> updates = {
-        '${DbPaths.games}/$gameId': null,
-        'users/$userId/createdGames/$gameId': null,
+        // Mark game inactive instead of deleting so invitees see "Cancelled"
+        '${DbPaths.games}/$gameId/isActive': false,
+        '${DbPaths.games}/$gameId/updatedAt': nowMs,
+        '${DbPaths.games}/$gameId/updatedBy': userId,
+        '${DbPaths.games}/$gameId/canceledAt': nowMs,
+        // Free the slot
         'slots/$dateKey/$fieldKey/$timeKey': null,
       };
 
       await _database.ref().update(updates);
-      _clearCache();
+      // Streams will update automatically - no cache clearing needed
     } catch (e, st) {
       NumberedLogger.e('Error deleting game: $e');
       CrashlyticsHelper.recordError(e, st, reason: 'game_delete_fail');
@@ -238,19 +299,57 @@ class CloudGamesServiceInstance {
     }
   }
 
+  // Remove game from user's createdGames index (hides it from organizer view)
+  Future<void> removeFromMyCreated(String gameId) async {
+    try {
+      final userId = _currentUserId;
+      if (userId == null) {
+        throw AuthException('User not authenticated');
+      }
+
+      await _usersRef
+          .child(DbPaths.userCreatedGames(userId))
+          .child(gameId)
+          .remove();
+
+      // Streams will update automatically - no cache clearing needed
+    } catch (e, st) {
+      NumberedLogger.e('Error removing game from created: $e');
+      CrashlyticsHelper.recordError(e, st,
+          reason: 'game_remove_from_created_fail');
+      rethrow;
+    }
+  }
+
+  // Remove game from user's joinedGames index (hides it from joined games list)
+  Future<void> removeFromMyJoined(String gameId) async {
+    try {
+      final userId = _currentUserId;
+      if (userId == null) {
+        throw AuthException('User not authenticated');
+      }
+
+      await _usersRef
+          .child(DbPaths.userJoinedGames(userId))
+          .child(gameId)
+          .remove();
+
+      // Streams will update automatically - no cache clearing needed
+    } catch (e, st) {
+      NumberedLogger.e('Error removing game from joined: $e');
+      CrashlyticsHelper.recordError(e, st,
+          reason: 'game_remove_from_joined_fail');
+      rethrow;
+    }
+  }
+
   // Get games for the current user (both organized and joined)
+  // Note: No caching - direct Firebase query for real-time consistency (matches old behavior)
   Future<List<Game>> getMyGames({Duration? ttl}) async {
     try {
       final userId = _currentUserId;
       if (userId == null) {
         return [];
-      }
-
-      // Check cache first
-      final cacheKey = 'my_games_$userId';
-      final cached = _gameCache[cacheKey];
-      if (cached != null && !cached.isExpired) {
-        return cached.data;
       }
 
       final gamesMap = <String, Game>{};
@@ -268,8 +367,8 @@ class CloudGamesServiceInstance {
         for (final entry in data.values) {
           try {
             final game = Game.fromJson(Map<String, dynamic>.from(entry));
-            // Only include upcoming and active games in "My Games"
-            if (game.isActive && game.dateTime.isAfter(now)) {
+            // Include upcoming games (active or cancelled) so users can see cancellation status
+            if (game.dateTime.isAfter(now)) {
               gamesMap[game.id] = game;
             }
           } catch (e) {
@@ -296,10 +395,8 @@ class CloudGamesServiceInstance {
             try {
               final game = Game.fromJson(
                   Map<String, dynamic>.from(gameSnapshot.value as Map));
-              // Only include upcoming and active games, and ensure user is actually in players list
-              if (game.isActive &&
-                  game.dateTime.isAfter(now) &&
-                  game.players.contains(userId)) {
+              // Include upcoming games (active or cancelled), and ensure user is actually in players list
+              if (game.dateTime.isAfter(now) && game.players.contains(userId)) {
                 gamesMap[game.id] = game;
               }
             } catch (e) {
@@ -313,13 +410,6 @@ class CloudGamesServiceInstance {
       final gamesList = gamesMap.values.toList();
       gamesList.sort((a, b) => a.dateTime.compareTo(b.dateTime));
 
-      // Cache the result
-      _gameCache[cacheKey] = CachedData(
-        gamesList,
-        DateTime.now(),
-        expiry: ttl ?? _gamesTtl,
-      );
-
       return gamesList;
     } catch (e) {
       NumberedLogger.e('Error getting my games: $e');
@@ -328,18 +418,12 @@ class CloudGamesServiceInstance {
   }
 
   // Get games that the user can join
+  // Note: No caching - direct Firebase query for real-time consistency (matches old behavior)
   Future<List<Game>> getJoinableGames({Duration? ttl}) async {
     try {
       final userId = _currentUserId;
       if (userId == null) {
         return [];
-      }
-
-      // Check cache first
-      final cacheKey = 'joinable_games_$userId';
-      final cached = _gameCache[cacheKey];
-      if (cached != null && !cached.isExpired) {
-        return cached.data;
       }
 
       // Fetch from Firebase with limit
@@ -365,13 +449,6 @@ class CloudGamesServiceInstance {
         }
       }
 
-      // Cache the result
-      _gameCache[cacheKey] = CachedData(
-        games,
-        DateTime.now(),
-        expiry: ttl ?? _gamesTtl,
-      );
-
       return games;
     } catch (e) {
       NumberedLogger.e('Error getting joinable games: $e');
@@ -379,7 +456,31 @@ class CloudGamesServiceInstance {
     }
   }
 
+  // Watch joinable games (reactive)
+  Stream<List<Game>> watchJoinableGames() {
+    final userId = _currentUserId;
+    if (userId == null) return Stream.value([]);
+
+    return _gamesRef.orderByChild('isActive').equalTo(true).onValue.map((e) {
+      if (!e.snapshot.exists) return <Game>[];
+      final map = Map<dynamic, dynamic>.from(e.snapshot.value as Map);
+      final list = <Game>[];
+      for (final entry in map.values) {
+        try {
+          final g = Game.fromJson(Map<String, dynamic>.from(entry));
+          if (!g.isActive) continue;
+          if (!g.dateTime.isAfter(DateTime.now())) continue;
+          if (g.organizerId == userId) continue;
+          list.add(g);
+        } catch (_) {}
+      }
+      list.sort((a, b) => a.dateTime.compareTo(b.dateTime));
+      return list;
+    });
+  }
+
   // Get invited games for the current user
+  // Note: No caching - direct Firebase query for real-time consistency
   Future<List<Game>> getInvitedGamesForCurrentUser({Duration? ttl}) async {
     try {
       final userId = _currentUserId;
@@ -387,20 +488,7 @@ class CloudGamesServiceInstance {
         return [];
       }
 
-      // Check cache first (only if TTL is not zero/force refresh)
-      final cacheKey = 'invited_games_$userId';
-      final shouldUseCache = ttl == null || ttl.inSeconds > 0;
-      if (shouldUseCache) {
-        final cached = _gameCache[cacheKey];
-        if (cached != null && !cached.isExpired) {
-          NumberedLogger.d('Using cached invited games for $userId');
-          return cached.data;
-        }
-      } else {
-        NumberedLogger.d('Force refreshing invited games for $userId (TTL=0)');
-      }
-
-      // Fetch from Firebase
+      // Fetch from Firebase - no cache to match old fast behavior
       final snapshot =
           await _usersRef.child(DbPaths.userGameInvites(userId)).get();
 
@@ -448,22 +536,13 @@ class CloudGamesServiceInstance {
             try {
               final game = Game.fromJson(
                   Map<String, dynamic>.from(gameSnapshot.value as Map));
+              // Include ALL games (including cancelled) so users can see they were cancelled
               games.add(game);
             } catch (e) {
               NumberedLogger.w('Error parsing invited game: $e');
             }
           }
         }
-      }
-
-      // Cache the result (only if TTL is valid)
-      if (shouldUseCache) {
-        _gameCache[cacheKey] = CachedData(
-          games,
-          DateTime.now(),
-          expiry: ttl ?? _gamesTtl,
-        );
-        NumberedLogger.d('Cached ${games.length} invited games for $userId');
       }
 
       NumberedLogger.i('Fetched ${games.length} invited games for $userId');
@@ -603,26 +682,476 @@ class CloudGamesServiceInstance {
       NumberedLogger.e('fixSimpleInconsistencies error: $e');
     }
 
-    if (fixes > 0) _clearCache();
+    // Streams will update automatically - no cache clearing needed
     return fixes;
   }
 
   // Watch pending invites count
   Stream<int> watchPendingInvitesCount() {
+    final userId = _currentUserId;
+    if (userId == null) return Stream.value(0);
+
     return _usersRef
-        .child(DbPaths.userGameInvites(_currentUserId ?? ''))
+        .child(DbPaths.userGameInvites(userId))
         .onValue
-        .map((event) {
+        .asyncMap((event) async {
       if (!event.snapshot.exists) return 0;
 
       final data = event.snapshot.value as Map<dynamic, dynamic>;
       int count = 0;
-      for (final entry in data.values) {
-        if (entry is Map && entry['status'] == 'pending') {
-          count++;
+
+      // Check each pending invite and verify the game is still active
+      for (final entry in data.entries) {
+        if (entry.value is Map && entry.value['status'] == 'pending') {
+          final gameId = entry.key.toString();
+          try {
+            // Verify game is active - exclude cancelled games
+            final gameSnapshot = await _gamesRef.child(gameId).get();
+            if (gameSnapshot.exists) {
+              final gameData =
+                  Map<String, dynamic>.from(gameSnapshot.value as Map);
+              final game = Game.fromJson(gameData);
+              if (game.isActive) {
+                count++;
+              }
+            }
+          } catch (e) {
+            // If we can't verify, don't count it
+            NumberedLogger.w(
+                'Error checking game $gameId for invite count: $e');
+          }
         }
       }
       return count;
+    });
+  }
+
+  // Watch a single game for real-time updates
+  Stream<Game?> watchGame(String gameId) {
+    return _gamesRef.child(gameId).onValue.map((event) {
+      if (!event.snapshot.exists) return null;
+      try {
+        final data = Map<String, dynamic>.from(event.snapshot.value as Map);
+        return Game.fromJson(data);
+      } catch (e) {
+        NumberedLogger.w('Error parsing watched game: $e');
+        return null;
+      }
+    });
+  }
+
+  // Watch invite statuses for a game in real-time
+  Stream<Map<String, String>> watchGameInviteStatuses(String gameId) {
+    return _gamesRef.child(gameId).child('invites').onValue.map((event) {
+      final statuses = <String, String>{};
+      if (!event.snapshot.exists) return statuses;
+
+      final invitesData =
+          Map<dynamic, dynamic>.from(event.snapshot.value as Map);
+      for (final entry in invitesData.entries) {
+        final uid = entry.key.toString();
+        final inviteValue = entry.value;
+
+        // Handle both Map and String cases
+        String status;
+        if (inviteValue is Map) {
+          final inviteMap = Map<dynamic, dynamic>.from(inviteValue);
+          status = inviteMap['status']?.toString() ?? 'pending';
+        } else {
+          // If it's just a string (legacy format)
+          status = inviteValue?.toString() ?? 'pending';
+        }
+
+        statuses[uid] = status;
+      }
+
+      return statuses;
+    });
+  }
+
+  // Watch invited games for the current user in real-time
+  // Uses Firebase Query to automatically watch all games with pending invites
+  // This matches the old fast behavior where the query automatically emits on any game change
+  Stream<List<Game>> watchInvitedGames() {
+    final userId = _currentUserId;
+    if (userId == null) return Stream.value([]);
+
+    // Use Firebase Query to watch all games with pending invites for this user
+    // This automatically emits when ANY matching game changes (including cancellations)
+    // This is the same approach as the old version and is more efficient and reliable
+    final Query query =
+        _gamesRef.orderByChild('invites/$userId/status').equalTo('pending');
+
+    NumberedLogger.d('🔍 Starting watchInvitedGames query for user: $userId');
+    NumberedLogger.d('🔍 Query path: invites/$userId/status = pending');
+
+    return query.onValue
+        .map((event) {
+          NumberedLogger.d(
+              '🔔 Query event received: exists=${event.snapshot.exists}');
+          if (!event.snapshot.exists) {
+            NumberedLogger.d('📭 Query returned no results');
+            return <Game>[];
+          }
+
+          final List<Game> invited = [];
+          NumberedLogger.d(
+              '🔍 Parsing ${event.snapshot.children.length} games from query');
+
+          // Parse all games from the query result
+          // Firebase query automatically emits when ANY matching game changes
+          for (final child in event.snapshot.children) {
+            try {
+              final Map<dynamic, dynamic> gameData =
+                  child.value as Map<dynamic, dynamic>;
+
+              // Check if user has pending invite
+              final invites = gameData['invites'];
+              if (invites is Map && invites.containsKey(userId)) {
+                final entry = invites[userId];
+                if (entry is Map &&
+                    (entry['status']?.toString() ?? 'pending') == 'pending') {
+                  final game =
+                      Game.fromJson(Map<String, dynamic>.from(gameData));
+                  // Include ALL games (including cancelled) so users can see they were cancelled
+                  // Check both isUpcoming and isActive: show upcoming games that might be cancelled
+                  if (game.isUpcoming || !game.isActive) {
+                    invited.add(game);
+                    // Log cancellation detection
+                    if (!game.isActive) {
+                      NumberedLogger.d(
+                          '🔔 Query detected cancelled invited game: ${game.id}');
+                    }
+                  }
+                }
+              }
+            } catch (e) {
+              NumberedLogger.w('Error parsing invited game from query: $e');
+            }
+          }
+
+          // Sort by date (earliest first) - matches old behavior
+          invited.sort((a, b) => a.dateTime.compareTo(b.dateTime));
+
+          NumberedLogger.d(
+              '📤 Query emitted ${invited.length} invited games (${invited.where((g) => !g.isActive).length} cancelled)');
+
+          return invited;
+        })
+        .transform(StreamTransformer<List<Game>, List<Game>>.fromHandlers(
+          handleData: (data, sink) {
+            sink.add(data);
+          },
+          handleError: (error, stackTrace, sink) {
+            NumberedLogger.e('Error in watchInvitedGames: $error');
+            sink.add(<Game>[]);
+          },
+        ))
+        .transform(_distinctGamesTransformer());
+  }
+
+  // Watch games organized by current user for real-time updates
+  Stream<List<Game>> watchMyGames() {
+    final userId = _currentUserId;
+    if (userId == null) return Stream.value([]);
+
+    final now = DateTime.now();
+
+    // Stream 1: Watch organized games by organizerId (captures all game data changes)
+    // This will emit whenever ANY game organized by this user changes (cancellation, updates, etc.)
+    final organizedGamesStream = _gamesRef
+        .orderByChild('organizerId')
+        .equalTo(userId)
+        .onValue
+        .asyncMap((event) async {
+      final gamesMap = <String, Game>{};
+
+      // Get current createdGames index to filter
+      final createdIndexSnapshot =
+          await _usersRef.child(DbPaths.userCreatedGames(userId)).get();
+      final Set<String> createdGameIds = {};
+      if (createdIndexSnapshot.exists) {
+        final createdData =
+            Map<dynamic, dynamic>.from(createdIndexSnapshot.value as Map);
+        createdGameIds.addAll(createdData.keys.map((k) => k.toString()));
+      }
+
+      if (event.snapshot.exists) {
+        final data = Map<dynamic, dynamic>.from(event.snapshot.value as Map);
+        for (final entry in data.values) {
+          try {
+            final game = Game.fromJson(Map<String, dynamic>.from(entry));
+            // Only include if:
+            // 1. Game is in userCreatedGames index (respects removal)
+            // 2. Game is upcoming (includes cancelled games)
+            if (createdGameIds.contains(game.id) &&
+                game.dateTime.isAfter(now)) {
+              gamesMap[game.id] = game;
+            }
+          } catch (e) {
+            NumberedLogger.w('Error parsing organized game: $e');
+          }
+        }
+      }
+
+      return gamesMap;
+    });
+
+    // Stream 2: Watch joined games index AND fetch their current data
+    // This handles both index changes (add/remove) and initial state
+    final joinedGamesStream = _usersRef
+        .child(DbPaths.userJoinedGames(userId))
+        .onValue
+        .asyncMap((event) async {
+      final gamesMap = <String, Game>{};
+
+      if (!event.snapshot.exists) return gamesMap;
+
+      final joinedData =
+          Map<dynamic, dynamic>.from(event.snapshot.value as Map);
+      final joinedIds = joinedData.keys.map((k) => k.toString()).toList();
+
+      // Fetch current state of all joined games
+      for (final gameId in joinedIds) {
+        try {
+          final gameSnapshot = await _gamesRef.child(gameId).get();
+          if (!gameSnapshot.exists) continue;
+          final game = Game.fromJson(
+              Map<String, dynamic>.from(gameSnapshot.value as Map));
+          // Include upcoming games (active or cancelled), and ensure user is actually in players list
+          if (game.dateTime.isAfter(now) && game.players.contains(userId)) {
+            gamesMap[game.id] = game;
+          }
+        } catch (e) {
+          NumberedLogger.w('Error fetching joined game $gameId: $e');
+        }
+      }
+
+      return gamesMap;
+    });
+
+    // Stream 3: Watch individual game data streams for joined games (catches cancellations/updates)
+    // When index changes, we watch each game's data stream to catch real-time updates
+    final joinedGamesDataStreamController =
+        StreamController<Map<String, Game>>();
+    final joinedGameSubscriptions = <String, StreamSubscription<Game?>>{};
+    final joinedGamesDataCache = <String, Game>{};
+
+    // Helper to update watched games when index changes
+    void _updateWatchedJoinedGames(Set<String> gameIds) {
+      // Cancel subscriptions for games no longer in index
+      final gamesToRemove = joinedGameSubscriptions.keys
+          .where((id) => !gameIds.contains(id))
+          .toList();
+      for (final gameId in gamesToRemove) {
+        joinedGameSubscriptions[gameId]?.cancel();
+        joinedGameSubscriptions.remove(gameId);
+        joinedGamesDataCache.remove(gameId);
+      }
+
+      // Add subscriptions for new games
+      for (final gameId in gameIds) {
+        if (!joinedGameSubscriptions.containsKey(gameId)) {
+          final sub = watchGame(gameId).listen((game) {
+            if (game != null &&
+                game.dateTime.isAfter(now) &&
+                game.players.contains(userId)) {
+              joinedGamesDataCache[gameId] = game;
+            } else {
+              joinedGamesDataCache.remove(gameId);
+            }
+            if (!joinedGamesDataStreamController.isClosed) {
+              joinedGamesDataStreamController
+                  .add(Map<String, Game>.from(joinedGamesDataCache));
+            }
+          }, onError: (e) {
+            if (!joinedGamesDataStreamController.isClosed) {
+              joinedGamesDataStreamController.addError(e);
+            }
+          });
+          joinedGameSubscriptions[gameId] = sub;
+        }
+      }
+    }
+
+    // Cleanup when stream is cancelled - note: joinedIndexWatchSubRef is set below
+    final joinedGamesDataStream = joinedGamesDataStreamController.stream;
+
+    // Combine all streams
+    final controller = StreamController<List<Game>>();
+    StreamSubscription<Map<String, Game>>? organizedSub;
+    StreamSubscription<Map<String, Game>>? joinedIndexSub;
+    StreamSubscription<Map<String, Game>>? joinedDataSub;
+    StreamSubscription<DatabaseEvent>? joinedIndexWatchSubRef;
+
+    // Track current state
+    Map<String, Game> organizedGames = {};
+    Map<String, Game> joinedGames = {};
+
+    void _emitCombined() {
+      if (controller.isClosed) return;
+
+      // Merge organized and joined games (organized take precedence)
+      final allGamesMap = <String, Game>{
+        ...joinedGames,
+        ...organizedGames, // Organized games override joined if same ID
+      };
+
+      final allGames = allGamesMap.values.toList();
+      allGames.sort((a, b) => a.dateTime.compareTo(b.dateTime));
+      controller.add(allGames);
+    }
+
+    // Watch organized games stream
+    organizedSub = organizedGamesStream.listen((games) {
+      organizedGames = games;
+      _emitCombined();
+    }, onError: (e) {
+      if (!controller.isClosed) controller.addError(e);
+    });
+
+    // Watch joined games index stream (handles add/remove from index)
+    joinedIndexSub = joinedGamesStream.listen((games) {
+      // Update or add games from index fetch
+      for (final entry in games.entries) {
+        joinedGames[entry.key] = entry.value;
+      }
+      // Note: Don't remove games here - let joinedGamesDataStream handle removals
+      // based on index watch, which will stop emitting for removed games
+      _emitCombined();
+    }, onError: (e) {
+      if (!controller.isClosed) controller.addError(e);
+    });
+
+    // Watch individual game data streams for joined games (handles cancellations/updates)
+    joinedDataSub = joinedGamesDataStream.listen((games) {
+      // Update joined games with latest data from individual streams
+      for (final entry in games.entries) {
+        joinedGames[entry.key] = entry.value;
+      }
+      // Remove games that are no longer in the cache (removed from index)
+      joinedGames.removeWhere((key, _) => !games.containsKey(key));
+      _emitCombined();
+    }, onError: (e) {
+      if (!controller.isClosed) controller.addError(e);
+    });
+
+    // Store reference to index watch subscription for updating watched games
+    joinedIndexWatchSubRef = _usersRef
+        .child(DbPaths.userJoinedGames(userId))
+        .onValue
+        .listen((event) {
+      if (!event.snapshot.exists) {
+        _updateWatchedJoinedGames({});
+        return;
+      }
+      final joinedData =
+          Map<dynamic, dynamic>.from(event.snapshot.value as Map);
+      final gameIds = joinedData.keys.map((k) => k.toString()).toSet();
+      _updateWatchedJoinedGames(gameIds);
+    });
+
+    // Initial fetch to populate data
+    Future.microtask(() async {
+      // Fetch initial organized games
+      final organizedSnapshot =
+          await _gamesRef.orderByChild('organizerId').equalTo(userId).get();
+      final createdIndexSnapshot =
+          await _usersRef.child(DbPaths.userCreatedGames(userId)).get();
+      final Set<String> createdGameIds = {};
+      if (createdIndexSnapshot.exists) {
+        final createdData =
+            Map<dynamic, dynamic>.from(createdIndexSnapshot.value as Map);
+        createdGameIds.addAll(createdData.keys.map((k) => k.toString()));
+      }
+      if (organizedSnapshot.exists) {
+        final data = Map<dynamic, dynamic>.from(organizedSnapshot.value as Map);
+        for (final entry in data.values) {
+          try {
+            final game = Game.fromJson(Map<String, dynamic>.from(entry));
+            if (createdGameIds.contains(game.id) &&
+                game.dateTime.isAfter(now)) {
+              organizedGames[game.id] = game;
+            }
+          } catch (e) {
+            NumberedLogger.w('Error parsing initial organized game: $e');
+          }
+        }
+      }
+
+      // Fetch initial joined games
+      final joinedSnapshot =
+          await _usersRef.child(DbPaths.userJoinedGames(userId)).get();
+      if (joinedSnapshot.exists) {
+        final joinedData =
+            Map<dynamic, dynamic>.from(joinedSnapshot.value as Map);
+        final joinedIds = joinedData.keys.map((k) => k.toString()).toSet();
+        _updateWatchedJoinedGames(joinedIds);
+
+        for (final gameId in joinedIds) {
+          try {
+            final gameSnapshot = await _gamesRef.child(gameId).get();
+            if (gameSnapshot.exists) {
+              final game = Game.fromJson(
+                  Map<String, dynamic>.from(gameSnapshot.value as Map));
+              if (game.dateTime.isAfter(now) && game.players.contains(userId)) {
+                joinedGames[game.id] = game;
+              }
+            }
+          } catch (e) {
+            NumberedLogger.w('Error fetching initial joined game $gameId: $e');
+          }
+        }
+      }
+
+      _emitCombined();
+    });
+
+    controller.onCancel = () {
+      organizedSub?.cancel();
+      joinedIndexSub?.cancel();
+      joinedDataSub?.cancel();
+      joinedIndexWatchSubRef?.cancel();
+      for (final sub in joinedGameSubscriptions.values) {
+        sub.cancel();
+      }
+      joinedGameSubscriptions.clear();
+      joinedGamesDataStreamController.close();
+    };
+
+    // Use a more lenient distinct that only checks for meaningful changes
+    // but still emits when games are added/removed or player counts change
+    return controller.stream.distinct((prev, next) {
+      if (prev.length != next.length) return false;
+
+      // Create maps for faster lookup
+      final prevMap = {for (var g in prev) g.id: g};
+      final nextMap = {for (var g in next) g.id: g};
+
+      for (final gameId in prevMap.keys) {
+        final prevGame =
+            prevMap[gameId]!; // Safe: we're iterating over keys that exist
+        final nextGame = nextMap[gameId];
+
+        if (nextGame == null) return false; // Game was removed
+
+        // Check for meaningful changes
+        if (prevGame.currentPlayers != nextGame.currentPlayers ||
+            prevGame.players.length != nextGame.players.length ||
+            prevGame.dateTime != nextGame.dateTime ||
+            prevGame.location != nextGame.location ||
+            prevGame.updatedAt != nextGame.updatedAt ||
+            prevGame.isActive != nextGame.isActive) {
+          return false; // Something meaningful changed
+        }
+      }
+
+      // Check for new games
+      for (final gameId in nextMap.keys) {
+        if (!prevMap.containsKey(gameId)) return false;
+      }
+
+      return true; // No meaningful changes
     });
   }
 
@@ -656,29 +1185,37 @@ class CloudGamesServiceInstance {
       // Add user to the game
       final updatedPlayers = List<String>.from(game.players)..add(userId);
 
+      // Prepare atomic updates
+      final Map<String, Object?> updates = {};
+
       // Update the game
-      await _gamesRef.child(gameId).update({
-        'players': updatedPlayers,
-        'currentPlayers': updatedPlayers.length,
-      });
+      updates['${DbPaths.games}/$gameId/players'] = updatedPlayers;
+      updates['${DbPaths.games}/$gameId/currentPlayers'] =
+          updatedPlayers.length;
+
+      // Update invite status in games/{gameId}/invites/{uid} if it exists
+      final inviteCheckSnapshot =
+          await _gamesRef.child(gameId).child('invites').child(userId).get();
+      if (inviteCheckSnapshot.exists) {
+        updates['${DbPaths.games}/$gameId/invites/$userId/status'] = 'accepted';
+      }
+
+      // Remove from user's invite list (this will trigger badge update)
+      updates['users/$userId/gameInvites/$gameId'] = null;
 
       // Add game to user's joined games
-      await _usersRef.child(DbPaths.userJoinedGames(userId)).child(gameId).set({
+      updates['users/$userId/joinedGames/$gameId'] = {
         'sport': game.sport,
         'dateTime': game.dateTime.toIso8601String(),
         'location': game.location,
         'maxPlayers': game.maxPlayers,
         'joinedAt': DateTime.now().toIso8601String(),
-      });
+      };
 
-      // Remove from invites if it was an invite
-      await _usersRef
-          .child(DbPaths.userGameInvites(userId))
-          .child(gameId)
-          .remove();
+      // Commit all updates atomically
+      await _database.ref().update(updates);
 
-      // Clear cache
-      _clearCache();
+      // Streams will update automatically - no cache clearing needed
     } catch (e, st) {
       NumberedLogger.e('Error joining game: $e');
       CrashlyticsHelper.recordError(e, st, reason: 'game_join_fail');
@@ -723,8 +1260,7 @@ class CloudGamesServiceInstance {
           .child(gameId)
           .remove();
 
-      // Clear cache
-      _clearCache();
+      // Streams will update automatically - no cache clearing needed
     } catch (e, st) {
       NumberedLogger.e('Error leaving game: $e');
       CrashlyticsHelper.recordError(e, st, reason: 'game_leave_fail');
@@ -777,8 +1313,7 @@ class CloudGamesServiceInstance {
           .child(gameId)
           .remove();
 
-      // Clear cache
-      _clearCache();
+      // Streams will update automatically - no cache clearing needed
     } catch (e) {
       NumberedLogger.e('Error declining game invite: $e');
       rethrow;
@@ -922,18 +1457,83 @@ class CloudGamesServiceInstance {
     }
   }
 
-  // Clear cache
-  void _clearCache() {
-    _gameCache.clear();
-  }
-
-  // Public cache invalidation for auth changes or external triggers
+  // Cache invalidation methods (no-op - no caching to match old fast behavior)
+  // Kept for API compatibility but doesn't do anything since we're not caching
   void invalidateAllCache() {
-    _clearCache();
+    // No-op: no cache in use to match old real-time behavior
   }
 
-  // Clear expired cache entries
   void clearExpiredCache() {
-    _gameCache.removeWhere((key, value) => value.isExpired);
+    // No-op: no cache in use to match old real-time behavior
+  }
+
+  // Custom distinct transformer for game lists
+  StreamTransformer<List<Game>, List<Game>> _distinctGamesTransformer() {
+    List<Game>? lastValue;
+    return StreamTransformer<List<Game>, List<Game>>.fromHandlers(
+      handleData: (data, sink) {
+        if (lastValue == null) {
+          lastValue = data;
+          sink.add(data);
+          return;
+        }
+
+        final prev = lastValue!;
+        final next = data;
+
+        // Only emit if list actually changed meaningfully
+        if (prev.length != next.length) {
+          NumberedLogger.d(
+              '🔄 Distinct: List length changed ${prev.length} -> ${next.length}');
+          lastValue = next;
+          sink.add(next);
+          return;
+        }
+
+        // Create maps for faster lookup
+        final prevMap = {for (var g in prev) g.id: g};
+        final nextMap = {for (var g in next) g.id: g};
+
+        for (final gameId in prevMap.keys) {
+          final prevGame = prevMap[gameId]!;
+          final nextGame = nextMap[gameId];
+
+          if (nextGame == null) {
+            NumberedLogger.d('🔄 Distinct: Game $gameId was removed');
+            lastValue = next;
+            sink.add(next);
+            return;
+          }
+
+          // Check for meaningful changes (especially isActive for cancellations)
+          if (prevGame.isActive != nextGame.isActive ||
+              prevGame.currentPlayers != nextGame.currentPlayers ||
+              prevGame.players.length != nextGame.players.length ||
+              prevGame.dateTime != nextGame.dateTime ||
+              prevGame.location != nextGame.location ||
+              prevGame.address != nextGame.address ||
+              prevGame.maxPlayers != nextGame.maxPlayers ||
+              prevGame.updatedAt != nextGame.updatedAt) {
+            NumberedLogger.d(
+                '🔄 Distinct: Game $gameId changed - isActive: ${prevGame.isActive}->${nextGame.isActive}');
+            lastValue = next;
+            sink.add(next);
+            return;
+          }
+        }
+
+        // Check for new games
+        for (final gameId in nextMap.keys) {
+          if (!prevMap.containsKey(gameId)) {
+            NumberedLogger.d('🔄 Distinct: New game $gameId added');
+            lastValue = next;
+            sink.add(next);
+            return;
+          }
+        }
+
+        // No meaningful changes, don't emit
+      },
+    );
   }
 }

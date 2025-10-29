@@ -408,6 +408,8 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
           _selectedField?['latitude']?.toDouble() ?? current.latitude;
       final double? newLon =
           _selectedField?['longitude']?.toDouble() ?? current.longitude;
+      final String? newFieldId =
+          _selectedField?['id']?.toString() ?? current.fieldId;
 
       // Update game through provider
       final updatedGame = current.copyWith(
@@ -416,14 +418,10 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
         address: newAddress,
         latitude: newLat,
         longitude: newLon,
+        fieldId: newFieldId,
       );
 
       await ref.read(gamesActionsProvider).updateGame(updatedGame);
-      // Ensure My Games reloads fresh data
-      try {
-        ref.read(cloudGamesServiceProvider).invalidateAllCache();
-      } catch (_) {}
-      ref.invalidate(myGamesProvider);
 
       // Send invites to newly selected friends
       final userId = ref.read(currentUserIdProvider);
@@ -798,11 +796,6 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
       );
 
       final createdId = await ref.read(gamesActionsProvider).createGame(game);
-      // Ensure My Games reloads fresh data
-      try {
-        ref.read(cloudGamesServiceProvider).invalidateAllCache();
-      } catch (_) {}
-      ref.invalidate(myGamesProvider);
 
       if (mounted) {
         ref.read(hapticsActionsProvider)?.mediumImpact();

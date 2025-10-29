@@ -1,0 +1,99 @@
+{
+    "rules": {
+        "games": {
+            ".read": "auth != null",
+            ".write": "auth != null",
+            ".indexOn": [
+                "createdAt",
+                "isActive",
+                "location",
+                "fieldId"
+            ],
+            "$gameId": {
+                "invites": {
+                    ".indexOn": [
+                        "status"
+                    ],
+                    "$uid": {
+                        ".read": "auth != null && (auth.uid == $uid || data.parent().parent().child('organizerId').val() == auth.uid)",
+                        ".write": "auth != null"
+                    }
+                }
+            }
+        },
+        "slots": {
+            "$date": {
+                "$field": {
+                    "$hhmm": {
+                        ".read": "auth != null",
+                        ".write": "auth != null && (!data.exists() || newData.val() == null)",
+                        ".validate": "newData.val() === true || newData.val() == null"
+                    }
+                }
+            }
+        },
+        "users": {
+            "$uid": {
+                ".read": "auth != null && auth.uid == $uid",
+                ".write": "auth != null && auth.uid == $uid",
+                "profile": {
+                    ".read": "auth != null"
+                },
+                "friendRequests": {
+                    "received": {
+                        "$fromUid": {
+                            ".write": "auth != null && auth.uid == $fromUid"
+                        }
+                    },
+                    "sent": {
+                        "$toUid": {
+                            ".write": "auth != null && auth.uid == $uid"
+                        }
+                    }
+                },
+                "friends": {
+                    "$friendUid": {
+                        ".write": "auth != null && (auth.uid == $uid || auth.uid == $friendUid)"
+                    }
+                },
+                "settings": {
+                    "profile": {
+                        ".read": "auth != null"
+                    }
+                }
+            }
+        },
+        "publicProfiles": {
+            "$uid": {
+                ".read": "auth != null",
+                ".write": "auth != null && auth.uid == $uid",
+                ".validate": "newData.hasChildren(['displayName'])"
+            }
+        },
+        "usersByEmailHash": {
+            "$hash": {
+                ".read": "auth != null",
+                ".write": "auth != null && (!data.exists() || data.val() === auth.uid) && newData.val() === auth.uid"
+            }
+        },
+        "friendTokens": {
+            "$token": {
+                ".read": "auth != null",
+                ".write": "auth != null && ( (!data.exists() && newData.child('ownerUid').val() === auth.uid) || (data.exists() && data.child('ownerUid').val() === auth.uid) )",
+                ".validate": "newData.hasChildren(['ownerUid','exp']) && newData.child('ownerUid').isString() && newData.child('exp').isNumber()"
+            }
+        },
+        "reports": {
+            "$id": {
+                ".read": "false",
+                ".write": "auth != null",
+                ".validate": "newData.hasChildren(['reporter','target','reason','ts']) && newData.child('reporter').val() === auth.uid"
+            }
+        },
+        "notification_requests": {
+            "$requestId": {
+                ".write": "auth != null"
+            }
+        }
+    }
+}

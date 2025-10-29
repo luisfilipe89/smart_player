@@ -4,7 +4,7 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:move_young/models/core/game.dart';
 import 'package:move_young/services/auth/auth_provider.dart';
 import 'package:move_young/services/games/games_provider.dart';
-import 'package:move_young/services/games/cloud_games_provider.dart' as cloud;
+import 'package:move_young/services/games/cloud_games_provider.dart';
 import 'package:move_young/theme/_theme.dart';
 import 'package:move_young/screens/games/games_join_screen.dart';
 import 'package:move_young/screens/games/game_organize_screen.dart';
@@ -84,9 +84,7 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
   }
 
   void _refreshData() {
-    // Refresh providers to get latest data
-    ref.read(cloud.cloudGamesServiceProvider).invalidateAllCache();
-    ref.invalidate(myGamesProvider);
+    // Providers will update automatically via Firebase real-time streams
   }
 
   // ---- Helpers restored ----
@@ -95,69 +93,159 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
 
     return SizedBox(
       height: 44,
-      child: FutureBuilder<Map<String, String>>(
-        future: ref
-            .read(cloud.cloudGamesActionsProvider)
-            .getGameInviteStatuses(game.id),
-        builder: (context, statusesSnap) {
-          final Map<String, String> inviteStatuses =
-              statusesSnap.data ?? const <String, String>{};
-          final List<String> invited = inviteStatuses.keys.toList();
-          // Keep invitees included visually even if they haven't joined yet
-          final List<String> merged =
-              <String>{...basePlayerUids, ...invited}.toList();
-          if (merged.isEmpty) return const SizedBox.shrink();
+      child: ref.watch(gameInviteStatusesProvider(game.id)).when(
+            loading: () => const SizedBox.shrink(),
+            error: (_, __) => const SizedBox.shrink(),
+            data: (inviteStatuses) {
+              final List<String> invited = inviteStatuses.keys.toList();
+              // Keep invitees included visually even if they haven't joined yet
+              final List<String> merged =
+                  <String>{...basePlayerUids, ...invited}.toList();
+              if (merged.isEmpty) return const SizedBox.shrink();
 
-          // Fetch minimal profiles for merged set
-          final List<String> limited = merged.take(12).toList();
-          return FutureBuilder<List<Map<String, String?>>>(
-            future: Future.wait(
-              limited.map((uid) async {
-                final friendsActions = ref.read(friendsActionsProvider);
-                final profile = await friendsActions.fetchMinimalProfile(uid);
-                return profile;
-              }),
-            ),
-            builder: (context, snapshot) {
-              final profiles = snapshot.data ?? const <Map<String, String?>>[];
-              if (profiles.isEmpty) return const SizedBox.shrink();
+              // Fetch minimal profiles for merged set
+              final List<String> limited = merged.take(12).toList();
+              return FutureBuilder<List<Map<String, String?>>>(
+                future: Future.wait(
+                  limited.map((uid) async {
+                    final friendsActions = ref.read(friendsActionsProvider);
+                    final profile =
+                        await friendsActions.fetchMinimalProfile(uid);
+                    return profile;
+                  }),
+                ),
+                builder: (context, snapshot) {
+                  final profiles =
+                      snapshot.data ?? const <Map<String, String?>>[];
+                  if (profiles.isEmpty) return const SizedBox.shrink();
 
-              const double radius = 18;
-              const double diameter = radius * 2;
-              const double overlap = 6;
-              const int maxVisible = 8;
+                  const double radius = 18;
+                  const double diameter = radius * 2;
+                  const double overlap = 6;
+                  const int maxVisible = 8;
 
-              final int total = merged.length;
-              final int visibleCount =
-                  profiles.length > maxVisible ? maxVisible : profiles.length;
-              final int remaining = total - visibleCount;
+                  final int total = merged.length;
+                  final int visibleCount = profiles.length > maxVisible
+                      ? maxVisible
+                      : profiles.length;
+                  final int remaining = total - visibleCount;
 
-              final Set<String> invitedSet = invited.toSet();
+                  final Set<String> invitedSet = invited.toSet();
 
-              final List<Widget> items = [];
-              for (int i = 0; i < visibleCount; i++) {
-                final String uid = limited[i];
-                final bool inPlayers = basePlayerUids.contains(uid);
-                final String status = inviteStatuses[uid] ?? 'pending';
-                final bool isPending = invitedSet.contains(uid) &&
-                    !inPlayers &&
-                    status == 'pending';
-                // Joining overrides historical invite status
-                final bool isAccepted = inPlayers ||
-                    (invitedSet.contains(uid) && status == 'accepted');
-                final bool isDeclinedOrLeft = invitedSet.contains(uid) &&
-                    !inPlayers &&
-                    (status == 'declined' || status == 'left');
-                final name = (profiles[i]['displayName'] ?? 'User').trim();
-                final photo = profiles[i]['photoURL'];
-                final initials = _initialsFromName(name);
-                items.add(Positioned(
-                  left: i * (diameter - overlap),
-                  top: 0,
-                  child: Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      Container(
+                  final List<Widget> items = [];
+                  for (int i = 0; i < visibleCount; i++) {
+                    final String uid = limited[i];
+                    final bool inPlayers = basePlayerUids.contains(uid);
+                    final String status = inviteStatuses[uid] ?? 'pending';
+                    final bool isPending = invitedSet.contains(uid) &&
+                        !inPlayers &&
+                        status == 'pending';
+                    // Joining overrides historical invite status
+                    final bool isAccepted = inPlayers ||
+                        (invitedSet.contains(uid) && status == 'accepted');
+                    final bool isDeclinedOrLeft = invitedSet.contains(uid) &&
+                        !inPlayers &&
+                        (status == 'declined' || status == 'left');
+                    final name = (profiles[i]['displayName'] ?? 'User').trim();
+                    final photo = profiles[i]['photoURL'];
+                    final initials = _initialsFromName(name);
+                    items.add(Positioned(
+                      left: i * (diameter - overlap),
+                      top: 0,
+                      child: Stack(
+                        clipBehavior: Clip.none,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(1),
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              border: const Border.fromBorderSide(BorderSide(
+                                  color: AppColors.primary, width: 1)),
+                            ),
+                            child: CircleAvatar(
+                              radius: radius,
+                              backgroundColor: AppColors.superlightgrey,
+                              backgroundImage:
+                                  (photo != null && photo.isNotEmpty)
+                                      ? NetworkImage(photo)
+                                      : null,
+                              child: (photo == null || photo.isEmpty)
+                                  ? (initials == '?'
+                                      ? const Icon(Icons.person,
+                                          size: 18, color: AppColors.blackopac)
+                                      : Text(initials,
+                                          style: AppTextStyles.small))
+                                  : null,
+                            ),
+                          ),
+                          if (isPending)
+                            Positioned(
+                              right: -2,
+                              bottom: -2,
+                              child: Container(
+                                width: 14,
+                                height: 14,
+                                decoration: const BoxDecoration(
+                                  color: Colors.amber,
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(
+                                  Icons.hourglass_bottom,
+                                  size: 10,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
+                          if (isAccepted && !isPending)
+                            Positioned(
+                              right: -2,
+                              bottom: -2,
+                              child: Container(
+                                width: 14,
+                                height: 14,
+                                decoration: BoxDecoration(
+                                  color: game.isPlayerOnBench(uid)
+                                      ? Colors.blue
+                                      : Colors.green,
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Icon(
+                                  game.isPlayerOnBench(uid)
+                                      ? Icons.event_seat
+                                      : Icons.check,
+                                  size: 10,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
+                          if (isDeclinedOrLeft)
+                            Positioned(
+                              right: -2,
+                              bottom: -2,
+                              child: Container(
+                                width: 14,
+                                height: 14,
+                                decoration: const BoxDecoration(
+                                  color: Colors.red,
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(
+                                  Icons.close,
+                                  size: 10,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ));
+                  }
+
+                  if (remaining > 0) {
+                    items.add(Positioned(
+                      left: visibleCount * (diameter - overlap),
+                      top: 0,
+                      child: Container(
                         padding: const EdgeInsets.all(1),
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
@@ -166,116 +254,29 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
                         ),
                         child: CircleAvatar(
                           radius: radius,
-                          backgroundColor: AppColors.superlightgrey,
-                          backgroundImage: (photo != null && photo.isNotEmpty)
-                              ? NetworkImage(photo)
-                              : null,
-                          child: (photo == null || photo.isEmpty)
-                              ? (initials == '?'
-                                  ? const Icon(Icons.person,
-                                      size: 18, color: AppColors.blackopac)
-                                  : Text(initials, style: AppTextStyles.small))
-                              : null,
+                          backgroundColor: AppColors.white,
+                          child: Text('+$remaining',
+                              style: AppTextStyles.small
+                                  .copyWith(color: AppColors.primary)),
                         ),
                       ),
-                      if (isPending)
-                        Positioned(
-                          right: -2,
-                          bottom: -2,
-                          child: Container(
-                            width: 14,
-                            height: 14,
-                            decoration: const BoxDecoration(
-                              color: Colors.amber,
-                              shape: BoxShape.circle,
-                            ),
-                            child: const Icon(
-                              Icons.hourglass_bottom,
-                              size: 10,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ),
-                      if (isAccepted && !isPending)
-                        Positioned(
-                          right: -2,
-                          bottom: -2,
-                          child: Container(
-                            width: 14,
-                            height: 14,
-                            decoration: BoxDecoration(
-                              color: game.isPlayerOnBench(uid)
-                                  ? Colors.blue
-                                  : Colors.green,
-                              shape: BoxShape.circle,
-                            ),
-                            child: Icon(
-                              game.isPlayerOnBench(uid)
-                                  ? Icons.event_seat
-                                  : Icons.check,
-                              size: 10,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ),
-                      if (isDeclinedOrLeft)
-                        Positioned(
-                          right: -2,
-                          bottom: -2,
-                          child: Container(
-                            width: 14,
-                            height: 14,
-                            decoration: const BoxDecoration(
-                              color: Colors.red,
-                              shape: BoxShape.circle,
-                            ),
-                            child: const Icon(
-                              Icons.close,
-                              size: 10,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                ));
-              }
+                    ));
+                  }
 
-              if (remaining > 0) {
-                items.add(Positioned(
-                  left: visibleCount * (diameter - overlap),
-                  top: 0,
-                  child: Container(
-                    padding: const EdgeInsets.all(1),
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: const Border.fromBorderSide(
-                          BorderSide(color: AppColors.primary, width: 1)),
-                    ),
-                    child: CircleAvatar(
-                      radius: radius,
-                      backgroundColor: AppColors.white,
-                      child: Text('+$remaining',
-                          style: AppTextStyles.small
-                              .copyWith(color: AppColors.primary)),
-                    ),
-                  ),
-                ));
-              }
+                  final double width =
+                      (visibleCount + (remaining > 0 ? 1 : 0)) *
+                              (diameter - overlap) +
+                          overlap +
+                          2;
 
-              final double width = (visibleCount + (remaining > 0 ? 1 : 0)) *
-                      (diameter - overlap) +
-                  overlap +
-                  2;
-
-              return SizedBox(
-                  width: width,
-                  height: diameter,
-                  child: Stack(children: items));
+                  return SizedBox(
+                      width: width,
+                      height: diameter,
+                      child: Stack(children: items));
+                },
+              );
             },
-          );
-        },
-      ),
+          ),
     );
   }
 
@@ -383,7 +384,9 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
 
   Future<void> _removeFromJoined(Game game) async {
     try {
-      await ref.read(gamesActionsProvider).deleteGame(game.id);
+      // Just remove from joinedGames index
+      // Streams will update automatically to reflect the change
+      await ref.read(cloudGamesActionsProvider).removeFromMyJoined(game.id);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -391,7 +394,7 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
             backgroundColor: AppColors.grey,
           ),
         );
-        _refreshData();
+        // No need to call _refreshData() - streams will update automatically
       }
     } catch (e) {
       if (mounted) {
@@ -407,7 +410,9 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
 
   Future<void> _removeFromCreated(Game game) async {
     try {
-      await ref.read(gamesActionsProvider).deleteGame(game.id);
+      // Just remove from createdGames index
+      // Streams will update automatically to reflect the change
+      await ref.read(cloudGamesActionsProvider).removeFromMyCreated(game.id);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -415,7 +420,7 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
             backgroundColor: AppColors.grey,
           ),
         );
-        _refreshData();
+        // No need to call _refreshData() - streams will update automatically
       }
     } catch (e) {
       if (mounted) {
@@ -640,6 +645,35 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
                       spacing: 6,
                       runSpacing: 6,
                       children: [
+                        // Show "Modified" badge if game was updated after creation (but not if cancelled)
+                        // Cancelled games should only show "Cancelled" badge
+                        if (game.isActive &&
+                            game.updatedAt != null &&
+                            game.updatedAt!.isAfter(game.createdAt)) ...[
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: Colors.orange.withValues(alpha: 0.1),
+                              border: const Border.fromBorderSide(BorderSide(
+                                  color: AppColors.lightgrey, width: 1)),
+                              borderRadius:
+                                  BorderRadius.circular(AppRadius.smallCard),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.edit,
+                                    size: 12, color: Colors.orange.shade800),
+                                const SizedBox(width: 4),
+                                Text('Modified',
+                                    style: AppTextStyles.small.copyWith(
+                                        color: Colors.orange.shade800,
+                                        fontWeight: FontWeight.bold)),
+                              ],
+                            ),
+                          ),
+                        ],
                         if (!game.isActive) ...[
                           Container(
                             padding: const EdgeInsets.symmetric(
@@ -703,8 +737,9 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
                             initialData: 0,
                             builder: (context, snapshot) {
                               final remaining = game.timeUntilGame;
+                              // Only show when 2 hours or less remaining
                               if (remaining.isNegative ||
-                                  remaining > const Duration(hours: 8)) {
+                                  remaining > const Duration(hours: 2)) {
                                 return const SizedBox.shrink();
                               }
                               final bool urgent =
@@ -948,10 +983,13 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
                           Expanded(
                             child: ElevatedButton.icon(
                               onPressed: () async {
+                                // If game is already cancelled, just remove it from view
                                 if (!game.isActive) {
                                   await _removeFromCreated(game);
                                   return;
                                 }
+
+                                // Otherwise, cancel it (which marks inactive AND removes from createdGames)
                                 final confirmed = await showDialog<bool>(
                                   context: context,
                                   builder: (ctx) => AlertDialog(
@@ -985,7 +1023,7 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
                                         ),
                                       );
                                     }
-                                    _refreshData();
+                                    // No need to call _refreshData() - streams will update automatically
                                   } catch (e) {
                                     if (mounted) {
                                       ScaffoldMessenger.of(context)

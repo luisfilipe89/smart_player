@@ -17,6 +17,9 @@ class NotificationServiceInstance implements INotificationService {
   final FlutterLocalNotificationsPlugin _local;
 
   StreamSubscription? _authStateSubscription;
+  bool _isRequestingPermissions =
+      false; // Guard to prevent concurrent permission requests
+  bool _isInitialized = false; // Guard to prevent multiple initializations
 
   // Navigation callback for handling notification taps
   Function(String? payload)? _onNotificationTap;
@@ -69,6 +72,12 @@ class NotificationServiceInstance implements INotificationService {
     Function(String? payload)? onNotificationTap,
     Function(Map<String, dynamic>)? onDeepLinkNavigation,
   }) async {
+    // Prevent multiple initializations
+    if (_isInitialized) {
+      NumberedLogger.d('Notification service already initialized, skipping');
+      return;
+    }
+
     _onNotificationTap = onNotificationTap;
     _onDeepLinkNavigation = onDeepLinkNavigation;
 
@@ -118,43 +127,104 @@ class NotificationServiceInstance implements INotificationService {
           ?.createNotificationChannel(_channelReminders);
     }
 
-    // Request permissions
-    await _requestPermissions();
+    // Request permissions (non-blocking - don't await to avoid blocking startup)
+    // Defer permission requests to avoid blocking UI
+    unawaited(_requestPermissions());
 
     // Setup Firebase messaging
     await _setupFirebaseMessaging();
+
+    _isInitialized = true;
   }
 
   Future<void> _requestPermissions() async {
     if (kIsWeb) return;
 
-    // Request notification permissions
-    NotificationSettings settings = await _messaging.requestPermission(
-      alert: true,
-      announcement: false,
-      badge: true,
-      carPlay: false,
-      criticalAlert: false,
-      provisional: false,
-      sound: true,
-    );
-
-    if (settings.authorizationStatus == AuthorizationStatus.authorized) {
-      NumberedLogger.i('User granted permission');
-    } else if (settings.authorizationStatus ==
-        AuthorizationStatus.provisional) {
-      NumberedLogger.i('User granted provisional permission');
-    } else {
-      NumberedLogger.w('User declined or has not accepted permission');
+    // Prevent concurrent permission requests
+    if (_isRequestingPermissions) {
+      NumberedLogger.d('Permission request already in progress, skipping');
+      return;
     }
 
-    // Request local notification permissions for Android
-    if (Platform.isAndroid) {
-      final AndroidFlutterLocalNotificationsPlugin? androidImplementation =
-          _local.resolvePlatformSpecificImplementation<
-              AndroidFlutterLocalNotificationsPlugin>();
+    try {
+      _isRequestingPermissions = true;
 
-      await androidImplementation?.requestNotificationsPermission();
+      // Check current permission status first to avoid unnecessary requests
+      try {
+        final currentSettings = await _messaging.getNotificationSettings();
+        if (currentSettings.authorizationStatus ==
+                AuthorizationStatus.authorized ||
+            currentSettings.authorizationStatus ==
+                AuthorizationStatus.provisional) {
+          _isRequestingPermissions = false;
+          NumberedLogger.d('Notification permission already granted');
+          return;
+        }
+      } catch (e) {
+        // Continue if we can't check status
+        NumberedLogger.d('Could not check permission status: $e');
+      }
+
+      // Add a delay to ensure system is ready and avoid conflicts
+      await Future.delayed(const Duration(milliseconds: 1000));
+
+      // Request notification permissions (non-blocking)
+      _messaging
+          .requestPermission(
+        alert: true,
+        announcement: false,
+        badge: true,
+        carPlay: false,
+        criticalAlert: false,
+        provisional: false,
+        sound: true,
+      )
+          .then((NotificationSettings settings) {
+        _isRequestingPermissions = false;
+        if (settings.authorizationStatus == AuthorizationStatus.authorized) {
+          NumberedLogger.i('User granted permission');
+        } else if (settings.authorizationStatus ==
+            AuthorizationStatus.provisional) {
+          NumberedLogger.i('User granted provisional permission');
+        } else {
+          NumberedLogger.w('User declined or has not accepted permission');
+        }
+      }).catchError((e) {
+        _isRequestingPermissions = false;
+        // Ignore "already in progress" errors silently
+        final errorStr = e.toString();
+        if (!errorStr.contains('permissionRequestInProgress') &&
+            !errorStr.contains('already running')) {
+          NumberedLogger.w('Error requesting notification permission: $e');
+        }
+      });
+
+      // Request local notification permissions for Android (with delay to avoid conflicts)
+      if (Platform.isAndroid) {
+        await Future.delayed(const Duration(milliseconds: 1200));
+        if (!_isRequestingPermissions) {
+          // Only request if Firebase permission request completed
+          final AndroidFlutterLocalNotificationsPlugin? androidImplementation =
+              _local.resolvePlatformSpecificImplementation<
+                  AndroidFlutterLocalNotificationsPlugin>();
+
+          androidImplementation
+              ?.requestNotificationsPermission()
+              .catchError((e) {
+            NumberedLogger.d(
+                'Error requesting Android notification permission: $e');
+            return null;
+          });
+        }
+      }
+    } catch (e) {
+      _isRequestingPermissions = false;
+      // Ignore "already in progress" errors silently
+      final errorStr = e.toString();
+      if (!errorStr.contains('permissionRequestInProgress') &&
+          !errorStr.contains('already running')) {
+        NumberedLogger.w('Error in permission request: $e');
+      }
     }
   }
 
