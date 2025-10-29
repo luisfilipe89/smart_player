@@ -74,7 +74,7 @@
                 "gameInvites": {
                     "$gameId": {
                         ".read": "auth != null && auth.uid == $uid",
-                        ".write": "auth != null && (auth.uid == $uid)"
+                        ".write": "auth != null && (auth.uid == $uid || root.child('games/'+$gameId+'/organizerId').val() === auth.uid)"
                     }
                 },
                 "settings": {

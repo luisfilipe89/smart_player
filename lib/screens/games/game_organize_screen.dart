@@ -438,9 +438,34 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
             await ref
                 .read(cloudGamesActionsProvider)
                 .sendGameInvitesToFriends(current.id, newInvites);
-          } catch (e) {
+            debugPrint(
+                '✅ Successfully sent invites to ${newInvites.length} friends');
+          } catch (e, stackTrace) {
             // Log error but don't fail game update
-            debugPrint('Failed to send game invites: $e');
+            debugPrint('❌ Failed to send game invites: $e');
+            debugPrint('Stack trace: $stackTrace');
+            // Show error to user so they know invites weren't sent
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Row(
+                    children: [
+                      const Icon(Icons.warning, color: Colors.white, size: 20),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Game updated but failed to send invites: ${e.toString().replaceAll('Exception: ', '')}',
+                          style:
+                              AppTextStyles.body.copyWith(color: Colors.white),
+                        ),
+                      ),
+                    ],
+                  ),
+                  backgroundColor: AppColors.orange,
+                  duration: const Duration(seconds: 5),
+                ),
+              );
+            }
           }
         }
       }
@@ -466,19 +491,49 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
       if (mounted) {
         String errorMsg = 'game_creation_failed'.tr();
         final es = e.toString();
-        if (es.contains('new_slot_unavailable')) {
-          errorMsg = 'time_slot_unavailable'.tr();
-        } else if (es.contains('not_authorized')) {
-          errorMsg = 'not_authorized'.tr();
-        }
+        final isSlotUnavailable = es.contains('new_slot_unavailable') ||
+            es.contains('time_slot_unavailable');
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(errorMsg),
-            backgroundColor: AppColors.red,
-            duration: const Duration(seconds: 5),
-          ),
-        );
+        if (isSlotUnavailable) {
+          errorMsg = 'time_slot_unavailable'.tr();
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  const Icon(
+                    Icons.block,
+                    color: Colors.white,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      errorMsg,
+                      style: AppTextStyles.body.copyWith(
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              backgroundColor: AppColors.red,
+              duration: const Duration(seconds: 3),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+          HapticFeedback.mediumImpact();
+        } else {
+          if (es.contains('not_authorized')) {
+            errorMsg = 'not_authorized'.tr();
+          }
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(errorMsg),
+              backgroundColor: AppColors.red,
+              duration: const Duration(seconds: 5),
+            ),
+          );
+        }
       }
     } finally {
       if (mounted) {
@@ -767,9 +822,34 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
           try {
             await ref.read(cloudGamesActionsProvider).sendGameInvitesToFriends(
                 createdId, _selectedFriendUids.toList());
-          } catch (e) {
+            debugPrint(
+                '✅ Successfully sent invites to ${_selectedFriendUids.length} friends');
+          } catch (e, stackTrace) {
             // Log error but don't fail game creation
-            debugPrint('Failed to send game invites: $e');
+            debugPrint('❌ Failed to send game invites: $e');
+            debugPrint('Stack trace: $stackTrace');
+            // Show error to user so they know invites weren't sent
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Row(
+                    children: [
+                      const Icon(Icons.warning, color: Colors.white, size: 20),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Game created but failed to send invites: ${e.toString().replaceAll('Exception: ', '')}',
+                          style:
+                              AppTextStyles.body.copyWith(color: Colors.white),
+                        ),
+                      ),
+                    ],
+                  ),
+                  backgroundColor: AppColors.orange,
+                  duration: const Duration(seconds: 5),
+                ),
+              );
+            }
           }
         }
 
@@ -782,16 +862,46 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
       if (mounted) {
         String errorMsg = 'game_creation_failed'.tr();
         final es = e.toString();
-        if (es.contains('new_slot_unavailable')) {
+        final isSlotUnavailable = es.contains('new_slot_unavailable') ||
+            es.contains('time_slot_unavailable');
+
+        if (isSlotUnavailable) {
           errorMsg = 'time_slot_unavailable'.tr();
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  const Icon(
+                    Icons.block,
+                    color: Colors.white,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      errorMsg,
+                      style: AppTextStyles.body.copyWith(
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              backgroundColor: AppColors.red,
+              duration: const Duration(seconds: 3),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+          HapticFeedback.mediumImpact();
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(errorMsg),
+              backgroundColor: AppColors.red,
+              duration: const Duration(seconds: 5),
+            ),
+          );
         }
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(errorMsg),
-            backgroundColor: AppColors.red,
-            duration: const Duration(seconds: 5),
-          ),
-        );
       }
     } finally {
       if (mounted) {
@@ -1638,10 +1748,44 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                                                     if (isBooked) {
                                                       ScaffoldMessenger.of(
                                                               context)
-                                                          .showSnackBar(SnackBar(
-                                                              content: Text(
+                                                          .showSnackBar(
+                                                        SnackBar(
+                                                          content: Row(
+                                                            children: [
+                                                              Icon(
+                                                                Icons.block,
+                                                                color: Colors
+                                                                    .white,
+                                                                size: 20,
+                                                              ),
+                                                              const SizedBox(
+                                                                  width: 12),
+                                                              Expanded(
+                                                                child: Text(
                                                                   'time_slot_unavailable'
-                                                                      .tr())));
+                                                                      .tr(),
+                                                                  style: AppTextStyles
+                                                                      .body
+                                                                      .copyWith(
+                                                                    color: Colors
+                                                                        .white,
+                                                                  ),
+                                                                ),
+                                                              ),
+                                                            ],
+                                                          ),
+                                                          backgroundColor:
+                                                              AppColors.red,
+                                                          duration:
+                                                              const Duration(
+                                                                  seconds: 3),
+                                                          behavior:
+                                                              SnackBarBehavior
+                                                                  .floating,
+                                                        ),
+                                                      );
+                                                      HapticFeedback
+                                                          .mediumImpact();
                                                       return;
                                                     }
                                                     HapticFeedback

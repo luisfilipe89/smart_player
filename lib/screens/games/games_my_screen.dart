@@ -85,8 +85,8 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
 
   void _refreshData() {
     // Refresh providers to get latest data
+    ref.read(cloud.cloudGamesServiceProvider).invalidateAllCache();
     ref.invalidate(myGamesProvider);
-    ref.invalidate(cloud.cloudGamesServiceProvider);
   }
 
   // ---- Helpers restored ----

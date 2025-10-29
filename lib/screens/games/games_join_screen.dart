@@ -28,6 +28,7 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
   String _selectedSport = 'all';
   String _searchQuery = '';
   late final TextEditingController _searchController;
+  DateTime? _lastRefreshTime;
   static const String _adminEmail = 'luisfccfigueiredo@gmail.com';
   final ScrollController _listController = ScrollController();
   final Map<String, GlobalKey> _itemKeys = {};
@@ -50,6 +51,23 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
     _highlightId = widget.highlightGameId;
     _loadGames();
     _loadInvitedGames();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Refresh invited games when screen becomes visible (throttled to once per second)
+    final now = DateTime.now();
+    if (_lastRefreshTime == null ||
+        now.difference(_lastRefreshTime!).inSeconds >= 1) {
+      _lastRefreshTime = now;
+      // Invalidate cache and reload fresh data when screen becomes visible
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _refreshInvitedGames();
+        }
+      });
+    }
   }
 
   // Try a few times to ensure the list is built before scrolling
@@ -160,17 +178,39 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
   Future<void> _loadInvitedGames() async {
     try {
       final cloudGamesService = ref.read(cloudGamesServiceProvider);
-      final invited = await cloudGamesService.getInvitedGamesForCurrentUser();
+      // Force refresh by bypassing cache with a very short TTL (essentially force fresh)
+      final invited = await cloudGamesService.getInvitedGamesForCurrentUser(
+          ttl: const Duration(seconds: 0));
       if (!mounted) return;
       // Exclude if already joined (defensive)
       final String? myUid = ref.read(currentUserIdProvider);
       final filtered = myUid == null
           ? invited
           : invited.where((g) => !g.players.contains(myUid)).toList();
+
+      debugPrint(
+          '📩 Loaded ${filtered.length} invited games: ${filtered.map((g) => g.id).join(', ')}');
+
       setState(() {
         _invitedGames = filtered;
       });
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('❌ Error loading invited games: $e');
+    }
+  }
+
+  Future<void> _refreshInvitedGames() async {
+    try {
+      // Invalidate cache first to ensure fresh data
+      final cloudGamesService = ref.read(cloudGamesServiceProvider);
+      cloudGamesService.invalidateAllCache();
+      debugPrint('🔄 Invalidated cache, refreshing invited games...');
+
+      // Then reload with fresh data
+      await _loadInvitedGames();
+    } catch (e) {
+      debugPrint('❌ Error refreshing invited games: $e');
+    }
   }
 
   Future<void> _joinGame(Game game) async {
@@ -538,6 +578,9 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
     final bool isJoined = myUid != null && game.players.contains(myUid);
     final bool isInvitedPending = _invitedGames.any((g) => g.id == game.id);
 
+    debugPrint(
+        '🎮 Game ${game.id}: isInvitedPending=$isInvitedPending, isJoined=$isJoined, _invitedGames.length=${_invitedGames.length}');
+
     if (isInvitedPending && !isJoined) {
       return Row(
         children: [
@@ -548,12 +591,25 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
                   await ref
                       .read(cloudGamesActionsProvider)
                       .acceptGameInvite(game.id);
+
+                  // Invalidate caches to ensure fresh data
+                  ref.read(cloudGamesServiceProvider).invalidateAllCache();
+                  ref.invalidate(myGamesProvider);
+
                   if (mounted) {
+                    // Navigate to My Games > Joining tab and highlight the game
+                    final ctrl = MainScaffoldController.maybeOf(context);
+                    ctrl?.openMyGames(
+                      initialTab: 0, // Joining tab (index 0)
+                      highlightGameId: game.id,
+                      popToRoot: true,
+                    );
+
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
                         content: Text('Joined ${game.sport} game!'),
                         backgroundColor: AppColors.green,
-                        duration: const Duration(seconds: 4),
+                        duration: const Duration(seconds: 2),
                       ),
                     );
                   }
@@ -802,15 +858,25 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
                                 )
                               : RefreshIndicator(
                                   onRefresh: () async {
+                                    // Invalidate cache and refresh both lists
+                                    ref
+                                        .read(cloudGamesServiceProvider)
+                                        .invalidateAllCache();
                                     await _loadGames();
-                                    await _loadInvitedGames();
+                                    await _refreshInvitedGames();
                                   },
                                   child: Builder(builder: (context) {
-                                    // Merge lists with invited first
+                                    // Merge lists with invited first, then sort non-invited games chronologically
+                                    final List<Game> nonInvited = _games
+                                        .where((g) => !_invitedGames
+                                            .any((i) => i.id == g.id))
+                                        .toList();
+                                    // Sort non-invited games by date (earliest first)
+                                    nonInvited.sort((a, b) =>
+                                        a.dateTime.compareTo(b.dateTime));
                                     final List<Game> merged = [
                                       ..._invitedGames,
-                                      ..._games.where((g) => !_invitedGames
-                                          .any((i) => i.id == g.id)),
+                                      ...nonInvited,
                                     ];
                                     return ListView.builder(
                                       controller: _listController,

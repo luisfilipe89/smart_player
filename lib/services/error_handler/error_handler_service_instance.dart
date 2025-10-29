@@ -4,6 +4,8 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:move_young/utils/logger.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import '../../utils/service_error.dart';
+import '../../utils/service_helpers.dart' show showFloatingSnack;
+import '../../theme/tokens.dart';
 
 /// Instance-based ErrorHandlerService for use with Riverpod dependency injection
 class ErrorHandlerServiceInstance {
@@ -37,11 +39,24 @@ class ErrorHandlerServiceInstance {
       errorMessage = error;
     }
 
+    // Modern UX for common auth error: wrong password → floating snackbar
+    if (errorMessage == 'wrong_password' ||
+        errorMessage.contains('wrong_password')) {
+      showFloatingSnack(
+        context,
+        message: 'wrong_password'.tr(),
+        backgroundColor: AppColors.red,
+        icon: Icons.lock_outline,
+        duration: const Duration(seconds: 4),
+      );
+      return;
+    }
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         title: Text('error_title'.tr()),
-        content: Text(errorMessage),
+        content: Text(errorMessage.tr()),
         actions: [
           if (onRetry != null)
             TextButton(

@@ -238,7 +238,7 @@ class CloudGamesServiceInstance {
     }
   }
 
-  // Get games for the current user
+  // Get games for the current user (both organized and joined)
   Future<List<Game>> getMyGames({Duration? ttl}) async {
     try {
       final userId = _currentUserId;
@@ -253,38 +253,74 @@ class CloudGamesServiceInstance {
         return cached.data;
       }
 
-      // Fetch from Firebase with limit
-      final snapshot = await _gamesRef
+      final gamesMap = <String, Game>{};
+      final now = DateTime.now();
+
+      // 1. Fetch games organized by the user
+      final organizedSnapshot = await _gamesRef
           .orderByChild('organizerId')
           .equalTo(userId)
           .limitToFirst(_maxMyGames)
           .get();
 
-      final games = <Game>[];
-      if (snapshot.exists) {
-        final data = Map<dynamic, dynamic>.from(snapshot.value as Map);
-        final now = DateTime.now();
+      if (organizedSnapshot.exists) {
+        final data = Map<dynamic, dynamic>.from(organizedSnapshot.value as Map);
         for (final entry in data.values) {
           try {
             final game = Game.fromJson(Map<String, dynamic>.from(entry));
             // Only include upcoming and active games in "My Games"
             if (game.isActive && game.dateTime.isAfter(now)) {
-              games.add(game);
+              gamesMap[game.id] = game;
             }
           } catch (e) {
-            NumberedLogger.w('Error parsing game: $e');
+            NumberedLogger.w('Error parsing organized game: $e');
           }
         }
       }
 
+      // 2. Fetch games the user joined (from joinedGames index)
+      final joinedGamesSnapshot =
+          await _usersRef.child(DbPaths.userJoinedGames(userId)).get();
+
+      if (joinedGamesSnapshot.exists) {
+        final joinedData =
+            Map<dynamic, dynamic>.from(joinedGamesSnapshot.value as Map);
+        final gameIds = joinedData.keys.map((k) => k.toString()).toList();
+
+        // Batch fetch all joined games
+        final gameFutures = gameIds.map((id) => _gamesRef.child(id).get());
+        final gameSnapshots = await Future.wait(gameFutures);
+
+        for (final gameSnapshot in gameSnapshots) {
+          if (gameSnapshot.exists) {
+            try {
+              final game = Game.fromJson(
+                  Map<String, dynamic>.from(gameSnapshot.value as Map));
+              // Only include upcoming and active games, and ensure user is actually in players list
+              if (game.isActive &&
+                  game.dateTime.isAfter(now) &&
+                  game.players.contains(userId)) {
+                gamesMap[game.id] = game;
+              }
+            } catch (e) {
+              NumberedLogger.w('Error parsing joined game: $e');
+            }
+          }
+        }
+      }
+
+      // Convert to list and sort by date (earliest first)
+      final gamesList = gamesMap.values.toList();
+      gamesList.sort((a, b) => a.dateTime.compareTo(b.dateTime));
+
       // Cache the result
       _gameCache[cacheKey] = CachedData(
-        games,
+        gamesList,
         DateTime.now(),
         expiry: ttl ?? _gamesTtl,
       );
 
-      return games;
+      return gamesList;
     } catch (e) {
       NumberedLogger.e('Error getting my games: $e');
       return [];
@@ -351,11 +387,17 @@ class CloudGamesServiceInstance {
         return [];
       }
 
-      // Check cache first
+      // Check cache first (only if TTL is not zero/force refresh)
       final cacheKey = 'invited_games_$userId';
-      final cached = _gameCache[cacheKey];
-      if (cached != null && !cached.isExpired) {
-        return cached.data;
+      final shouldUseCache = ttl == null || ttl.inSeconds > 0;
+      if (shouldUseCache) {
+        final cached = _gameCache[cacheKey];
+        if (cached != null && !cached.isExpired) {
+          NumberedLogger.d('Using cached invited games for $userId');
+          return cached.data;
+        }
+      } else {
+        NumberedLogger.d('Force refreshing invited games for $userId (TTL=0)');
       }
 
       // Fetch from Firebase
@@ -365,15 +407,37 @@ class CloudGamesServiceInstance {
       final games = <Game>[];
       if (snapshot.exists) {
         final data = Map<dynamic, dynamic>.from(snapshot.value as Map);
+        NumberedLogger.d(
+            'Raw invite data for $userId: ${data.keys.length} entries');
 
         // Collect pending invite gameIds first
         final gameIds = <String>[];
         for (final entry in data.entries) {
-          final inviteData = entry.value as Map<dynamic, dynamic>;
-          if (inviteData['status'] == 'pending') {
-            gameIds.add(entry.key);
+          final gameId = entry.key.toString();
+          final inviteData = entry.value;
+
+          if (inviteData is! Map) {
+            NumberedLogger.w(
+                'Invite data for $gameId is not a Map: $inviteData');
+            continue;
+          }
+
+          final inviteMap = Map<dynamic, dynamic>.from(inviteData);
+          final status = inviteMap['status']?.toString();
+
+          NumberedLogger.d('Game $gameId: status=$status');
+
+          if (status == 'pending') {
+            gameIds.add(gameId);
+            NumberedLogger.d('Added pending game $gameId to list');
+          } else {
+            NumberedLogger.d(
+                'Skipping game $gameId (status=$status, not pending)');
           }
         }
+
+        NumberedLogger.d(
+            'Found ${gameIds.length} pending invites out of ${data.length} total');
 
         // Batch fetch all games in parallel to avoid N+1 query pattern
         final gameFutures = gameIds.map((id) => _gamesRef.child(id).get());
@@ -392,13 +456,17 @@ class CloudGamesServiceInstance {
         }
       }
 
-      // Cache the result
-      _gameCache[cacheKey] = CachedData(
-        games,
-        DateTime.now(),
-        expiry: ttl ?? _gamesTtl,
-      );
+      // Cache the result (only if TTL is valid)
+      if (shouldUseCache) {
+        _gameCache[cacheKey] = CachedData(
+          games,
+          DateTime.now(),
+          expiry: ttl ?? _gamesTtl,
+        );
+        NumberedLogger.d('Cached ${games.length} invited games for $userId');
+      }
 
+      NumberedLogger.i('Fetched ${games.length} invited games for $userId');
       return games;
     } catch (e) {
       NumberedLogger.e('Error getting invited games: $e');
@@ -726,13 +794,24 @@ class CloudGamesServiceInstance {
         return {};
       }
 
-      final invitesData = Map<String, dynamic>.from(snapshot.value as Map);
+      final invitesData = Map<dynamic, dynamic>.from(snapshot.value as Map);
       final statuses = <String, String>{};
 
       for (final entry in invitesData.entries) {
-        final uid = entry.key;
-        final inviteData = entry.value as Map<String, dynamic>;
-        statuses[uid] = inviteData['status']?.toString() ?? 'pending';
+        final uid = entry.key.toString();
+        final inviteValue = entry.value;
+
+        // Handle both Map and String cases
+        String status;
+        if (inviteValue is Map) {
+          final inviteMap = Map<dynamic, dynamic>.from(inviteValue);
+          status = inviteMap['status']?.toString() ?? 'pending';
+        } else {
+          // If it's just a string (legacy format)
+          status = inviteValue?.toString() ?? 'pending';
+        }
+
+        statuses[uid] = status;
       }
 
       return statuses;
@@ -753,9 +832,13 @@ class CloudGamesServiceInstance {
         throw AuthException('User not authenticated');
       }
 
+      NumberedLogger.d(
+          'Sending invites for game $gameId to ${friendUids.length} friends');
+
       // Get game details to include in invites
       final game = await getGameById(gameId);
       if (game == null) {
+        NumberedLogger.e('Game not found when sending invites: $gameId');
         throw NotFoundException('Game not found: $gameId');
       }
 
@@ -767,28 +850,45 @@ class CloudGamesServiceInstance {
 
       for (final friendUid in friendUids) {
         // Write to games/{gameId}/invites/{uid}: {status: 'pending'}
-        updates['${DbPaths.games}/$gameId/invites/$friendUid'] = {
+        final gameInvitePath = '${DbPaths.games}/$gameId/invites/$friendUid';
+        updates[gameInvitePath] = {
           'status': 'pending',
         };
 
         // Write to users/{uid}/gameInvites/{gameId}: {status, ts, organizerId, sport, date}
-        updates['users/$friendUid/gameInvites/$gameId'] = {
+        final userInvitePath = 'users/$friendUid/gameInvites/$gameId';
+        updates[userInvitePath] = {
           'status': 'pending',
           'ts': timestamp,
           'organizerId': game.organizerId,
           'sport': game.sport,
           'date': inviteDateString,
         };
+
+        NumberedLogger.d(
+            'Prepared invite paths: game=$gameInvitePath, user=$userInvitePath');
       }
 
+      NumberedLogger.d(
+          'Committing ${updates.length} invite updates atomically');
+
       // Atomic commit all invites
-      await _database.ref().update(updates);
+      try {
+        await _database.ref().update(updates);
+        NumberedLogger.i(
+            'Successfully wrote ${friendUids.length} invites to database');
+      } catch (e) {
+        NumberedLogger.e('Failed to write invites to database: $e');
+        NumberedLogger.e('Update paths were: ${updates.keys.join(', ')}');
+        rethrow;
+      }
 
       // Send notifications after successfully writing to DB
       for (final friendUid in friendUids) {
         try {
           await _notificationService.sendGameInviteNotification(
               friendUid, gameId);
+          NumberedLogger.d('Notification sent to $friendUid');
         } catch (e) {
           // Log notification errors but don't fail the entire operation
           NumberedLogger.w('Failed to send notification to $friendUid: $e');
@@ -797,8 +897,9 @@ class CloudGamesServiceInstance {
 
       NumberedLogger.i(
           'Game invites sent to ${friendUids.length} friends for game $gameId');
-    } catch (e) {
+    } catch (e, stackTrace) {
       NumberedLogger.e('Error sending game invites: $e');
+      NumberedLogger.e('Stack trace: $stackTrace');
       rethrow;
     }
   }
