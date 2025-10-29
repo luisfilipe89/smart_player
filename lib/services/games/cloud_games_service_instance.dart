@@ -897,6 +897,44 @@ class CloudGamesServiceInstance {
       return gamesMap;
     });
 
+    // Stream 1b: Also watch userCreatedGames index to trigger re-filtering when games are removed
+    // When index changes, we need to re-emit organized games with updated filter
+    final createdIndexWatchStream = _usersRef
+        .child(DbPaths.userCreatedGames(userId))
+        .onValue
+        .asyncMap((event) async {
+      // Get current organized games and re-filter by index
+      final organizedSnapshot = await _gamesRef
+          .orderByChild('organizerId')
+          .equalTo(userId)
+          .get();
+      
+      final gamesMap = <String, Game>{};
+      final Set<String> createdGameIds = {};
+      
+      if (event.snapshot.exists) {
+        final createdData =
+            Map<dynamic, dynamic>.from(event.snapshot.value as Map);
+        createdGameIds.addAll(createdData.keys.map((k) => k.toString()));
+      }
+
+      if (organizedSnapshot.exists) {
+        final data = Map<dynamic, dynamic>.from(organizedSnapshot.value as Map);
+        for (final entry in data.values) {
+          try {
+            final game = Game.fromJson(Map<String, dynamic>.from(entry));
+            if (createdGameIds.contains(game.id) && game.dateTime.isAfter(now)) {
+              gamesMap[game.id] = game;
+            }
+          } catch (e) {
+            NumberedLogger.w('Error parsing organized game from index watch: $e');
+          }
+        }
+      }
+
+      return gamesMap;
+    });
+
     // Stream 2: Watch joined games index AND fetch their current data
     // This handles both index changes (add/remove) and initial state
     final joinedGamesStream = _usersRef
@@ -972,6 +1010,12 @@ class CloudGamesServiceInstance {
           joinedGameSubscriptions[gameId] = sub;
         }
       }
+
+      // IMPORTANT: Emit update after removing games so the UI updates immediately
+      if (!joinedGamesDataStreamController.isClosed) {
+        joinedGamesDataStreamController
+            .add(Map<String, Game>.from(joinedGamesDataCache));
+      }
     }
 
     // Cleanup when stream is cancelled - note: joinedIndexWatchSubRef is set below
@@ -980,6 +1024,7 @@ class CloudGamesServiceInstance {
     // Combine all streams
     final controller = StreamController<List<Game>>();
     StreamSubscription<Map<String, Game>>? organizedSub;
+    StreamSubscription<Map<String, Game>>? organizedIndexSub;
     StreamSubscription<Map<String, Game>>? joinedIndexSub;
     StreamSubscription<Map<String, Game>>? joinedDataSub;
     StreamSubscription<DatabaseEvent>? joinedIndexWatchSubRef;
@@ -990,7 +1035,7 @@ class CloudGamesServiceInstance {
 
     void _emitCombined() {
       if (controller.isClosed) return;
-
+      
       // Merge organized and joined games (organized take precedence)
       final allGamesMap = <String, Game>{
         ...joinedGames,
@@ -1002,8 +1047,16 @@ class CloudGamesServiceInstance {
       controller.add(allGames);
     }
 
-    // Watch organized games stream
+    // Watch organized games stream (game data changes)
     organizedSub = organizedGamesStream.listen((games) {
+      organizedGames = games;
+      _emitCombined();
+    }, onError: (e) {
+      if (!controller.isClosed) controller.addError(e);
+    });
+
+    // Watch created games index stream (index changes trigger re-filtering)
+    organizedIndexSub = createdIndexWatchStream.listen((games) {
       organizedGames = games;
       _emitCombined();
     }, onError: (e) {
@@ -1109,6 +1162,7 @@ class CloudGamesServiceInstance {
 
     controller.onCancel = () {
       organizedSub?.cancel();
+      organizedIndexSub?.cancel();
       joinedIndexSub?.cancel();
       joinedDataSub?.cancel();
       joinedIndexWatchSubRef?.cancel();
