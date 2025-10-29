@@ -37,6 +37,3 @@ abstract class IAuthService {
   // Providers
   bool get hasPasswordProvider;
 }
-
-
-

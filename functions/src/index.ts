@@ -1,7 +1,6 @@
 import * as admin from "firebase-admin";
 import { setGlobalOptions } from "firebase-functions/v2";
-import { onValueCreated } from "firebase-functions/v2/database";
-import { onValueWritten } from "firebase-functions/v2/database";
+import { onValueCreated, onValueDeleted, onValueWritten } from "firebase-functions/v2/database";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { onRequest } from "firebase-functions/v2/https";
 import * as puppeteer from "puppeteer";
@@ -88,6 +87,80 @@ export const onMailNotificationCreate = onValueCreated(
     }
   }
 );
+
+// Cleanup when a game is deleted: remove joined indexes, invites, and related notifications
+export const onGameDelete = onValueDeleted("/games/{gameId}", async (event) => {
+  const gameId = event.params.gameId as string;
+  const db = admin.database();
+  try {
+    const usersSnap = await db.ref("/users").once("value");
+    const users = usersSnap.val() || {};
+    const updates: { [path: string]: null } = {};
+    for (const uid of Object.keys(users)) {
+      updates[`/users/${uid}/joinedGames/${gameId}`] = null;
+      updates[`/users/${uid}/gameInvites/${gameId}`] = null;
+      const notifs = (users[uid]?.notifications) || {};
+      for (const nid of Object.keys(notifs)) {
+        if (notifs[nid]?.data?.gameId === gameId) {
+          updates[`/users/${uid}/notifications/${nid}`] = null;
+        }
+      }
+    }
+    if (Object.keys(updates).length) {
+      await db.ref().update(updates);
+    }
+  } catch (e) {
+    console.error("Error cleaning up after game delete:", e);
+  }
+});
+
+// Cleanup when a user is deleted: remove invites and player entries
+export const onUserDelete = onValueDeleted("/users/{uid}", async (event) => {
+  const uid = event.params.uid as string;
+  const db = admin.database();
+  try {
+    const gamesSnap = await db.ref("/games").once("value");
+    const games = gamesSnap.val() || {};
+    const updates: { [path: string]: any } = {};
+    for (const gid of Object.keys(games)) {
+      updates[`/games/${gid}/invites/${uid}`] = null;
+      // players may be array or object; handle both
+      const game = games[gid] || {};
+      const players = game.players;
+      if (Array.isArray(players)) {
+        const filtered = players.filter((p: string) => p !== uid);
+        updates[`/games/${gid}/players`] = filtered;
+        updates[`/games/${gid}/currentPlayers`] = filtered.length;
+      } else if (players && typeof players === 'object') {
+        // If modeled as map, just remove key if present
+        updates[`/games/${gid}/players/${uid}`] = null;
+      }
+    }
+    if (Object.keys(updates).length) await db.ref().update(updates);
+  } catch (e) {
+    console.error("Error cleaning up after user delete:", e);
+  }
+});
+
+// Enforce last-write-wins metadata and monotonic version on game updates
+export const onGameUpdate = onValueWritten("/games/{gameId}", async (event) => {
+  const before = event.data.before.val() || {};
+  const after = event.data.after.val() || {};
+  if (!after) return;
+  try {
+    const currentVersion = Number(before.version ?? 0);
+    const incomingVersion = Number(after.version ?? currentVersion);
+    const nextVersion = isNaN(incomingVersion) || incomingVersion <= currentVersion
+      ? currentVersion + 1
+      : incomingVersion;
+    await event.data.after.ref.update({
+      version: nextVersion,
+      updatedAt: Date.now(),
+    });
+  } catch (e) {
+    console.error("Error enforcing game version/update metadata:", e);
+  }
+});
 
 // Process notification requests and write to user's notifications
 export const processNotificationRequest = onValueCreated(
@@ -530,8 +603,8 @@ function isRecurringDateTime(input: string): boolean {
   return !(lower.includes("1x") || lower.includes("eenmalig") || lower.includes("op inschrijving"));
 }
 
-// Scrape sport events from s-port.nl
-async function scrapeSportEvents(): Promise<any[]> {
+// Scrape sport events from s-port.nl for a given locale ('en' | 'nl')
+async function scrapeSportEvents(locale: 'en' | 'nl' = 'en'): Promise<any[]> {
   let browser;
   try {
     browser = await puppeteer.launch({
@@ -549,10 +622,10 @@ async function scrapeSportEvents(): Promise<any[]> {
 
     const page = await browser.newPage();
 
-    // Set language
+    // Set language cookie for requested locale
     await page.setCookie({
       name: 'locale',
-      value: 'en',
+      value: locale,
       path: '/',
       domain: 'www.aanbod.s-port.nl'
     });
@@ -628,7 +701,7 @@ async function scrapeSportEvents(): Promise<any[]> {
       };
     });
 
-    console.log(`Scraped ${processedEvents.length} events`);
+    console.log(`Scraped ${processedEvents.length} events for locale ${locale}`);
     return processedEvents;
 
   } catch (error) {
@@ -653,16 +726,22 @@ export const fetchSportEvents = onSchedule(
     console.log("Starting daily event scrape...");
 
     try {
-      const events = await scrapeSportEvents();
+      const [eventsEn, eventsNl] = await Promise.all([
+        scrapeSportEvents('en'),
+        scrapeSportEvents('nl'),
+      ]);
 
       // Save to Firebase Realtime Database
       const db = admin.database();
       await db.ref("events/latest").set({
-        events,
+        events_en: eventsEn,
+        events_nl: eventsNl,
+        // Backward compatibility for older app versions
+        events: eventsEn,
         lastUpdated: Date.now(),
       });
 
-      console.log(`Successfully stored ${events.length} events`);
+      console.log(`Stored EN:${eventsEn.length} NL:${eventsNl.length} events`);
       return;
     } catch (error) {
       console.error("Error in fetchSportEvents:", error);
@@ -680,13 +759,32 @@ export const manualFetchEvents = onRequest(
   },
   async (req, res) => {
     try {
-      const events = await scrapeSportEvents();
+      const lang = (req.query.lang as string | undefined)?.toLowerCase();
+      if (lang === 'en' || lang === 'nl') {
+        const events = await scrapeSportEvents(lang);
+        const db = admin.database();
+        await db.ref("events/latest").update({
+          [lang === 'en' ? 'events_en' : 'events_nl']: events,
+          // Keep default events pointer to EN
+          ...(lang === 'en' ? { events } : {}),
+          lastUpdated: Date.now(),
+        });
+        res.json({ success: true, count: events.length, locale: lang });
+        return;
+      }
+
+      const [eventsEn, eventsNl] = await Promise.all([
+        scrapeSportEvents('en'),
+        scrapeSportEvents('nl'),
+      ]);
       const db = admin.database();
       await db.ref("events/latest").set({
-        events,
+        events_en: eventsEn,
+        events_nl: eventsNl,
+        events: eventsEn,
         lastUpdated: Date.now(),
       });
-      res.json({ success: true, count: events.length });
+      res.json({ success: true, count_en: eventsEn.length, count_nl: eventsNl.length });
     } catch (error: any) {
       console.error("Error in manualFetchEvents:", error);
       res.status(500).json({ error: error?.message || "Unknown error" });

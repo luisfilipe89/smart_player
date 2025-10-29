@@ -16,6 +16,7 @@ final cloudGamesServiceProvider = Provider<CloudGamesServiceInstance>((ref) {
     firebaseDatabase,
     firebaseAuth,
     notificationService,
+    gamesTtl: const Duration(minutes: 5),
   );
 });
 

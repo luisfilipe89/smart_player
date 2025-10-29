@@ -18,13 +18,19 @@
             ],
             "$gameId": {
                 ".write": "auth != null && (!data.exists() && newData.child('organizerId').val() === auth.uid || data.exists() && data.child('organizerId').val() === auth.uid)",
+                "organizerId": {
+                    ".validate": "auth != null && ((!data.exists() && newData.val() === auth.uid) || (data.exists() && newData.val() === data.val()))"
+                },
                 "invites": {
                     ".indexOn": [
                         "status"
                     ],
                     "$uid": {
                         ".read": "auth != null && ($uid === auth.uid || root.child('games/'+$gameId+'/organizerId').val() === auth.uid)",
-                        ".write": "auth != null && ($uid === auth.uid || root.child('games/'+$gameId+'/organizerId').val() === auth.uid)"
+                        ".write": "auth != null && ($uid === auth.uid || root.child('games/'+$gameId+'/organizerId').val() === auth.uid)",
+                        "status": {
+                            ".validate": "newData.isString() && (newData.val() == 'pending' || newData.val() == 'accepted' || newData.val() == 'declined')"
+                        }
                     }
                 }
             }
@@ -34,8 +40,8 @@
                 "$field": {
                     "$hhmm": {
                         ".read": "auth != null",
-                        ".write": "auth != null && newData.val() === true && (!data.exists() || newData.val() == null)",
-                        ".validate": "newData.isBoolean() && newData.val() === true && !data.exists()"
+                        ".write": "auth != null && ((newData.val() === true && !data.exists()) || newData.val() == null)",
+                        ".validate": "(newData.val() == null) || (newData.isBoolean() && newData.val() === true && !data.exists())"
                     }
                 }
             }
@@ -121,11 +127,8 @@
             "notifications": {
                 "$id": {
                     ".read": "false",
-                    ".write": "auth != null && (
-                        (newData.child('type').val() === 'friend_request' && newData.child('toUid').isString() && newData.child('fromUid').val() === auth.uid) ||
-                        (newData.child('type').val() === 'game_invite' && newData.child('toUid').isString() && newData.child('gameId').isString() && newData.child('fromUid').val() === auth.uid) ||
-                        (newData.child('type').val() === 'game_reminder' && newData.child('gameId').isString())
-                    )",".validate": "newData.hasChild('type') && newData.child('type').isString()"
+                    ".write": "auth != null && ((newData.child('type').val() === 'friend_request' && newData.child('toUid').isString() && newData.child('fromUid').val() === auth.uid) || (newData.child('type').val() === 'game_invite' && newData.child('toUid').isString() && newData.child('gameId').isString() && newData.child('fromUid').val() === auth.uid) || (newData.child('type').val() === 'game_reminder' && newData.child('gameId').isString()))",
+                    ".validate": "newData.hasChild('type') && newData.child('type').isString()"
                 }
             }
         }

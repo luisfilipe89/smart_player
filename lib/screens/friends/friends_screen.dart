@@ -16,41 +16,106 @@ import 'package:move_young/services/friends/friends_provider.dart';
 import 'package:move_young/services/friends/email_provider.dart';
 import 'package:move_young/services/system/haptics_provider.dart';
 import 'package:move_young/theme/tokens.dart';
+import 'package:move_young/utils/service_helpers.dart' show showFloatingSnack;
 import 'package:move_young/theme/app_back_button.dart';
 import 'package:shimmer/shimmer.dart';
 
-// Helper: modern floating SnackBar with icon
-void showFloatingSnack(
-  BuildContext context, {
-  required String message,
-  required Color backgroundColor,
-  required IconData icon,
-  Duration duration = const Duration(seconds: 2),
-}) {
-  final snack = SnackBar(
-    content: Row(
-      children: [
-        Icon(icon, color: Colors.white),
-        const SizedBox(width: 12),
-        Expanded(child: Text(message)),
-      ],
-    ),
-    behavior: SnackBarBehavior.floating,
-    margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-    backgroundColor: backgroundColor,
-    duration: duration,
-  );
-  ScaffoldMessenger.of(context)
-    ..hideCurrentSnackBar()
-    ..showSnackBar(snack);
-}
+// Helper moved to utils/service_helpers.dart and imported above
 
 class FriendsScreen extends ConsumerStatefulWidget {
   const FriendsScreen({super.key});
 
   @override
   ConsumerState<FriendsScreen> createState() => _FriendsScreenState();
+}
+
+class _FriendsSkeleton extends StatelessWidget {
+  const _FriendsSkeleton();
+  @override
+  Widget build(BuildContext context) {
+    return ListView.separated(
+      padding: const EdgeInsets.all(16),
+      itemCount: 8,
+      separatorBuilder: (_, __) => const SizedBox(height: 12),
+      itemBuilder: (context, index) {
+        return Row(
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: AppColors.superlightgrey,
+                shape: BoxShape.circle,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    height: 14,
+                    decoration: BoxDecoration(
+                      color: AppColors.superlightgrey,
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Container(
+                    height: 12,
+                    width: MediaQuery.of(context).size.width * 0.5,
+                    decoration: BoxDecoration(
+                      color: AppColors.superlightgrey,
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _MiniListSkeleton extends StatelessWidget {
+  const _MiniListSkeleton();
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 120,
+      child: ListView.separated(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        itemCount: 4,
+        separatorBuilder: (_, __) => const SizedBox(height: 8),
+        itemBuilder: (context, index) {
+          return Row(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: const BoxDecoration(
+                  color: AppColors.superlightgrey,
+                  shape: BoxShape.circle,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Container(
+                  height: 12,
+                  decoration: BoxDecoration(
+                    color: AppColors.superlightgrey,
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
 }
 
 class _FriendsScreenState extends ConsumerState<FriendsScreen>
@@ -1056,8 +1121,13 @@ class _FriendsList extends ConsumerWidget {
                                                     Navigator.pop(ctx, false),
                                                 child: Text('cancel'.tr())),
                                             TextButton(
-                                                onPressed: () =>
-                                                    Navigator.pop(ctx, true),
+                                                onPressed: () async {
+                                                  await ref
+                                                      .read(
+                                                          hapticsActionsProvider)
+                                                      ?.heavyImpact();
+                                                  Navigator.pop(ctx, true);
+                                                },
                                                 child: Text('ok'.tr())),
                                           ],
                                         ),
@@ -1081,8 +1151,13 @@ class _FriendsList extends ConsumerWidget {
                                                     Navigator.pop(ctx, false),
                                                 child: Text('cancel'.tr())),
                                             TextButton(
-                                                onPressed: () =>
-                                                    Navigator.pop(ctx, true),
+                                                onPressed: () async {
+                                                  await ref
+                                                      .read(
+                                                          hapticsActionsProvider)
+                                                      ?.heavyImpact();
+                                                  Navigator.pop(ctx, true);
+                                                },
                                                 child: Text('ok'.tr())),
                                           ],
                                         ),
@@ -1106,7 +1181,7 @@ class _FriendsList extends ConsumerWidget {
               _SentRequests(uid: uid),
             ],
           ),
-          loading: () => Center(child: CircularProgressIndicator()),
+          loading: () => const _FriendsSkeleton(),
           error: (error, stack) => Center(child: Text('Error: $error')),
         );
   }
@@ -1280,7 +1355,7 @@ class _SuggestionsSectionState extends ConsumerState<_SuggestionsSection> {
           children: [
             Text('friends_suggestions'.tr(), style: AppTextStyles.h3),
             const SizedBox(height: 12),
-            const Center(child: CircularProgressIndicator()),
+            const _FriendsSkeleton(),
           ],
         ),
       );
@@ -1524,7 +1599,7 @@ class _QrBottomSheetContent extends ConsumerWidget {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const SizedBox(
               height: 120,
-              child: Center(child: CircularProgressIndicator()),
+              child: const _FriendsSkeleton(),
             );
           }
           if (snapshot.hasError || !snapshot.hasData || snapshot.data == null) {
@@ -1944,14 +2019,13 @@ class _RequestsListState extends ConsumerState<_RequestsList> {
                               },
                             );
                           },
-                          loading: () =>
-                              const Center(child: CircularProgressIndicator()),
+                          loading: () => const _MiniListSkeleton(),
                           error: (_, __) => const SizedBox.shrink(),
                         ),
               ),
             ],
           ),
-          loading: () => Center(child: CircularProgressIndicator()),
+          loading: () => const _FriendsSkeleton(),
           error: (error, stack) => Center(child: Text('Error: $error')),
         );
   }

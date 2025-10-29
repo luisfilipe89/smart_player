@@ -214,16 +214,6 @@ class _MoveYoungAppState extends ConsumerState<MoveYoungApp>
 
   @override
   Widget build(BuildContext context) {
-    // First build: show provider-free MaterialApp
-    if (!_isInitialized) {
-      debugPrint('[Bootstrap] Rendering first frame Splash');
-      return const MaterialApp(
-        debugShowCheckedModeBanner: false,
-        home: SplashScreen(),
-      );
-    }
-
-    // Second build: use providers
     return Consumer(
       builder: (context, ref, child) {
         // Try to get high contrast mode, but don't block on it
@@ -252,7 +242,6 @@ class _MoveYoungAppState extends ConsumerState<MoveYoungApp>
           theme: isHighContrast
               ? AppTheme.highContrast()
               : AppTheme.minimal().copyWith(
-                  // Ensure nav bar never gets tinted pink
                   bottomNavigationBarTheme: const BottomNavigationBarThemeData(
                     backgroundColor: AppColors.white,
                     elevation: 8,
@@ -261,28 +250,84 @@ class _MoveYoungAppState extends ConsumerState<MoveYoungApp>
                   ),
                   navigationBarTheme: const NavigationBarThemeData(
                     backgroundColor: Colors.white,
-                    surfaceTintColor:
-                        Colors.transparent, // <- kill Material3 tint
+                    surfaceTintColor: Colors.transparent,
                   ),
                 ),
           localizationsDelegates: context.localizationDelegates,
           supportedLocales: context.supportedLocales,
           locale: context.locale,
           scrollBehavior: AppScrollBehavior(),
-          home: const WelcomeScreenWrapper(),
+          home: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 450),
+            switchInCurve: Curves.easeOutCubic,
+            switchOutCurve: Curves.easeInCubic,
+            transitionBuilder: (child, animation) => FadeTransition(
+              opacity: animation,
+              child: child,
+            ),
+            child: _isInitialized
+                ? const WelcomeScreenWrapper(key: ValueKey('welcome'))
+                : const ModernSplashScreen(key: ValueKey('splash')),
+          ),
         );
       },
     );
   }
 }
 
-/// Simple splash screen that doesn't use any providers
-class SplashScreen extends StatelessWidget {
-  const SplashScreen({super.key});
+class ModernSplashScreen extends StatelessWidget {
+  const ModernSplashScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    return Scaffold(
+      backgroundColor: AppColors.white,
+      body: Center(
+        child: TweenAnimationBuilder<double>(
+          duration: const Duration(milliseconds: 750),
+          curve: Curves.easeOutCubic,
+          tween: Tween(begin: 0.95, end: 1.0),
+          builder: (context, scale, child) {
+            final t = ((scale - 0.95) / 0.05).clamp(0.0, 1.0);
+            return Opacity(
+              opacity: t,
+              child: Transform.scale(
+                scale: scale,
+                child: child,
+              ),
+            );
+          },
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 88,
+                height: 88,
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withOpacity(0.08),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.directions_run_rounded,
+                  size: 40,
+                  color: AppColors.primary,
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Text('MoveYoung', style: AppTextStyles.h3),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: 140,
+                child: const LinearProgressIndicator(
+                  minHeight: 3,
+                  backgroundColor: AppColors.superlightgrey,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
 

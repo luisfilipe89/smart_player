@@ -49,7 +49,8 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
   // Data + prefs
   // --------------------------------------------
   Future<void> loadEvents() async {
-    final loaded = await loadEventsFromJson();
+    final currentLang = context.locale.languageCode;
+    final loaded = await loadEventsFromJson(lang: currentLang);
     if (!mounted) return;
 
     setState(() {

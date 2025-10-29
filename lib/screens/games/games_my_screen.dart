@@ -613,8 +613,11 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
             mainAxisSize: MainAxisSize.min,
             children: [
               ListTile(
-                leading: Icon(_iconForSport(game.sport),
-                    color: _colorForSport(game.sport)),
+                leading: Hero(
+                  tag: 'game-${game.id}-icon',
+                  child: Icon(_iconForSport(game.sport),
+                      color: _colorForSport(game.sport)),
+                ),
                 title: Text(game.location, style: AppTextStyles.cardTitle),
                 subtitle: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,

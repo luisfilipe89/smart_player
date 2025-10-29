@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:animations/animations.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:easy_localization/easy_localization.dart';
 
@@ -35,5 +36,28 @@ class NavigationUtils {
         }
       });
     }
+  }
+
+  // Shared-axis route helper for create/edit flows
+  static PageRoute<T> sharedAxisRoute<T>({
+    required WidgetBuilder builder,
+    SharedAxisTransitionType type = SharedAxisTransitionType.vertical,
+    Duration duration = const Duration(milliseconds: 280),
+    RouteSettings? settings,
+  }) {
+    return PageRouteBuilder<T>(
+      settings: settings,
+      transitionDuration: duration,
+      reverseTransitionDuration: duration,
+      pageBuilder: (context, animation, secondaryAnimation) => builder(context),
+      transitionsBuilder: (context, animation, secondaryAnimation, child) {
+        return SharedAxisTransition(
+          animation: animation,
+          secondaryAnimation: secondaryAnimation,
+          transitionType: type,
+          child: child,
+        );
+      },
+    );
   }
 }

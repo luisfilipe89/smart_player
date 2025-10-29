@@ -15,6 +15,9 @@ class Game {
   final String organizerId;
   final String organizerName;
   final DateTime createdAt;
+  final DateTime? updatedAt;
+  final String? updatedBy;
+  final int? version;
   final bool isActive;
   final bool isPublic;
   final String? imageUrl;
@@ -40,6 +43,9 @@ class Game {
     required this.organizerId,
     required this.organizerName,
     required this.createdAt,
+    this.updatedAt,
+    this.updatedBy,
+    this.version,
     this.isActive = true,
     this.isPublic = true,
     this.imageUrl,
@@ -66,6 +72,9 @@ class Game {
     String? organizerId,
     String? organizerName,
     DateTime? createdAt,
+    DateTime? updatedAt,
+    String? updatedBy,
+    int? version,
     bool? isActive,
     bool? isPublic,
     String? imageUrl,
@@ -90,6 +99,9 @@ class Game {
       organizerId: organizerId ?? this.organizerId,
       organizerName: organizerName ?? this.organizerName,
       createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      updatedBy: updatedBy ?? this.updatedBy,
+      version: version ?? this.version,
       isActive: isActive ?? this.isActive,
       isPublic: isPublic ?? this.isPublic,
       imageUrl: imageUrl ?? this.imageUrl,
@@ -118,6 +130,9 @@ class Game {
       'organizerId': organizerId,
       'organizerName': organizerName,
       'createdAt': createdAt.toIso8601String(),
+      'updatedAt': updatedAt?.toIso8601String(),
+      'updatedBy': updatedBy,
+      'version': version,
       'isActive': isActive ? 1 : 0, // Convert bool to int for SQLite
       'isPublic': isPublic ? 1 : 0,
       'imageUrl': imageUrl,
@@ -148,6 +163,9 @@ class Game {
       'organizerId': organizerId,
       'organizerName': organizerName,
       'createdAt': createdAt.millisecondsSinceEpoch,
+      'updatedAt': updatedAt?.millisecondsSinceEpoch,
+      'updatedBy': updatedBy,
+      'version': version,
       'isActive': isActive,
       'isPublic': isPublic,
       'imageUrl': imageUrl,
@@ -173,6 +191,16 @@ class Game {
     final dynamic isPublicRaw = json['isPublic'];
     final bool isPublicParsed =
         isPublicRaw is bool ? isPublicRaw : ((isPublicRaw ?? 1) == 1);
+
+    final dynamic updatedAtRaw = json['updatedAt'];
+    final DateTime? updatedAtParsed = updatedAtRaw == null
+        ? null
+        : (updatedAtRaw is int
+            ? DateTime.fromMillisecondsSinceEpoch(updatedAtRaw)
+            : DateTime.tryParse(updatedAtRaw.toString()));
+    final int? versionParsed = json['version'] == null
+        ? null
+        : int.tryParse(json['version'].toString());
 
     // Players can be a List (cloud) or JSON string (local)
     final dynamic playersRaw = json['players'];
@@ -230,6 +258,9 @@ class Game {
       organizerId: json['organizerId']?.toString() ?? '',
       organizerName: json['organizerName']?.toString() ?? '',
       createdAt: createdAtParsed,
+      updatedAt: updatedAtParsed,
+      updatedBy: json['updatedBy']?.toString(),
+      version: versionParsed,
       isActive: isActiveParsed,
       isPublic: isPublicParsed,
       imageUrl: json['imageUrl']?.toString(),

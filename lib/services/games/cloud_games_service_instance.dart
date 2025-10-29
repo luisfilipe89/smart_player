@@ -6,6 +6,7 @@ import 'package:move_young/db/db_paths.dart';
 // import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:move_young/utils/logger.dart';
 import 'package:move_young/models/infrastructure/cached_data.dart';
+// Cache TTL configurable via constructor if needed
 import '../notifications/notification_interface.dart';
 import '../../utils/service_error.dart';
 import 'package:move_young/utils/crashlytics_helper.dart';
@@ -17,20 +18,20 @@ class CloudGamesServiceInstance {
   final FirebaseDatabase _database;
   final FirebaseAuth _auth;
   final INotificationService _notificationService;
+  final Duration _gamesTtl;
 
   // Query limits to prevent memory issues
   static const int _maxJoinableGames = 50;
   static const int _maxMyGames = 100;
 
   CloudGamesServiceInstance(
-    this._database,
-    this._auth,
-    this._notificationService,
-  );
+      this._database, this._auth, this._notificationService,
+      {Duration? gamesTtl})
+      : _gamesTtl = gamesTtl ?? const Duration(minutes: 5);
 
   // Cache for games data
   final Map<String, CachedData<List<Game>>> _gameCache = {};
-  static const Duration _defaultCacheTtl = Duration(minutes: 5);
+  // default TTL retained for reference
 
   // Database references
   DatabaseReference get _gamesRef => _database.ref(DbPaths.games);
@@ -262,10 +263,14 @@ class CloudGamesServiceInstance {
       final games = <Game>[];
       if (snapshot.exists) {
         final data = Map<dynamic, dynamic>.from(snapshot.value as Map);
+        final now = DateTime.now();
         for (final entry in data.values) {
           try {
             final game = Game.fromJson(Map<String, dynamic>.from(entry));
-            games.add(game);
+            // Only include upcoming and active games in "My Games"
+            if (game.isActive && game.dateTime.isAfter(now)) {
+              games.add(game);
+            }
           } catch (e) {
             NumberedLogger.w('Error parsing game: $e');
           }
@@ -273,8 +278,11 @@ class CloudGamesServiceInstance {
       }
 
       // Cache the result
-      _gameCache[cacheKey] =
-          CachedData(games, DateTime.now(), expiry: ttl ?? _defaultCacheTtl);
+      _gameCache[cacheKey] = CachedData(
+        games,
+        DateTime.now(),
+        expiry: ttl ?? _gamesTtl,
+      );
 
       return games;
     } catch (e) {
@@ -322,8 +330,11 @@ class CloudGamesServiceInstance {
       }
 
       // Cache the result
-      _gameCache[cacheKey] =
-          CachedData(games, DateTime.now(), expiry: ttl ?? _defaultCacheTtl);
+      _gameCache[cacheKey] = CachedData(
+        games,
+        DateTime.now(),
+        expiry: ttl ?? _gamesTtl,
+      );
 
       return games;
     } catch (e) {
@@ -382,8 +393,11 @@ class CloudGamesServiceInstance {
       }
 
       // Cache the result
-      _gameCache[cacheKey] =
-          CachedData(games, DateTime.now(), expiry: ttl ?? _defaultCacheTtl);
+      _gameCache[cacheKey] = CachedData(
+        games,
+        DateTime.now(),
+        expiry: ttl ?? _gamesTtl,
+      );
 
       return games;
     } catch (e) {

@@ -175,26 +175,30 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         Center(
                           child: Stack(
                             children: [
-                              Container(
-                                padding: const EdgeInsets.all(3),
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  border: Border.all(
-                                      color: AppColors.primary, width: 2),
-                                ),
-                                child: CircleAvatar(
-                                  radius: 52,
-                                  backgroundColor: AppColors.lightgrey,
-                                  backgroundImage: _localImage != null
-                                      ? FileImage(_localImage!)
-                                      : (photoUrl != null
-                                          ? CachedNetworkImageProvider(photoUrl)
-                                          : null) as ImageProvider?,
-                                  child:
-                                      (photoUrl == null && _localImage == null)
-                                          ? const Icon(Icons.person,
-                                              size: 52, color: Colors.white)
-                                          : null,
+                              Hero(
+                                tag: 'avatar-${user?.uid ?? 'me'}',
+                                child: Container(
+                                  padding: const EdgeInsets.all(3),
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    border: Border.all(
+                                        color: AppColors.primary, width: 2),
+                                  ),
+                                  child: CircleAvatar(
+                                    radius: 52,
+                                    backgroundColor: AppColors.lightgrey,
+                                    backgroundImage: _localImage != null
+                                        ? FileImage(_localImage!)
+                                        : (photoUrl != null
+                                            ? CachedNetworkImageProvider(
+                                                photoUrl)
+                                            : null) as ImageProvider?,
+                                    child: (photoUrl == null &&
+                                            _localImage == null)
+                                        ? const Icon(Icons.person,
+                                            size: 52, color: Colors.white)
+                                        : null,
+                                  ),
                                 ),
                               ),
                               Positioned(

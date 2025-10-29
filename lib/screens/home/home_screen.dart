@@ -59,7 +59,8 @@ class _HomeScreenNewState extends ConsumerState<HomeScreenNew> {
   Future<void> _fetch() async {
     setState(() => _state = _LoadState.loading);
     try {
-      final loaded = await loadEventsFromJson();
+      final loaded =
+          await loadEventsFromJson(lang: context.locale.languageCode);
       if (!mounted) return;
       setState(() {
         events = loaded;
@@ -197,7 +198,15 @@ class _HomeScreenNewState extends ConsumerState<HomeScreenNew> {
       body: SafeArea(
         top: false, // AppBar covers the top inset already
         child: RefreshIndicator(
-          onRefresh: _fetch,
+          onRefresh: () async {
+            await _fetch();
+            if (mounted) {
+              try {
+                final h = ref.read(hapticsServiceProvider);
+                await h?.mediumImpact();
+              } catch (_) {}
+            }
+          },
           child: ListView(
             physics: const AlwaysScrollableScrollPhysics(),
             padding: AppPaddings.symmHorizontalReg.copyWith(
@@ -335,17 +344,20 @@ class _HomeScreenNewState extends ConsumerState<HomeScreenNew> {
                         horizontal: 24, vertical: 16),
                     child: Row(
                       children: [
-                        CircleAvatar(
-                          radius: 24,
-                          backgroundColor: AppColors.primary,
-                          child: Text(
-                            displayName.isNotEmpty
-                                ? displayName[0].toUpperCase()
-                                : 'U',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 20,
-                              fontWeight: FontWeight.w600,
+                        Hero(
+                          tag: 'avatar-${user?.uid ?? 'me'}',
+                          child: CircleAvatar(
+                            radius: 24,
+                            backgroundColor: AppColors.primary,
+                            child: Text(
+                              displayName.isNotEmpty
+                                  ? displayName[0].toUpperCase()
+                                  : 'U',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 20,
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
                           ),
                         ),

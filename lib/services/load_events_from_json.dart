@@ -5,7 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:move_young/models/external/event_model.dart';
 
-Future<List<Event>> loadEventsFromJson() async {
+Future<List<Event>> loadEventsFromJson({String lang = 'en'}) async {
   try {
     // Try to load from Firebase first with timeout
     developer.log('Loading events from Firebase...',
@@ -21,13 +21,17 @@ Future<List<Event>> loadEventsFromJson() async {
 
     if (snapshot.exists && snapshot.value != null) {
       final data = Map<String, dynamic>.from(snapshot.value as Map);
-      if (data['events'] != null) {
-        final events = (data['events'] as List).map((json) {
+      // Prefer language-specific lists when present
+      final key = (lang.toLowerCase() == 'nl') ? 'events_nl' : 'events_en';
+      final raw = (data[key] as List?) ?? (data['events'] as List?);
+      if (raw != null) {
+        final events = raw.map((json) {
           final bool isRecurring =
               _isRecurringDateTime(json['date_time'] ?? '');
           return Event.fromJson({...json, 'isRecurring': isRecurring});
         }).toList();
-        developer.log('Loaded ${events.length} events from Firebase',
+        developer.log(
+            'Loaded ${events.length} ${lang.toUpperCase()} events from Firebase',
             name: 'loadEventsFromJson');
         return events;
       }

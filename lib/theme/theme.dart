@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:animations/animations.dart';
 import 'package:flutter/services.dart';
 import 'package:move_young/theme/tokens.dart';
 
@@ -17,6 +18,16 @@ class AppTheme {
       primaryColor: AppColors.primary,
       fontFamily: 'Poppins',
       scaffoldBackgroundColor: AppColors.white,
+      pageTransitionsTheme: const PageTransitionsTheme(
+        builders: <TargetPlatform, PageTransitionsBuilder>{
+          TargetPlatform.android: FadeThroughPageTransitionsBuilder(),
+          TargetPlatform.fuchsia: FadeThroughPageTransitionsBuilder(),
+          TargetPlatform.linux: FadeThroughPageTransitionsBuilder(),
+          TargetPlatform.windows: FadeThroughPageTransitionsBuilder(),
+          TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+          TargetPlatform.macOS: CupertinoPageTransitionsBuilder(),
+        },
+      ),
       appBarTheme: const AppBarTheme(
         backgroundColor: AppColors.white,
         foregroundColor: AppColors.blackIcon,
@@ -97,6 +108,16 @@ class AppTheme {
       primaryColor: AppColors.highContrastPrimary,
       fontFamily: 'Poppins',
       scaffoldBackgroundColor: AppColors.highContrastBackground,
+      pageTransitionsTheme: const PageTransitionsTheme(
+        builders: <TargetPlatform, PageTransitionsBuilder>{
+          TargetPlatform.android: FadeThroughPageTransitionsBuilder(),
+          TargetPlatform.fuchsia: FadeThroughPageTransitionsBuilder(),
+          TargetPlatform.linux: FadeThroughPageTransitionsBuilder(),
+          TargetPlatform.windows: FadeThroughPageTransitionsBuilder(),
+          TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+          TargetPlatform.macOS: CupertinoPageTransitionsBuilder(),
+        },
+      ),
       appBarTheme: AppBarTheme(
         backgroundColor: AppColors.highContrastBackground,
         foregroundColor: AppColors.highContrastText,

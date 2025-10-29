@@ -80,6 +80,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         false;
 
     if (!confirmed) return;
+    // Stronger haptic for destructive action
+    await ref.read(hapticsActionsProvider)?.heavyImpact();
     await _deleteAccount();
   }
 

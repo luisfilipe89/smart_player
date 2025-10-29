@@ -8,6 +8,8 @@ import 'package:move_young/services/auth/auth_provider.dart';
 import 'package:move_young/services/games/games_provider.dart';
 import 'package:move_young/services/games/cloud_games_provider.dart';
 import 'package:move_young/services/system/haptics_provider.dart';
+import 'package:move_young/widgets/navigation/navigation_utils.dart';
+import 'package:move_young/screens/games/game_detail_screen.dart';
 import 'dart:async';
 import 'package:move_young/screens/main_scaffold.dart';
 
@@ -310,7 +312,14 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
                 ],
         ),
         child: InkWell(
-          onTap: () {},
+          onTap: () {
+            ref.read(hapticsActionsProvider)?.selectionClick();
+            Navigator.of(context).push(
+              NavigationUtils.sharedAxisRoute(
+                builder: (_) => GameDetailScreen(game: game),
+              ),
+            );
+          },
           borderRadius: BorderRadius.circular(AppRadius.card),
           child: Padding(
             padding: const EdgeInsets.all(AppWidths.regular),
@@ -351,18 +360,21 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
                   ),
                 Row(
                   children: [
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color:
-                            _getSportColor(game.sport).withValues(alpha: 0.1),
-                        borderRadius:
-                            BorderRadius.circular(AppRadius.smallCard),
-                      ),
-                      child: Icon(
-                        _getSportIcon(game.sport),
-                        color: _getSportColor(game.sport),
-                        size: 24,
+                    Hero(
+                      tag: 'game-${game.id}-icon',
+                      child: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color:
+                              _getSportColor(game.sport).withValues(alpha: 0.1),
+                          borderRadius:
+                              BorderRadius.circular(AppRadius.smallCard),
+                        ),
+                        child: Icon(
+                          _getSportIcon(game.sport),
+                          color: _getSportColor(game.sport),
+                          size: 24,
+                        ),
                       ),
                     ),
                     const SizedBox(width: AppWidths.regular),
@@ -762,7 +774,7 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
                     child: Padding(
                       padding: AppPaddings.symmHorizontalReg,
                       child: _isLoading
-                          ? const Center(child: CircularProgressIndicator())
+                          ? const _GamesSkeleton()
                           : (_games.isEmpty && _invitedGames.isEmpty)
                               ? Center(
                                   child: Column(
@@ -847,5 +859,26 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
       default:
         return Icons.sports;
     }
+  }
+}
+
+class _GamesSkeleton extends StatelessWidget {
+  const _GamesSkeleton();
+  @override
+  Widget build(BuildContext context) {
+    return ListView.separated(
+      padding: EdgeInsets.zero,
+      itemCount: 6,
+      separatorBuilder: (_, __) => const SizedBox(height: AppHeights.reg),
+      itemBuilder: (context, index) {
+        return Container(
+          height: 88,
+          decoration: BoxDecoration(
+            color: AppColors.superlightgrey,
+            borderRadius: BorderRadius.circular(AppRadius.card),
+          ),
+        );
+      },
+    );
   }
 }

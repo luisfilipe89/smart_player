@@ -454,7 +454,8 @@ class _GenericSportScreenState extends ConsumerState<GenericSportScreen>
                           ? (accent ?? AppColors.blackShadow)
                           : Colors.transparent,
                     ),
-                    onSelected: (on) {
+                    onSelected: (on) async {
+                      await ref.read(hapticsActionsProvider)?.selectionClick();
                       setState(() {
                         _selection.choiceSelections[def.key] =
                             (on && !isSelected)
@@ -492,7 +493,8 @@ class _GenericSportScreenState extends ConsumerState<GenericSportScreen>
                         on), // amber outline (off) / outline+fill (on)
                     text: 'lit'.tr(),
                   ),
-                  onSelected: (sel) {
+                  onSelected: (sel) async {
+                    await ref.read(hapticsActionsProvider)?.selectionClick();
                     setState(() {
                       _selection.toggles[def.key] = sel;
                       _applyFilters();
@@ -525,7 +527,12 @@ class _GenericSportScreenState extends ConsumerState<GenericSportScreen>
           : _error != null
               ? Center(child: Text(_error!))
               : RefreshIndicator(
-                  onRefresh: () => _loadData(bypassCache: true),
+                  onRefresh: () async {
+                    await _loadData(bypassCache: true);
+                    try {
+                      await ref.read(hapticsActionsProvider)?.mediumImpact();
+                    } catch (_) {}
+                  },
                   child: Padding(
                     padding: AppPaddings.symmHorizontalReg,
                     child: Column(

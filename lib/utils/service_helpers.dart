@@ -2,6 +2,7 @@ import 'package:firebase_database/firebase_database.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import 'service_error.dart';
+import 'package:flutter/material.dart';
 import '../services/firebase_error_handler.dart';
 
 /// Safely executes a service operation with typed error handling
@@ -43,6 +44,34 @@ Future<T> safeServiceCall<T>(
       originalError: e,
     );
   }
+}
+
+/// Unified floating snackbar with icon and theming.
+/// Prefer this over raw SnackBar for consistency.
+void showFloatingSnack(
+  BuildContext context, {
+  required String message,
+  required Color backgroundColor,
+  required IconData icon,
+  Duration duration = const Duration(seconds: 2),
+}) {
+  final snack = SnackBar(
+    content: Row(
+      children: [
+        Icon(icon, color: Colors.white),
+        const SizedBox(width: 12),
+        Expanded(child: Text(message)),
+      ],
+    ),
+    behavior: SnackBarBehavior.floating,
+    margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    backgroundColor: backgroundColor,
+    duration: duration,
+  );
+  ScaffoldMessenger.of(context)
+    ..hideCurrentSnackBar()
+    ..showSnackBar(snack);
 }
 
 /// Safely executes a Firebase RTDB read operation with error handling
