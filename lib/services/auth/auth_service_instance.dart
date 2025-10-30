@@ -6,10 +6,12 @@ import 'package:move_young/utils/logger.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'auth_service.dart';
 import '../../utils/service_error.dart';
+import '../../utils/service_base_mixin.dart';
 import '../firebase_error_handler.dart';
 
 /// Instance-based AuthService for use with Riverpod dependency injection
-class AuthServiceInstance implements IAuthService {
+/// Uses ServiceBaseMixin for standardized error handling
+class AuthServiceInstance with ServiceBaseMixin implements IAuthService {
   final FirebaseAuth _auth;
 
   AuthServiceInstance(this._auth);
@@ -78,7 +80,8 @@ class AuthServiceInstance implements IAuthService {
     } on FirebaseAuthException catch (e) {
       throw FirebaseErrorHandler.toServiceException(e);
     } catch (e) {
-      throw ServiceException('Failed to sign in anonymously', originalError: e);
+      NumberedLogger.e('Error signing in anonymously: $e');
+      throw FirebaseErrorHandler.toServiceException(e);
     }
   }
 
@@ -150,10 +153,10 @@ class AuthServiceInstance implements IAuthService {
       await _auth.currentUser?.reload();
       return userCredential;
     } on FirebaseAuthException catch (e) {
-      throw AuthException(_mapFirebaseError(e, isSignup: false), code: e.code);
+      throw FirebaseErrorHandler.toServiceException(e);
     } catch (e) {
-      if (e is ServiceException) rethrow;
-      throw ServiceException('Sign in failed', originalError: e);
+      NumberedLogger.e('Error signing in with email: $e');
+      throw FirebaseErrorHandler.toServiceException(e);
     }
   }
 
@@ -176,10 +179,10 @@ class AuthServiceInstance implements IAuthService {
 
       return userCredential;
     } on FirebaseAuthException catch (e) {
-      throw AuthException(_mapFirebaseError(e, isSignup: true), code: e.code);
+      throw FirebaseErrorHandler.toServiceException(e);
     } catch (e) {
-      if (e is ServiceException) rethrow;
-      throw ServiceException('Account creation failed', originalError: e);
+      NumberedLogger.e('Error creating account: $e');
+      throw FirebaseErrorHandler.toServiceException(e);
     }
   }
 

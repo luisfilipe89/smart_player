@@ -2,13 +2,15 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'cache_service_instance.dart';
 import '../../providers/infrastructure/shared_preferences_provider.dart';
+import '../../config/cache_config.dart';
 
 // CacheService provider with dependency injection
 // Note: Returns null if SharedPreferences is not initialized yet
 final cacheServiceProvider = Provider<CacheServiceInstance?>((ref) {
   final prefs = ref.watch(sharedPreferencesProvider);
+  final config = ref.watch(cacheConfigProvider);
   if (prefs == null) return null;
-  return CacheServiceInstance(prefs);
+  return CacheServiceInstance(prefs, config);
 });
 
 // Cache statistics provider (reactive)

@@ -15,6 +15,7 @@ import '../../utils/service_error.dart';
 import 'friends_service.dart';
 
 /// Instance-based FriendsService for use with Riverpod dependency injection
+/// Error handling uses direct try-catch patterns for clarity and flexibility
 class FriendsServiceInstance implements IFriendsService {
   final FirebaseAuth _auth;
   final FirebaseDatabase _db;
@@ -122,7 +123,7 @@ class FriendsServiceInstance implements IFriendsService {
       }
       return [];
     } catch (e) {
-      NumberedLogger.e('Error getting friends for $uid: $e');
+      NumberedLogger.w('Error getting friends for $uid: $e');
       return [];
     }
   }
@@ -138,7 +139,7 @@ class FriendsServiceInstance implements IFriendsService {
       }
       return [];
     } catch (e) {
-      NumberedLogger.e('Error getting sent friend requests for $uid: $e');
+      NumberedLogger.w('Error getting sent friend requests for $uid: $e');
       return [];
     }
   }
@@ -154,7 +155,7 @@ class FriendsServiceInstance implements IFriendsService {
       }
       return [];
     } catch (e) {
-      NumberedLogger.e('Error getting received friend requests for $uid: $e');
+      NumberedLogger.w('Error getting received friend requests for $uid: $e');
       return [];
     }
   }
@@ -162,10 +163,10 @@ class FriendsServiceInstance implements IFriendsService {
   // Send friend request
   @override
   Future<bool> sendFriendRequest(String toUid) async {
-    try {
-      final fromUid = _auth.currentUser?.uid;
-      if (fromUid == null) return false;
+    final fromUid = _auth.currentUser?.uid;
+    if (fromUid == null) return false;
 
+    try {
       // Check if already friends
       final friends = await getUserFriends(fromUid);
       if (friends.contains(toUid)) return false;
@@ -200,10 +201,10 @@ class FriendsServiceInstance implements IFriendsService {
   // Accept friend request
   @override
   Future<bool> acceptFriendRequest(String fromUid) async {
-    try {
-      final toUid = _auth.currentUser?.uid;
-      if (toUid == null) return false;
+    final toUid = _auth.currentUser?.uid;
+    if (toUid == null) return false;
 
+    try {
       // Add to friends list for both users
       await _db.ref().update({
         '${DbPaths.userFriends(fromUid)}/$toUid': true,
@@ -233,10 +234,10 @@ class FriendsServiceInstance implements IFriendsService {
   // Decline friend request
   @override
   Future<bool> declineFriendRequest(String fromUid) async {
-    try {
-      final toUid = _auth.currentUser?.uid;
-      if (toUid == null) return false;
+    final toUid = _auth.currentUser?.uid;
+    if (toUid == null) return false;
 
+    try {
       // Remove from requests
       await _db.ref().update({
         '${DbPaths.userFriendRequestsSent(fromUid)}/$toUid': null,
@@ -257,10 +258,10 @@ class FriendsServiceInstance implements IFriendsService {
   // Remove friend
   @override
   Future<bool> removeFriend(String friendUid) async {
-    try {
-      final currentUid = _auth.currentUser?.uid;
-      if (currentUid == null) return false;
+    final currentUid = _auth.currentUser?.uid;
+    if (currentUid == null) return false;
 
+    try {
       // Remove from friends list for both users
       await _db.ref().update({
         '${DbPaths.userFriends(currentUid)}/$friendUid': null,
@@ -281,10 +282,10 @@ class FriendsServiceInstance implements IFriendsService {
   // Block friend
   @override
   Future<bool> blockFriend(String friendUid) async {
-    try {
-      final currentUid = _auth.currentUser?.uid;
-      if (currentUid == null) return false;
+    final currentUid = _auth.currentUser?.uid;
+    if (currentUid == null) return false;
 
+    try {
       // Add to blocked users list
       await _db.ref().update({
         'users/$currentUid/blockedUsers/$friendUid': true,

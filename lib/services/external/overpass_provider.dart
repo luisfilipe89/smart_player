@@ -25,6 +25,7 @@ class OverpassActions {
     bool bypassCache = false,
   }) async {
     // Overpass disabled: return empty to ensure no network call even if referenced
+    // Note: _overpassService is kept for potential future use
     return <Map<String, dynamic>>[];
   }
 
@@ -34,6 +35,7 @@ class OverpassActions {
     bool bypassCache = false,
   }) async {
     // Overpass disabled
+    // Note: _overpassService is kept for potential future use
     return <Map<String, dynamic>>[];
   }
 }

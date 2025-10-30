@@ -3,21 +3,19 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 // import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:move_young/utils/logger.dart';
+import 'package:move_young/config/cache_config.dart';
 
 /// Simple cache service using in-memory + SharedPreferences
 /// No SQLite, no platform channels, works everywhere
 class CacheServiceInstance {
   final SharedPreferences _prefs;
+  final CacheConfig _config;
 
   // In-memory cache for faster access
   final Map<String, CachedEntry> _memoryCache = {};
 
-  // TTL settings
-  static const Duration _userProfileTTL = Duration(hours: 1);
-  static const Duration _gameDetailsTTL = Duration(minutes: 30);
-  static const Duration _publicGamesTTL = Duration(minutes: 5);
-
-  CacheServiceInstance(this._prefs);
+  CacheServiceInstance(this._prefs, [CacheConfig? config])
+      : _config = config ?? const CacheConfig();
 
   /// Get cache key for SharedPreferences
   String _key(String prefix, String id) => 'cache_${prefix}_$id';
@@ -88,7 +86,7 @@ class CacheServiceInstance {
   /// Get cached user profile if not expired
   Future<Map<String, dynamic>?> getCachedUserProfile(String uid) async {
     final key = _key('user_profile', uid);
-    final entry = _getEntry(key, _userProfileTTL);
+    final entry = _getEntry(key, _config.userProfileTtl);
 
     if (entry == null) return null;
 
@@ -161,7 +159,7 @@ class CacheServiceInstance {
   /// Get cached game details if not expired
   Future<Map<String, dynamic>?> getCachedGameDetails(String gameId) async {
     final key = _key('game_details', gameId);
-    final entry = _getEntry(key, _gameDetailsTTL);
+    final entry = _getEntry(key, _config.gameDetailsTtl);
 
     if (entry == null) return null;
 
@@ -183,7 +181,7 @@ class CacheServiceInstance {
   /// Get cached public games list if not expired
   Future<List<Map<String, dynamic>>?> getCachedPublicGames() async {
     const key = 'cache_public_games';
-    final entry = _getEntry(key, _publicGamesTTL);
+    final entry = _getEntry(key, _config.publicGamesTtl);
 
     if (entry == null) return null;
 
@@ -204,9 +202,10 @@ class CacheServiceInstance {
     // Check memory cache
     for (final entry in _memoryCache.entries) {
       final age = now.difference(entry.value.timestamp);
-      if (age > _userProfileTTL &&
-          age > _gameDetailsTTL &&
-          age > _publicGamesTTL) {
+      // Entry is expired if it exceeds any TTL (conservative approach)
+      if (age > _config.userProfileTtl &&
+          age > _config.gameDetailsTtl &&
+          age > _config.publicGamesTtl) {
         expiredKeys.add(entry.key);
       }
     }

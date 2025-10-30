@@ -1,66 +1,66 @@
 // lib/services/games_service_instance.dart
-// import 'package:flutter/foundation.dart';
-import 'package:move_young/utils/logger.dart';
 import 'package:move_young/models/core/game.dart';
 import '../auth/auth_service.dart';
 import 'games_service.dart';
-import 'cloud_games_service_instance.dart';
 import '../../utils/service_error.dart';
+import '../../utils/logger.dart';
+import '../../services/firebase_error_handler.dart';
+import '../../repositories/game_repository.dart';
 
 /// Instance-based GamesService - cloud-first, no SQLite
 /// All game data is managed through Firebase Realtime Database
+///
+/// Uses IGameRepository for data access abstraction.
+/// Error handling is done here at the service layer with direct try-catch patterns.
 class GamesServiceInstance implements IGamesService {
   final IAuthService _authService;
-  final CloudGamesServiceInstance _cloudGamesService;
+  final IGameRepository _gameRepository;
 
-  GamesServiceInstance(this._authService, this._cloudGamesService);
+  GamesServiceInstance(this._authService, this._gameRepository);
 
   // Create a new game
   @override
   Future<String> createGame(Game game) async {
+    final userId = _authService.currentUserId;
+    if (userId == null) {
+      throw AuthException('User not authenticated');
+    }
+
     try {
-      final userId = _authService.currentUserId;
-
-      if (userId == null) {
-        throw AuthException('User not authenticated');
-      }
-
-      // Create in cloud
-      final cloudGameId = await _cloudGamesService.createGame(game);
-      return cloudGameId;
+      return await _gameRepository.createGame(game);
+    } on ServiceException {
+      rethrow; // Already typed, just rethrow
     } catch (e) {
       NumberedLogger.e('Error creating game: $e');
-      rethrow;
+      throw FirebaseErrorHandler.toServiceException(e);
     }
   }
 
   // Get user's games
   @override
   Future<List<Game>> getMyGames() async {
-    try {
-      final userId = _authService.currentUserId;
-      if (userId == null) return [];
+    final userId = _authService.currentUserId;
+    if (userId == null) return [];
 
-      // Fetch from cloud
-      return await _cloudGamesService.getMyGames();
+    try {
+      return await _gameRepository.getMyGames();
     } catch (e) {
-      NumberedLogger.e('Error getting my games: $e');
-      return [];
+      NumberedLogger.w('Error getting my games: $e');
+      return []; // Return empty list on error (offline-friendly)
     }
   }
 
   // Get games that user can join
   @override
   Future<List<Game>> getJoinableGames() async {
-    try {
-      final userId = _authService.currentUserId;
-      if (userId == null) return [];
+    final userId = _authService.currentUserId;
+    if (userId == null) return [];
 
-      // Fetch from cloud
-      return await _cloudGamesService.getJoinableGames();
+    try {
+      return await _gameRepository.getJoinableGames();
     } catch (e) {
-      NumberedLogger.e('Error getting joinable games: $e');
-      return [];
+      NumberedLogger.w('Error getting joinable games: $e');
+      return []; // Return empty list on error (offline-friendly)
     }
   }
 
@@ -68,11 +68,10 @@ class GamesServiceInstance implements IGamesService {
   @override
   Future<Game?> getGameById(String gameId) async {
     try {
-      // Fetch from cloud
-      return await _cloudGamesService.getGameById(gameId);
+      return await _gameRepository.getGameById(gameId);
     } catch (e) {
-      NumberedLogger.e('Error getting game by ID: $e');
-      return null;
+      NumberedLogger.w('Error getting game by ID: $e');
+      return null; // Return null on error
     }
   }
 
@@ -80,10 +79,12 @@ class GamesServiceInstance implements IGamesService {
   @override
   Future<void> updateGame(Game game) async {
     try {
-      await _cloudGamesService.updateGame(game);
+      return await _gameRepository.updateGame(game);
+    } on ServiceException {
+      rethrow;
     } catch (e) {
       NumberedLogger.e('Error updating game: $e');
-      rethrow;
+      throw FirebaseErrorHandler.toServiceException(e);
     }
   }
 
@@ -91,44 +92,48 @@ class GamesServiceInstance implements IGamesService {
   @override
   Future<void> deleteGame(String gameId) async {
     try {
-      await _cloudGamesService.deleteGame(gameId);
+      return await _gameRepository.deleteGame(gameId);
+    } on ServiceException {
+      rethrow;
     } catch (e) {
       NumberedLogger.e('Error deleting game: $e');
-      rethrow;
+      throw FirebaseErrorHandler.toServiceException(e);
     }
   }
 
   // Join a game
   @override
   Future<void> joinGame(String gameId) async {
-    try {
-      final userId = _authService.currentUserId;
-      if (userId == null) {
-        throw AuthException('User not authenticated');
-      }
+    final userId = _authService.currentUserId;
+    if (userId == null) {
+      throw AuthException('User not authenticated');
+    }
 
-      // Use cloud service to join
-      await _cloudGamesService.joinGame(gameId);
+    try {
+      return await _gameRepository.addPlayerToGame(gameId, userId);
+    } on ServiceException {
+      rethrow;
     } catch (e) {
       NumberedLogger.e('Error joining game: $e');
-      rethrow;
+      throw FirebaseErrorHandler.toServiceException(e);
     }
   }
 
   // Leave a game
   @override
   Future<void> leaveGame(String gameId) async {
-    try {
-      final userId = _authService.currentUserId;
-      if (userId == null) {
-        throw AuthException('User not authenticated');
-      }
+    final userId = _authService.currentUserId;
+    if (userId == null) {
+      throw AuthException('User not authenticated');
+    }
 
-      // Use cloud service to leave
-      await _cloudGamesService.leaveGame(gameId);
+    try {
+      return await _gameRepository.removePlayerFromGame(gameId, userId);
+    } on ServiceException {
+      rethrow;
     } catch (e) {
       NumberedLogger.e('Error leaving game: $e');
-      rethrow;
+      throw FirebaseErrorHandler.toServiceException(e);
     }
   }
 
@@ -136,6 +141,6 @@ class GamesServiceInstance implements IGamesService {
   @override
   Future<void> syncWithCloud() async {
     // No-op: we're always synced with cloud
-    NumberedLogger.d('syncWithCloud called (no-op - already cloud-first)');
+    // This method is kept for interface compatibility
   }
 }

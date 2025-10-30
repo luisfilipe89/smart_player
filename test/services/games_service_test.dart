@@ -2,45 +2,44 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mockito/mockito.dart';
 import 'package:move_young/services/games/games_service_instance.dart';
 import 'package:move_young/services/auth/auth_service_instance.dart';
-import 'package:move_young/services/games/cloud_games_service_instance.dart';
+import 'package:move_young/repositories/game_repository.dart';
 import '../helpers/test_db_helper.dart';
 import '../helpers/test_data.dart';
 
 // Mocks
 class MockAuthServiceInstance extends Mock implements AuthServiceInstance {}
 
-class MockCloudGamesServiceInstance extends Mock
-    implements CloudGamesServiceInstance {}
+class MockGameRepository extends Mock implements IGameRepository {}
 
 void main() {
   late GamesServiceInstance gamesService;
   late MockAuthServiceInstance mockAuthService;
-  late MockCloudGamesServiceInstance mockCloudService;
+  late MockGameRepository mockGameRepository;
 
   setUp(() {
     TestDbHelper.initializeFfi();
     mockAuthService = MockAuthServiceInstance();
-    mockCloudService = MockCloudGamesServiceInstance();
+    mockGameRepository = MockGameRepository();
 
     // Setup mock defaults
     when(mockAuthService.currentUserId).thenReturn('test-user-123');
     when(mockAuthService.isSignedIn).thenReturn(true);
 
     // Create service with injected mocks
-    gamesService = GamesServiceInstance(mockAuthService, mockCloudService);
+    gamesService = GamesServiceInstance(mockAuthService, mockGameRepository);
   });
 
   group('GamesServiceInstance - Unit Tests', () {
     test('should handle game creation with cloud service', () async {
       final game = TestData.createSampleGame();
 
-      when(mockCloudService.createGame(game))
+      when(mockGameRepository.createGame(game))
           .thenAnswer((_) async => 'cloud-game-id');
 
       final gameId = await gamesService.createGame(game);
 
       expect(gameId, equals('cloud-game-id'));
-      verify(mockCloudService.createGame(game)).called(1);
+      verify(mockGameRepository.createGame(game)).called(1);
     });
 
     test('should handle game creation without cloud service when signed out',
@@ -77,11 +76,11 @@ void main() {
         TestData.createSampleGame2()
       ];
 
-      when(mockCloudService.getMyGames()).thenAnswer((_) async => cloudGames);
+      when(mockGameRepository.getMyGames()).thenAnswer((_) async => cloudGames);
 
       await gamesService.syncWithCloud();
 
-      verify(mockCloudService.getMyGames()).called(1);
+      verify(mockGameRepository.getMyGames()).called(1);
     });
 
     test('should not sync when not authenticated', () async {
@@ -89,31 +88,31 @@ void main() {
 
       await gamesService.syncWithCloud();
 
-      verifyNever(mockCloudService.getMyGames());
+      verifyNever(mockGameRepository.getMyGames());
     });
 
-    test('should join game through cloud service', () async {
+    test('should join game through repository', () async {
       final game = TestData.createSampleGame();
 
-      when(mockCloudService.joinGame(game.id)).thenAnswer((_) async {});
+      when(mockGameRepository.addPlayerToGame(game.id, 'test-user-123'))
+          .thenAnswer((_) async {});
 
-      // This would normally throw if game doesn't exist locally
-      // For this unit test, we just verify the cloud service is called
-      // when trying to join
+      await gamesService.joinGame(game.id);
 
-      verifyNever(mockCloudService.joinGame(game.id));
+      verify(mockGameRepository.addPlayerToGame(game.id, 'test-user-123'))
+          .called(1);
     });
 
-    test('should leave game through cloud service', () async {
+    test('should leave game through repository', () async {
       final game = TestData.createSampleGame();
 
-      when(mockCloudService.leaveGame(game.id)).thenAnswer((_) async {});
+      when(mockGameRepository.removePlayerFromGame(game.id, 'test-user-123'))
+          .thenAnswer((_) async {});
 
-      // This would normally throw if game doesn't exist locally
-      // For this unit test, we just verify the cloud service is called
-      // when trying to leave
+      await gamesService.leaveGame(game.id);
 
-      verifyNever(mockCloudService.leaveGame(game.id));
+      verify(mockGameRepository.removePlayerFromGame(game.id, 'test-user-123'))
+          .called(1);
     });
 
     test('should handle service cleanup gracefully', () async {

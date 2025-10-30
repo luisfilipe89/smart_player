@@ -30,6 +30,22 @@ class SyncServiceInstance {
   static const Duration _stuckThreshold = Duration(minutes: 15);
   static const Duration _healthLogInterval = Duration(minutes: 10);
 
+  // Retry configuration with exponential backoff
+  static const int _maxRetries = 5;
+  static const Duration _baseRetryDelay = Duration(seconds: 30);
+  static const Duration _maxRetryDelay = Duration(minutes: 15);
+
+  // Operation priority levels (higher number = higher priority)
+  // Public constants for callers to use when adding sync operations
+  static const int priorityHigh =
+      3; // Critical operations (e.g., friend accept)
+  static const int priorityNormal =
+      2; // Normal operations (e.g., game join/leave)
+  static const int priorityLow = 1; // Low priority (e.g., updates)
+
+  // Private constants for internal use (alias to public constants)
+  static const int _priorityNormal = priorityNormal;
+
   SyncServiceInstance(
     this._cloudGamesService,
     this._friendsService,
@@ -60,12 +76,18 @@ class SyncServiceInstance {
     }
   }
 
-  /// Add operation to sync queue
+  /// Add operation to sync queue with priority
+  ///
+  /// [priority] determines execution order:
+  /// - 3 (high): Critical operations like friend accept
+  /// - 2 (normal): Standard operations like game join/leave
+  /// - 1 (low): Low priority operations like updates
   Future<void> addSyncOperation({
     required String type,
     required Map<String, dynamic> data,
     required Future<bool> Function() operation,
     String? itemId,
+    int priority = _priorityNormal,
   }) async {
     final syncOp = SyncOperation(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
@@ -76,38 +98,79 @@ class SyncServiceInstance {
       timestamp: DateTime.now(),
       retryCount: 0,
       itemId: itemId,
+      priority: priority,
     );
 
-    _syncQueue.add(syncOp);
+    // Insert based on priority (higher priority first)
+    // For same priority, FIFO order (insert at appropriate position)
+    int insertIndex = _syncQueue.length;
+    for (int i = 0; i < _syncQueue.length; i++) {
+      if (_syncQueue[i].priority < priority) {
+        insertIndex = i;
+        break;
+      }
+    }
+    _syncQueue.insert(insertIndex, syncOp);
+
     await _saveSyncQueue();
     _notifyStatusChange();
   }
 
-  /// Retry failed operations
+  /// Retry failed operations with exponential backoff
+  ///
+  /// Operations are retried with exponential backoff based on retry count.
+  /// Higher priority operations are retried first.
   Future<void> retryFailedOperations() async {
+    // Get failed operations sorted by priority (high first) and then by timestamp (oldest first)
     final failedOps =
-        _syncQueue.where((op) => op.status == _statusFailed).toList();
+        _syncQueue.where((op) => op.status == _statusFailed).toList()
+          ..sort((a, b) {
+            // First sort by priority (descending)
+            if (a.priority != b.priority) {
+              return b.priority.compareTo(a.priority);
+            }
+            // Then by timestamp (oldest first)
+            return a.timestamp.compareTo(b.timestamp);
+          });
 
     for (final op in failedOps) {
+      // Check if enough time has passed since last attempt (exponential backoff)
+      if (op.lastAttempt != null) {
+        final delay = _calculateRetryDelay(op.retryCount);
+        final timeSinceLastAttempt = DateTime.now().difference(op.lastAttempt!);
+        if (timeSinceLastAttempt < delay) {
+          // Too soon to retry, skip for now
+          continue;
+        }
+      }
+
+      // Check max retries
+      if (op.retryCount >= _maxRetries) {
+        NumberedLogger.w(
+            'Sync operation ${op.id} exceeded max retries (${_maxRetries}), marking as permanently failed');
+        continue; // Skip permanently failed operations
+      }
+
       try {
         final success = await _executeOperation(op);
         if (success) {
           op.status = _statusSynced;
           op.lastAttempt = DateTime.now();
+          NumberedLogger.d(
+              'Sync operation ${op.id} succeeded after ${op.retryCount} retries');
         } else {
           op.retryCount++;
           op.lastAttempt = DateTime.now();
-          if (op.retryCount >= 3) {
-            op.status = _statusFailed;
-          }
+          op.status = _statusFailed; // Keep as failed for next retry cycle
+          NumberedLogger.w(
+              'Sync operation ${op.id} failed (attempt ${op.retryCount}/$_maxRetries)');
         }
-      } catch (e) {
+      } catch (e, stack) {
         op.retryCount++;
         op.lastAttempt = DateTime.now();
-        if (op.retryCount >= 3) {
-          op.status = _statusFailed;
-        }
-        NumberedLogger.w('Sync retry failed: $e');
+        op.status = _statusFailed;
+        NumberedLogger.w('Sync retry failed for ${op.id}: $e');
+        NumberedLogger.d('Stack trace: $stack');
       }
     }
 
@@ -115,6 +178,16 @@ class SyncServiceInstance {
     _syncQueue.removeWhere((op) => op.status == _statusSynced);
     await _saveSyncQueue();
     _notifyStatusChange();
+  }
+
+  /// Calculate exponential backoff delay for retry
+  ///
+  /// Formula: min(baseDelay * 2^retryCount, maxDelay)
+  Duration _calculateRetryDelay(int retryCount) {
+    final delay = Duration(
+      milliseconds: _baseRetryDelay.inMilliseconds * (1 << retryCount),
+    );
+    return delay > _maxRetryDelay ? _maxRetryDelay : delay;
   }
 
   /// Mark operation as synced
@@ -294,6 +367,7 @@ class SyncOperation {
   int retryCount;
   DateTime? lastAttempt;
   final String? itemId;
+  final int priority; // Higher number = higher priority
 
   SyncOperation({
     required this.id,
@@ -305,6 +379,7 @@ class SyncOperation {
     required this.retryCount,
     this.lastAttempt,
     this.itemId,
+    this.priority = SyncServiceInstance._priorityNormal,
   });
 
   Map<String, dynamic> toJson() => {
@@ -316,6 +391,7 @@ class SyncOperation {
         'retryCount': retryCount,
         'lastAttempt': lastAttempt?.toIso8601String(),
         'itemId': itemId,
+        'priority': priority,
       };
 
   factory SyncOperation.fromJson(Map<String, dynamic> json) => SyncOperation(
@@ -326,11 +402,12 @@ class SyncOperation {
             false, // Placeholder since function can't be serialized
         status: json['status'],
         timestamp: DateTime.parse(json['timestamp']),
-        retryCount: json['retryCount'],
+        retryCount: json['retryCount'] ?? 0,
         lastAttempt: json['lastAttempt'] != null
             ? DateTime.parse(json['lastAttempt'])
             : null,
         itemId: json['itemId'],
+        priority: json['priority'] ?? SyncServiceInstance._priorityNormal,
       );
 }
 

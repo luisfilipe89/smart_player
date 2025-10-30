@@ -8,6 +8,9 @@ import '../services/firebase_error_handler.dart';
 /// Safely executes a service operation with typed error handling
 ///
 /// Wraps common try-catch patterns to throw typed exceptions
+///
+/// Note: This is a utility function - services should use direct try-catch
+/// with FirebaseErrorHandler.toServiceException() for clarity and flexibility.
 Future<T> safeServiceCall<T>(
   Future<T> Function() operation, {
   String? errorMessage,

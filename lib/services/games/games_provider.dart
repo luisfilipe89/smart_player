@@ -6,12 +6,14 @@ import 'package:move_young/models/core/game.dart';
 import '../auth/auth_provider.dart';
 import 'cloud_games_provider.dart';
 import 'cloud_games_service_instance.dart';
+import '../../repositories/game_repository_provider.dart';
 
 // GamesService provider with dependency injection
+// Now uses repository pattern for better abstraction
 final gamesServiceProvider = Provider<IGamesService>((ref) {
   final authService = ref.watch(authServiceProvider);
-  final cloudGamesService = ref.watch(cloudGamesServiceProvider);
-  return GamesServiceInstance(authService, cloudGamesService);
+  final gameRepository = ref.watch(gameRepositoryProvider);
+  return GamesServiceInstance(authService, gameRepository);
 });
 
 // My games provider (reactive) - using stream for real-time updates
