@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:move_young/models/core/game.dart';
@@ -477,16 +478,100 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
     });
   }
 
-  Future<void> _openDirections(String target) async {
-    final query = Uri.encodeComponent(target);
-    final uri =
-        Uri.parse('https://www.google.com/maps/search/?api=1&query=$query');
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    } else if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('could_not_open_google_maps'.tr())),
-      );
+  Future<void> _openDirections(Game game) async {
+    try {
+      Uri uri;
+      
+      // Prefer coordinates if available for accurate directions
+      if (game.latitude != null && game.longitude != null) {
+        uri = Uri.parse(
+          'https://www.google.com/maps/dir/?api=1&destination=${game.latitude},${game.longitude}&travelmode=walking',
+        );
+      } else {
+        // Fallback: Use address or location name
+        String searchQuery = '';
+        
+        // Strategy 1: Use address if available
+        if (game.address != null && game.address!.isNotEmpty) {
+          searchQuery = game.address!;
+        } 
+        // Strategy 2: Use location name
+        else if (game.location.isNotEmpty) {
+          searchQuery = game.location;
+          
+          // Strategy 3: Enhance with area name if we know it's in 's-Hertogenbosch
+          // This helps Google Maps find the location better
+          if (!searchQuery.toLowerCase().contains("'s-hertogenbosch") &&
+              !searchQuery.toLowerCase().contains('den bosch')) {
+            searchQuery = "$searchQuery, 's-Hertogenbosch";
+          }
+        } else {
+          // No location data available
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('No location information available for directions'),
+                backgroundColor: AppColors.orange,
+              ),
+            );
+          }
+          return;
+        }
+        
+        // Build search URL
+        final query = Uri.encodeComponent(searchQuery);
+        uri = Uri.parse('https://www.google.com/maps/search/?api=1&query=$query');
+      }
+      
+      // Try launching URL - if platform channel fails, use direct Android intent as fallback
+      try {
+        final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+        if (!launched && mounted) {
+          debugPrint('launchUrl returned false for: $uri');
+          _openUrlViaAndroidIntent(uri.toString());
+        }
+      } catch (launchError) {
+        debugPrint('Error launching URL via url_launcher: $launchError');
+        debugPrint('URI was: $uri');
+        // Fallback: Use direct Android intent
+        _openUrlViaAndroidIntent(uri.toString());
+      }
+    } catch (e) {
+      debugPrint('Error opening directions: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('could_not_open_maps'.tr()),
+            backgroundColor: AppColors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  /// Fallback method to open URL when url_launcher fails
+  Future<void> _openUrlViaAndroidIntent(String url) async {
+    debugPrint('Using fallback method to open URL: $url');
+    try {
+      const platform = MethodChannel('app.sportappdenbosch/intent');
+      await platform.invokeMethod('launchUrl', {'url': url});
+      debugPrint('Successfully launched URL via Android intent: $url');
+    } catch (e) {
+      debugPrint('Error launching URL via Android intent: $e');
+      // Last resort: try share_plus (user can select Google Maps from share menu)
+      try {
+        await Share.share(url);
+      } catch (shareError) {
+        debugPrint('Error sharing URL: $shareError');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('could_not_open_maps'.tr()),
+              backgroundColor: AppColors.red,
+            ),
+          );
+        }
+      }
     }
   }
 
@@ -1061,10 +1146,7 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
                         ],
                         Expanded(
                           child: OutlinedButton.icon(
-                            onPressed: () => _openDirections(
-                                (game.address?.isNotEmpty ?? false)
-                                    ? game.address!
-                                    : game.location),
+                            onPressed: () => _openDirections(game),
                             style: OutlinedButton.styleFrom(
                               minimumSize: const Size(0, 36),
                               padding: const EdgeInsets.symmetric(
