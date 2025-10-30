@@ -144,19 +144,163 @@ export const onUserDelete = onValueDeleted("/users/{uid}", async (event) => {
 
 // Enforce last-write-wins metadata and monotonic version on game updates
 export const onGameUpdate = onValueWritten("/games/{gameId}", async (event) => {
-  const before = event.data.before.val() || {};
+  const before = event.data.before.val();
   const after = event.data.after.val() || {};
   if (!after) return;
+
+  // Only update metadata if this is an actual update (game existed before)
+  // New game creations should not have updatedAt set by this function
+  const isCreation = !event.data.before.exists();
+  if (isCreation) {
+    // For new games, only set version if not already set
+    // IMPORTANT: Don't update updatedAt during creation - it should equal createdAt
+    // Also check if updatedAt is already correctly set to createdAt (or not set)
+    const updates: { [key: string]: any } = {};
+    if (!after.version) {
+      updates.version = 1;
+    }
+    // Ensure updatedAt is not set or equals createdAt for new games
+    // This prevents the "Modified" badge from appearing on newly created games
+    const createdAtMs = after.createdAt;
+    const updatedAtMs = after.updatedAt;
+    if (updatedAtMs && createdAtMs && updatedAtMs !== createdAtMs) {
+      // Fix: set updatedAt to match createdAt for new games
+      updates.updatedAt = createdAtMs;
+    }
+
+    if (Object.keys(updates).length > 0) {
+      await event.data.after.ref.update(updates);
+    }
+    return;
+  }
+
+  // This is an update - check if it's an organizer edit or just player participation changes
+  const beforeData = before || {};
+
+  // Skip if this is just a metadata update from this function (version/updatedAt only)
+  // This prevents infinite loops when we update version during creation
+  // Check if only version and/or updatedAt changed, and nothing else
+  let onlyMetadataChanged = true;
+  for (const key in after) {
+    if (key !== 'version' && key !== 'updatedAt') {
+      if (beforeData[key] !== after[key]) {
+        onlyMetadataChanged = false;
+        break;
+      }
+    }
+  }
+  // Also check if any keys were removed
+  for (const key in beforeData) {
+    if (key !== 'version' && key !== 'updatedAt' && !(key in after)) {
+      onlyMetadataChanged = false;
+      break;
+    }
+  }
+
+  if (onlyMetadataChanged) {
+    // Only version/updatedAt changed, likely from this function's own update
+    // Don't process further to avoid loops
+    return;
+  }
+
+  // Primary indicator: if lastOrganizerEditAt was updated, it's definitely an organizer edit
+  const beforeLastEdit = beforeData.lastOrganizerEditAt;
+  const afterLastEdit = after.lastOrganizerEditAt;
+  const isOrganizerEdit = afterLastEdit && afterLastEdit !== beforeLastEdit;
+
+  // If lastOrganizerEditAt wasn't set, check if only participant fields changed
+  // Participant fields are: players, currentPlayers, and nested invites/{uid}/status
+  // These changes (player joins/leaves) should NOT trigger updatedAt
+  let onlyParticipantFieldsChanged = false;
+  if (!isOrganizerEdit) {
+    // Check what fields actually changed (excluding metadata)
+    const changedFields = new Set<string>();
+    for (const key in after) {
+      if (key === 'version' || key === 'updatedAt' || key === 'updatedBy' || key === 'lastOrganizerEditAt') {
+        continue; // Skip metadata fields
+      }
+      if (beforeData[key] !== after[key]) {
+        changedFields.add(key);
+      }
+    }
+
+    // Check if ONLY participant fields changed:
+    // - players, currentPlayers (when players join/leave)
+    // - invites/{uid}/status (when players accept/decline invites)
+    const participantFields = ['players', 'currentPlayers'];
+    const participantOnlyFields = new Set(['players', 'currentPlayers', 'invites']);
+
+    // First, check if only players/currentPlayers changed
+    if (changedFields.size > 0 &&
+      changedFields.size <= participantFields.length &&
+      Array.from(changedFields).every(field => participantFields.includes(field))) {
+      onlyParticipantFieldsChanged = true;
+    }
+    // Otherwise, check if players/currentPlayers AND invites changed (player accept scenario)
+    else if (changedFields.size > 0 &&
+      changedFields.size <= participantOnlyFields.size &&
+      Array.from(changedFields).every(field => participantOnlyFields.has(field))) {
+      // Verify invites only had status changes (not new invites added)
+      if (changedFields.has('invites')) {
+        const beforeInvites = beforeData.invites || {};
+        const afterInvites = after.invites || {};
+        const beforeInviteUids = Object.keys(beforeInvites);
+        const afterInviteUids = Object.keys(afterInvites);
+
+        // Check if only invite statuses changed or new invites were added
+        // Both cases are participant-related actions, not game modifications
+        const newInvitesAdded = afterInviteUids.length > beforeInviteUids.length &&
+          beforeInviteUids.every(uid => afterInviteUids.includes(uid));
+        const sameInvitesStatusChanged =
+          beforeInviteUids.length === afterInviteUids.length &&
+          beforeInviteUids.every(uid => afterInviteUids.includes(uid));
+
+        if (newInvitesAdded || sameInvitesStatusChanged) {
+          // Check existing invites: only status should change (for status updates)
+          // Or new invites are just being added (organizer sending invites)
+          let onlyParticipantInviteChanges = true;
+          for (const uid of beforeInviteUids) {
+            const beforeInvite = beforeInvites[uid] || {};
+            const afterInvite = afterInvites[uid] || {};
+            // Check if anything other than status changed
+            for (const key in afterInvite) {
+              if (key !== 'status' && beforeInvite[key] !== afterInvite[key]) {
+                onlyParticipantInviteChanges = false;
+                break;
+              }
+            }
+            if (!onlyParticipantInviteChanges) break;
+          }
+          // New invites are also participant-related (organizer inviting people, not modifying game)
+          if (onlyParticipantInviteChanges || newInvitesAdded) {
+            onlyParticipantFieldsChanged = true;
+          }
+        }
+      } else {
+        // Only players/currentPlayers changed, no invites
+        onlyParticipantFieldsChanged = true;
+      }
+    }
+  }
+
+  // Only set updatedAt if this is an organizer edit, not just a player join/leave/accept
+  const shouldSetUpdatedAt = isOrganizerEdit || !onlyParticipantFieldsChanged;
+
   try {
-    const currentVersion = Number(before.version ?? 0);
+    const currentVersion = Number(beforeData.version ?? 0);
     const incomingVersion = Number(after.version ?? currentVersion);
     const nextVersion = isNaN(incomingVersion) || incomingVersion <= currentVersion
       ? currentVersion + 1
       : incomingVersion;
-    await event.data.after.ref.update({
-      version: nextVersion,
-      updatedAt: Date.now(),
-    });
+
+    const updates: { [key: string]: any } = { version: nextVersion };
+
+    // Only set updatedAt for organizer edits, not for player participation changes
+    if (shouldSetUpdatedAt) {
+      updates.updatedAt = Date.now();
+    }
+
+    await event.data.after.ref.update(updates);
   } catch (e) {
     console.error("Error enforcing game version/update metadata:", e);
   }

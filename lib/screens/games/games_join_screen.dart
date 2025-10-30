@@ -439,7 +439,7 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
                                   ),
                                 ),
                               ),
-                              // Show "Cancelled" (red) or "Modified" (orange) badge
+                              // Show "Cancelled" (red) badge
                               if (!currentGame.isActive)
                                 Container(
                                   margin: const EdgeInsets.only(left: 4),
@@ -459,32 +459,6 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
                                           style: AppTextStyles.superSmall
                                               .copyWith(
                                                   color: Colors.red.shade800,
-                                                  fontWeight: FontWeight.bold)),
-                                    ],
-                                  ),
-                                )
-                              else if (currentGame.updatedAt != null &&
-                                  currentGame.updatedAt!
-                                      .isAfter(currentGame.createdAt))
-                                Container(
-                                  margin: const EdgeInsets.only(left: 4),
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 6, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: Colors.orange.withValues(alpha: 0.1),
-                                    borderRadius: BorderRadius.circular(4),
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(Icons.edit,
-                                          size: 10,
-                                          color: Colors.orange.shade800),
-                                      const SizedBox(width: 2),
-                                      Text('Modified',
-                                          style: AppTextStyles.superSmall
-                                              .copyWith(
-                                                  color: Colors.orange.shade800,
                                                   fontWeight: FontWeight.bold)),
                                     ],
                                   ),
@@ -668,9 +642,14 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
     final bool hasLeftGame = inviteStatusesAsync.valueOrNull != null &&
         myUid != null &&
         inviteStatusesAsync.valueOrNull![myUid] == 'left';
+    
+    // Check if user previously declined this invite (for join option)
+    final bool hasDeclinedInvite = inviteStatusesAsync.valueOrNull != null &&
+        myUid != null &&
+        inviteStatusesAsync.valueOrNull![myUid] == 'declined';
 
     debugPrint(
-        '🎮 Game ${game.id}: isInvitedPending=$isInvitedPending, isJoined=$isJoined, hasLeftGame=$hasLeftGame, invitedGames.length=${filteredInvited.length}');
+        '🎮 Game ${game.id}: isInvitedPending=$isInvitedPending, isJoined=$isJoined, hasLeftGame=$hasLeftGame, hasDeclinedInvite=$hasDeclinedInvite, invitedGames.length=${filteredInvited.length}');
 
     if (isInvitedPending && !isJoined) {
       return Row(
@@ -819,6 +798,55 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
             color: Colors.white,
           ),
         ),
+      );
+    }
+
+    // Show "You declined" message with join button if user previously declined this invite
+    if (hasDeclinedInvite && !isJoined) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            margin: const EdgeInsets.only(bottom: 8),
+            decoration: BoxDecoration(
+              color: AppColors.red.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(AppRadius.smallCard),
+              border: Border.all(color: AppColors.red.withValues(alpha: 0.3)),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.close, size: 16, color: AppColors.red),
+                const SizedBox(width: 6),
+                Text(
+                  'You declined the invite',
+                  style: AppTextStyles.small.copyWith(
+                    color: AppColors.red,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          ElevatedButton(
+            onPressed: game.hasSpace ? () => _joinGame(game) : null,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: game.hasSpace ? AppColors.blue : AppColors.grey,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(AppRadius.card),
+              ),
+              elevation: 0,
+            ),
+            child: Text(
+              game.hasSpace ? 'join_game'.tr() : 'game_full'.tr(),
+              style: AppTextStyles.cardTitle.copyWith(
+                color: Colors.white,
+              ),
+            ),
+          ),
+        ],
       );
     }
 

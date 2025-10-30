@@ -730,35 +730,7 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
                       spacing: 6,
                       runSpacing: 6,
                       children: [
-                        // Show "Modified" badge if game was updated after creation (but not if cancelled)
-                        // Cancelled games should only show "Cancelled" badge
-                        if (game.isActive &&
-                            game.updatedAt != null &&
-                            game.updatedAt!.isAfter(game.createdAt)) ...[
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: Colors.orange.withValues(alpha: 0.1),
-                              border: const Border.fromBorderSide(BorderSide(
-                                  color: AppColors.lightgrey, width: 1)),
-                              borderRadius:
-                                  BorderRadius.circular(AppRadius.smallCard),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(Icons.edit,
-                                    size: 12, color: Colors.orange.shade800),
-                                const SizedBox(width: 4),
-                                Text('Modified',
-                                    style: AppTextStyles.small.copyWith(
-                                        color: Colors.orange.shade800,
-                                        fontWeight: FontWeight.bold)),
-                              ],
-                            ),
-                          ),
-                        ],
+                        // Show "Cancelled" badge for cancelled games
                         if (!game.isActive) ...[
                           Container(
                             padding: const EdgeInsets.symmetric(
