@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:easy_localization/easy_localization.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:move_young/models/core/game.dart';
 import 'package:move_young/theme/_theme.dart';
 import 'package:move_young/services/auth/auth_provider.dart';
@@ -10,7 +11,7 @@ import 'package:move_young/services/games/cloud_games_provider.dart';
 import 'package:move_young/services/external/weather_provider.dart';
 import 'package:move_young/services/fields/fields_provider.dart';
 import 'package:move_young/services/system/haptics_provider.dart';
-import 'package:move_young/widgets/friends/friend_picker_widget.dart';
+import 'package:move_young/services/friends/friends_provider.dart';
 import 'package:move_young/screens/main_scaffold.dart';
 import 'package:move_young/widgets/common/success_checkmark_overlay.dart';
 import 'package:move_young/providers/infrastructure/firebase_providers.dart';
@@ -1928,27 +1929,26 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                               PanelHeader('invite_friends_label'.tr()),
                               Padding(
                                 padding: AppPaddings.symmHorizontalReg,
-                                child: FriendPicker(
-                                  currentUid:
-                                      ref.read(currentUserIdProvider) ?? '',
-                                  initiallySelected: _selectedFriendUids,
-                                  lockedUids: widget.initialGame != null
-                                      ? _lockedInvitedUids
-                                      : const <String>{},
-                                  onToggle: (uid, selected) {
-                                    // Prevent toggling locked invites in edit mode
-                                    if (widget.initialGame != null &&
-                                        _lockedInvitedUids.contains(uid)) {
-                                      return;
-                                    }
-                                    setState(() {
-                                      if (selected) {
-                                        _selectedFriendUids.add(uid);
-                                      } else {
-                                        _selectedFriendUids.remove(uid);
-                                      }
-                                    });
-                                  },
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    // Selected friends displayed as chips
+                                    if (_selectedFriendUids.isNotEmpty)
+                                      Wrap(
+                                        spacing: 8,
+                                        runSpacing: 8,
+                                        children: [
+                                          // Render each selected friend as a chip
+                                          ...(_selectedFriendUids.map(
+                                              (uid) => _buildFriendChip(uid))),
+                                          // "Add more" button chip
+                                          _buildAddFriendChip(),
+                                        ],
+                                      )
+                                    else
+                                      // If no friends selected yet, show only the "Add" button
+                                      _buildAddFriendChip(),
+                                  ],
                                 ),
                               ),
                             ],
@@ -2020,6 +2020,90 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
     );
   }
 
+  // Build a chip for a selected friend
+  Widget _buildFriendChip(String uid) {
+    return FutureBuilder<Map<String, String?>>(
+      future: ref.read(friendsActionsProvider).fetchMinimalProfile(uid),
+      builder: (context, snap) {
+        if (!snap.hasData || snap.data == null) {
+          return const SizedBox.shrink(); // Loading or error
+        }
+
+        final name = snap.data?['displayName'] ?? 'Friend';
+        final photo = snap.data?['photoURL'];
+        final locked =
+            widget.initialGame != null && _lockedInvitedUids.contains(uid);
+
+        return Chip(
+          avatar: CircleAvatar(
+            radius: 12,
+            backgroundColor: AppColors.superlightgrey,
+            backgroundImage: (photo != null && photo.isNotEmpty)
+                ? CachedNetworkImageProvider(photo)
+                : null,
+            child: (photo == null || photo.isEmpty)
+                ? Text(
+                    name.isNotEmpty ? name[0].toUpperCase() : '?',
+                    style: const TextStyle(fontSize: 12),
+                  )
+                : null,
+          ),
+          label: Text(name),
+          deleteIcon: Icon(
+            locked ? Icons.lock : Icons.close,
+            size: 16,
+          ),
+          onDeleted: locked
+              ? null
+              : () {
+                  setState(() => _selectedFriendUids.remove(uid));
+                },
+          backgroundColor: locked
+              ? AppColors.grey.withValues(alpha: 0.1)
+              : AppColors.blue.withValues(alpha: 0.1),
+        );
+      },
+    );
+  }
+
+  // Build the "Add Friends" action chip
+  Widget _buildAddFriendChip() {
+    return ActionChip(
+      avatar: const Icon(Icons.person_add, size: 18, color: AppColors.blue),
+      label: Text('add_friends'.tr()),
+      onPressed: () => _showFriendSelectionSheet(),
+      backgroundColor: AppColors.blue.withValues(alpha: 0.1),
+      labelStyle: AppTextStyles.body.copyWith(color: AppColors.blue),
+    );
+  }
+
+  // Show the friend selection bottom sheet
+  void _showFriendSelectionSheet() {
+    ref.read(hapticsActionsProvider)?.selectionClick();
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => _FriendSelectionSheet(
+        currentUid: ref.read(currentUserIdProvider) ?? '',
+        initiallySelected: _selectedFriendUids,
+        lockedUids:
+            widget.initialGame != null ? _lockedInvitedUids : const <String>{},
+        onApply: (selectedUids) {
+          // Apply changes when Done is pressed
+          setState(() {
+            // Keep locked invites (they can't be removed)
+            final newSelection = <String>{..._lockedInvitedUids};
+            // Add newly selected friends
+            newSelection.addAll(selectedUids);
+            _selectedFriendUids.clear();
+            _selectedFriendUids.addAll(newSelection);
+          });
+        },
+      ),
+    );
+  }
+
   Future<void> _loadLockedInvites() async {
     if (widget.initialGame == null) return;
     try {
@@ -2032,7 +2116,350 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
         _lockedInvitedUids
           ..clear()
           ..addAll(statuses.keys);
+        // Also populate selectedFriendUids with already-invited friends
+        // so they appear checked in the UI
+        _selectedFriendUids
+          ..clear()
+          ..addAll(statuses.keys);
       });
     } catch (_) {}
+  }
+}
+
+// Bottom sheet widget for selecting friends with search
+class _FriendSelectionSheet extends ConsumerStatefulWidget {
+  final String currentUid;
+  final Set<String> initiallySelected;
+  final Set<String> lockedUids;
+  final void Function(Set<String> selectedUids) onApply;
+
+  const _FriendSelectionSheet({
+    required this.currentUid,
+    required this.initiallySelected,
+    required this.lockedUids,
+    required this.onApply,
+  });
+
+  @override
+  ConsumerState<_FriendSelectionSheet> createState() =>
+      _FriendSelectionSheetState();
+}
+
+class _FriendSelectionSheetState extends ConsumerState<_FriendSelectionSheet> {
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
+  late Set<String> _selectedUids;
+
+  @override
+  void initState() {
+    super.initState();
+    // Initialize with current selections (including locked ones)
+    _selectedUids = Set<String>.from(widget.initiallySelected);
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  void _handleToggle(String uid, bool selected) {
+    // Prevent toggling locked invites
+    if (widget.lockedUids.contains(uid)) {
+      return;
+    }
+    setState(() {
+      if (selected) {
+        _selectedUids.add(uid);
+      } else {
+        _selectedUids.remove(uid);
+      }
+    });
+  }
+
+  void _handleApply() {
+    ref.read(hapticsActionsProvider)?.selectionClick();
+    // Apply selections (excluding locked ones from the set we pass back)
+    final newSelections =
+        _selectedUids.where((uid) => !widget.lockedUids.contains(uid)).toSet();
+    widget.onApply(newSelections);
+    Navigator.of(context).pop();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        color: AppColors.white,
+        borderRadius: BorderRadius.only(
+          topLeft: Radius.circular(20),
+          topRight: Radius.circular(20),
+        ),
+      ),
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.of(context).size.height * 0.85,
+      ),
+      child: Column(
+        children: [
+          // Header with drag handle and title
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              children: [
+                // Drag handle
+                Container(
+                  width: 40,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: 12),
+                  decoration: BoxDecoration(
+                    color: AppColors.grey.withValues(alpha: 0.3),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                // Title
+                Text('invite_friends'.tr(), style: AppTextStyles.h3),
+                const SizedBox(height: 16),
+                // Search bar
+                TextField(
+                  controller: _searchController,
+                  autofocus: false,
+                  decoration: InputDecoration(
+                    hintText: 'search_friends'.tr(),
+                    prefixIcon: const Icon(Icons.search),
+                    suffixIcon: _searchQuery.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(Icons.clear),
+                            onPressed: () {
+                              _searchController.clear();
+                              setState(() => _searchQuery = '');
+                            },
+                          )
+                        : null,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: BorderSide(
+                        color: AppColors.grey.withValues(alpha: 0.3),
+                      ),
+                    ),
+                    filled: true,
+                    fillColor: AppColors.superlightgrey,
+                  ),
+                  onChanged: (value) => setState(() => _searchQuery = value),
+                ),
+              ],
+            ),
+          ),
+          // Selected count indicator
+          if (_selectedUids.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Row(
+                children: [
+                  Text(
+                    '${_selectedUids.length} ${'selected'.tr()}',
+                    style: AppTextStyles.small.copyWith(color: AppColors.grey),
+                  ),
+                ],
+              ),
+            ),
+          const Divider(height: 1),
+          // Friend list (reuse existing FriendPicker but with search)
+          Expanded(
+            child: _SearchableFriendPicker(
+              currentUid: widget.currentUid,
+              selectedUids: _selectedUids,
+              lockedUids: widget.lockedUids,
+              searchQuery: _searchQuery,
+              onToggle: _handleToggle,
+            ),
+          ),
+          // Done button
+          SafeArea(
+            top: false,
+            child: Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: AppColors.white,
+                border: Border(
+                  top: BorderSide(
+                    color: AppColors.grey.withValues(alpha: 0.2),
+                    width: 1,
+                  ),
+                ),
+              ),
+              child: SizedBox(
+                width: double.infinity,
+                height: 50,
+                child: ElevatedButton(
+                  onPressed: _handleApply,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.blue,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(AppRadius.card),
+                    ),
+                    elevation: 0,
+                  ),
+                  child: Text(
+                    'done'.tr(),
+                    style: AppTextStyles.cardTitle.copyWith(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// Searchable friend picker widget
+class _SearchableFriendPicker extends ConsumerWidget {
+  final String currentUid;
+  final Set<String> selectedUids;
+  final Set<String> lockedUids;
+  final String searchQuery;
+  final void Function(String uid, bool selected) onToggle;
+
+  const _SearchableFriendPicker({
+    required this.currentUid,
+    required this.selectedUids,
+    required this.lockedUids,
+    required this.searchQuery,
+    required this.onToggle,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Container(
+      decoration: const BoxDecoration(
+        color: AppColors.white,
+      ),
+      child: ref.watch(watchFriendsListProvider).when(
+            data: (friendUids) {
+              if (friendUids.isEmpty) {
+                return Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Text('no_friends_to_invite'.tr(),
+                      style:
+                          AppTextStyles.small.copyWith(color: AppColors.grey)),
+                );
+              }
+
+              // Fetch all profiles upfront to avoid FutureBuilder in ListView
+              return FutureBuilder<Map<String, Map<String, String?>>>(
+                future: Future.wait(friendUids.map((id) => ref
+                    .read(friendsActionsProvider)
+                    .fetchMinimalProfile(id))).then((profiles) {
+                  final map = <String, Map<String, String?>>{};
+                  for (int i = 0;
+                      i < friendUids.length && i < profiles.length;
+                      i++) {
+                    map[friendUids[i]] = profiles[i];
+                  }
+                  return map;
+                }),
+                builder: (context, snap) {
+                  if (snap.connectionState == ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+
+                  if (!snap.hasData || snap.data == null) {
+                    return Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Text('no_friends_to_invite'.tr(),
+                          style: AppTextStyles.small
+                              .copyWith(color: AppColors.grey)),
+                    );
+                  }
+
+                  final profiles = snap.data!;
+
+                  // Apply search filter
+                  final filtered = searchQuery.isEmpty
+                      ? friendUids
+                      : friendUids.where((uid) {
+                          final name = profiles[uid]?['displayName'] ?? '';
+                          return name
+                              .toLowerCase()
+                              .contains(searchQuery.toLowerCase());
+                        }).toList();
+
+                  if (filtered.isEmpty) {
+                    return Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Text('no_friends_yet'.tr(),
+                          style: AppTextStyles.small
+                              .copyWith(color: AppColors.grey)),
+                    );
+                  }
+
+                  return ListView.separated(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    itemCount: filtered.length,
+                    separatorBuilder: (_, __) =>
+                        const Divider(height: 1, color: AppColors.lightgrey),
+                    itemBuilder: (context, i) {
+                      final uid = filtered[i];
+                      final data = profiles[uid] ??
+                          const {'displayName': 'User', 'photoURL': null};
+                      final name = data['displayName'] ?? 'User';
+                      final photo = data['photoURL'];
+                      final selected = selectedUids.contains(uid);
+                      final locked = lockedUids.contains(uid);
+
+                      return ListTile(
+                        leading: CircleAvatar(
+                          backgroundColor: AppColors.superlightgrey,
+                          backgroundImage: (photo != null && photo.isNotEmpty)
+                              ? CachedNetworkImageProvider(photo)
+                              : null,
+                          child: (photo == null || photo.isEmpty)
+                              ? Text(
+                                  name.isNotEmpty ? name[0].toUpperCase() : '?')
+                              : null,
+                        ),
+                        title: Text(name,
+                            style: AppTextStyles.body.copyWith(
+                                color: locked ? AppColors.grey : null)),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (locked)
+                              Padding(
+                                padding: const EdgeInsets.only(right: 8),
+                                child: Icon(
+                                  Icons.lock,
+                                  size: 16,
+                                  color: AppColors.grey,
+                                ),
+                              ),
+                            Checkbox(
+                              value: selected || locked,
+                              onChanged: locked
+                                  ? null
+                                  : (v) => onToggle(uid, v == true),
+                            ),
+                          ],
+                        ),
+                        onTap: locked ? null : () => onToggle(uid, !selected),
+                      );
+                    },
+                  );
+                },
+              );
+            },
+            loading: () => const Center(child: CircularProgressIndicator()),
+            error: (_, __) => Padding(
+              padding: const EdgeInsets.all(16),
+              child: Text('no_friends_to_invite'.tr(),
+                  style: AppTextStyles.small.copyWith(color: AppColors.grey)),
+            ),
+          ),
+    );
   }
 }
