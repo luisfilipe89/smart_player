@@ -88,7 +88,7 @@ class DeepLinkDispatcher {
     } else if (intent is AgendaIntent) {
       controller.switchToTab(kTabAgenda, popToRoot: true);
     } else if (intent is DiscoverGamesIntent) {
-      controller.switchToTab(kTabJoin, popToRoot: true);
+      controller.openJoinScreen(intent.highlightGameId);
     } else if (intent is MyGamesIntent) {
       controller.openMyGames(
         initialTab: intent.initialTab,

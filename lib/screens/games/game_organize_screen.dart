@@ -892,18 +892,25 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
           ),
         );
 
-        // Send in-app invites to selected friends (if signed in)
+        // Navigate to My Games → Organized and highlight the created game
+        // Navigate immediately for consistent UX transition regardless of invite status
+        final ctrl = MainScaffoldController.maybeOf(context);
+        ctrl?.openMyGames(
+            initialTab: 1, highlightGameId: createdId, popToRoot: true);
+
+        // Send in-app invites to selected friends in the background (non-blocking)
+        // This ensures consistent transition timing whether friends are invited or not
         if (_selectedFriendUids.isNotEmpty) {
-          try {
-            await ref.read(cloudGamesActionsProvider).sendGameInvitesToFriends(
-                createdId, _selectedFriendUids.toList());
+          ref.read(cloudGamesActionsProvider)
+              .sendGameInvitesToFriends(createdId, _selectedFriendUids.toList())
+              .then((_) {
             debugPrint(
                 '✅ Successfully sent invites to ${_selectedFriendUids.length} friends');
-          } catch (e, stackTrace) {
-            // Log error but don't fail game creation
+          }).catchError((e, stackTrace) {
+            // Log error but don't fail game creation or interrupt navigation
             debugPrint('❌ Failed to send game invites: $e');
             debugPrint('Stack trace: $stackTrace');
-            // Show error to user so they know invites weren't sent
+            // Show error to user so they know invites weren't sent (if still mounted)
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
@@ -925,13 +932,8 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                 ),
               );
             }
-          }
+          });
         }
-
-        // Navigate to My Games → Organized and highlight the created game
-        final ctrl = MainScaffoldController.maybeOf(context);
-        ctrl?.openMyGames(
-            initialTab: 1, highlightGameId: createdId, popToRoot: true);
       }
     } catch (e) {
       if (mounted) {

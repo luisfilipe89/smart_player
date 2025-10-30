@@ -286,6 +286,13 @@ export const onGameUpdate = onValueWritten("/games/{gameId}", async (event) => {
   // Only set updatedAt if this is an organizer edit, not just a player join/leave/accept
   const shouldSetUpdatedAt = isOrganizerEdit || !onlyParticipantFieldsChanged;
 
+  // Skip version/updatedAt updates entirely if only participant fields changed
+  // This prevents unnecessary writes and potential notification triggers
+  if (onlyParticipantFieldsChanged && !isOrganizerEdit) {
+    console.log(`Skipping version/updatedAt update for game ${event.params.gameId} - only participant fields changed (invites/players)`);
+    return;
+  }
+
   try {
     const currentVersion = Number(beforeData.version ?? 0);
     const incomingVersion = Number(after.version ?? currentVersion);
@@ -504,29 +511,39 @@ export const onGameInviteCreate = onValueCreated(
         return;
       }
 
+      // Get game data to retrieve sport and organizerId
+      const gameSnap = await admin
+        .database()
+        .ref(`/games/${gameId}`)
+        .once("value");
+      const game = gameSnap.val() || {};
+      const organizerId = (game.organizerId || invite.organizerId || "").toString();
+      const rawSport = (game.sport || invite.sport || "game").toString();
+
       // Resolve organizer display name with graceful fallbacks
-      const organizerId = (invite.organizerId as string | undefined) || undefined;
-      let organizerName: string =
-        invite.organizerName || invite.fromName || "Someone";
-      if (organizerName === "Someone" && organizerId) {
+      let organizerName: string = "Someone";
+      if (organizerId) {
         try {
           const user = await admin.auth().getUser(organizerId);
           if (user.displayName) organizerName = user.displayName;
-        } catch (_) { }
+        } catch (_) {
+          // Fallback to invite data if available
+          organizerName = invite.organizerName || invite.fromName || "Someone";
+        }
+      } else {
+        organizerName = invite.organizerName || invite.fromName || "Someone";
       }
 
       // Map soccer to "football"; otherwise use sport value
-      const rawSport = (invite.sport || "game").toString();
       const sportWord = rawSport.toLowerCase() === "soccer" ? "football" : rawSport;
 
       const message: admin.messaging.MulticastMessage = {
         notification: {
           title: "Game Invitation",
-          body: `${organizerName} invited you to play a ${sportWord} match!`,
+          body: `${organizerName} invited you to a ${sportWord} game!`,
         },
         data: {
-          type: "game_invite",
-          route: "/my-games",
+          type: "discover",
           gameId,
         },
         tokens,

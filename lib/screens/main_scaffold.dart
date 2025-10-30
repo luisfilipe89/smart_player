@@ -17,10 +17,12 @@ import 'package:move_young/widgets/navigation/navigation_utils.dart';
 
 // ---------------------------- Navigation Controller Scope ----------------------------
 class MainScaffoldController {
-  const MainScaffoldController(this._switchToTab, [this._openMyGames]);
+  const MainScaffoldController(this._switchToTab,
+      [this._openMyGames, this._openJoinScreen]);
   final void Function(int index, {bool popToRoot}) _switchToTab;
   final void Function(
       {int initialTab, String? highlightGameId, bool popToRoot})? _openMyGames;
+  final void Function(String? highlightGameId)? _openJoinScreen;
 
   void switchToTab(int index, {bool popToRoot = false}) =>
       _switchToTab(index, popToRoot: popToRoot);
@@ -35,6 +37,15 @@ class MainScaffoldController {
           popToRoot: popToRoot);
     } else {
       _switchToTab(kTabJoin, popToRoot: popToRoot);
+    }
+  }
+
+  void openJoinScreen(String? highlightGameId) {
+    final fn = _openJoinScreen;
+    if (fn != null) {
+      fn(highlightGameId);
+    } else {
+      _switchToTab(kTabJoin, popToRoot: true);
     }
   }
 
@@ -124,6 +135,18 @@ class MainScaffoldState extends ConsumerState<MainScaffold> {
       switchToTab(kTabAgenda, popToRoot: true);
     } else if (intent is DiscoverGamesIntent) {
       switchToTab(kTabJoin, popToRoot: true);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final nav = _joinKey.currentState;
+        if (nav != null) {
+          nav.push(
+            NavigationUtils.sharedAxisRoute(
+              builder: (_) => GamesJoinScreen(
+                highlightGameId: intent.highlightGameId,
+              ),
+            ),
+          );
+        }
+      });
     } else if (intent is MyGamesIntent) {
       _myGamesArgs = MyGamesArgs(
           initialTab: intent.initialTab,
@@ -177,6 +200,25 @@ class MainScaffoldState extends ConsumerState<MainScaffold> {
               MaterialPageRoute(
                 builder: (_) => GamesMyScreen(
                   initialTab: initialTab,
+                  highlightGameId: highlightGameId,
+                ),
+              ),
+            );
+          }
+        });
+      },
+      (String? highlightGameId) {
+        // Pop to root of Join tab first
+        _popToRoot(kTabJoin);
+        ref.read(mainTabIndexProvider.notifier).state = kTabJoin;
+        _currentIndexNotifier.value = kTabJoin;
+        // Push GamesJoinScreen with highlightGameId
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          final nav = _joinKey.currentState;
+          if (nav != null) {
+            nav.push(
+              NavigationUtils.sharedAxisRoute(
+                builder: (_) => GamesJoinScreen(
                   highlightGameId: highlightGameId,
                 ),
               ),

@@ -1,5 +1,6 @@
 // lib/services/notification_service_instance.dart
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:move_young/utils/logger.dart';
@@ -102,7 +103,15 @@ class NotificationServiceInstance implements INotificationService {
       initSettings,
       onDidReceiveNotificationResponse: (NotificationResponse response) {
         if (response.payload != null) {
-          _onNotificationTap?.call(response.payload);
+          // Parse JSON payload and handle navigation
+          try {
+            final payloadMap =
+                jsonDecode(response.payload!) as Map<String, dynamic>;
+            _onDeepLinkNavigation?.call(payloadMap);
+          } catch (e) {
+            // Fallback to string payload handler if not JSON
+            _onNotificationTap?.call(response.payload);
+          }
         }
       },
     );
@@ -230,14 +239,28 @@ class NotificationServiceInstance implements INotificationService {
 
   Future<void> _setupFirebaseMessaging() async {
     // Handle foreground messages
-    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+    FirebaseMessaging.onMessage.listen((RemoteMessage message) async {
       NumberedLogger.i('Got a message whilst in the foreground!');
       NumberedLogger.d('Message data: ${message.data}');
 
       if (message.notification != null) {
         NumberedLogger.d(
             'Message also contained a notification: ${message.notification}');
+
+        // Show local notification when app is in foreground
+        // This ensures users see the notification even when app is open
+        // Store the message data as JSON payload so we can handle tap later
+        final payload = jsonEncode(message.data);
+        await showLocalNotification(
+          id: message.hashCode
+              .abs(), // Use absolute value to ensure positive ID
+          title: message.notification?.title ?? 'SMARTPLAYER',
+          body: message.notification?.body ?? 'You have a new notification',
+          payload: payload,
+          channel: _channelGames, // Use games channel for game invites
+        );
       }
+      // DO NOT navigate automatically - only navigate when user taps the notification
     });
 
     // Handle background messages
@@ -257,7 +280,15 @@ class NotificationServiceInstance implements INotificationService {
   }
 
   void _handleNotificationTap(RemoteMessage message) {
-    if (message.data.containsKey('gameId')) {
+    // Handle game invites with type 'discover' (navigate to Join a Game screen)
+    if (message.data.containsKey('gameId') &&
+        message.data['type'] == 'discover') {
+      _onDeepLinkNavigation?.call({
+        'type': 'discover',
+        'gameId': message.data['gameId'],
+      });
+    } else if (message.data.containsKey('gameId')) {
+      // Fallback for other game-related notifications
       _onDeepLinkNavigation?.call({
         'type': 'game',
         'gameId': message.data['gameId'],
@@ -304,13 +335,22 @@ class NotificationServiceInstance implements INotificationService {
     String? payload,
     AndroidNotificationChannel? channel,
   }) async {
-    const AndroidNotificationDetails androidPlatformChannelSpecifics =
+    // Use provided channel or default to games channel for better visibility
+    final channelId = channel?.id ?? _channelGames.id;
+    final channelName = channel?.name ?? 'Games';
+    final channelDescription =
+        channel?.description ?? 'Game invites and updates';
+
+    final AndroidNotificationDetails androidPlatformChannelSpecifics =
         AndroidNotificationDetails(
-      'smartplayer_default',
-      'General',
-      channelDescription: 'General notifications',
-      importance: Importance.max,
+      channelId,
+      channelName,
+      channelDescription: channelDescription,
+      importance: Importance.high, // Use high importance for game invites
       priority: Priority.high,
+      playSound: true,
+      enableVibration: true,
+      showWhen: true,
     );
 
     const DarwinNotificationDetails iOSPlatformChannelSpecifics =
@@ -320,7 +360,7 @@ class NotificationServiceInstance implements INotificationService {
       presentSound: true,
     );
 
-    const NotificationDetails platformChannelSpecifics = NotificationDetails(
+    final NotificationDetails platformChannelSpecifics = NotificationDetails(
       android: androidPlatformChannelSpecifics,
       iOS: iOSPlatformChannelSpecifics,
     );

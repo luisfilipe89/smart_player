@@ -16,6 +16,9 @@ import 'package:move_young/utils/crashlytics_helper.dart';
 class CloudGamesServiceInstance {
   final FirebaseDatabase _database;
   final FirebaseAuth _auth;
+  // Notifications are now handled automatically by Cloud Function onGameInviteCreate
+  // Keep this for backward compatibility with provider setup
+  // ignore: unused_field
   final INotificationService _notificationService;
 
   // Query limits to prevent memory issues
@@ -73,10 +76,8 @@ class CloudGamesServiceInstance {
       String dateKey, String fieldKey, String timeKey) async {
     try {
       // Query all active games
-      final snapshot = await _gamesRef
-          .orderByChild('isActive')
-          .equalTo(true)
-          .get();
+      final snapshot =
+          await _gamesRef.orderByChild('isActive').equalTo(true).get();
 
       if (!snapshot.exists) {
         return false;
@@ -89,10 +90,10 @@ class CloudGamesServiceInstance {
           final game = Game.fromJson(gameData);
 
           // Check if this game uses the same slot
-          final gameDateKey = gameData['slotDate']?.toString() ??
-              _dateKey(game.dateTime);
-          final gameFieldKey = gameData['slotField']?.toString() ??
-              _fieldKeyForGame(game);
+          final gameDateKey =
+              gameData['slotDate']?.toString() ?? _dateKey(game.dateTime);
+          final gameFieldKey =
+              gameData['slotField']?.toString() ?? _fieldKeyForGame(game);
           final gameTimeKey =
               gameData['slotTime']?.toString() ?? _timeKey(game.dateTime);
 
@@ -138,8 +139,8 @@ class CloudGamesServiceInstance {
 
       if (slotSnapshot.exists && slotSnapshot.value == true) {
         // Slot exists, check if it's actually occupied by an active game
-        final isOccupied = await _isSlotOccupiedByActiveGame(
-            dateKey, fieldKey, timeKey);
+        final isOccupied =
+            await _isSlotOccupiedByActiveGame(dateKey, fieldKey, timeKey);
 
         if (isOccupied) {
           NumberedLogger.w(
@@ -212,8 +213,8 @@ class CloudGamesServiceInstance {
           final dateKey = _dateKey(game.dateTime);
           final timeKey = _timeKey(game.dateTime);
           final fieldKey = _fieldKeyForGame(game);
-          final isOccupied = await _isSlotOccupiedByActiveGame(
-              dateKey, fieldKey, timeKey);
+          final isOccupied =
+              await _isSlotOccupiedByActiveGame(dateKey, fieldKey, timeKey);
           if (isOccupied) {
             throw ValidationException('new_slot_unavailable');
           }
@@ -352,7 +353,10 @@ class CloudGamesServiceInstance {
       if (e.toString().toLowerCase().contains('permission') ||
           e.toString().toLowerCase().contains('denied')) {
         // Check if it's related to slot change
-        if (slotChanged && newDateKey != null && newFieldKey != null && newTimeKey != null) {
+        if (slotChanged &&
+            newDateKey != null &&
+            newFieldKey != null &&
+            newTimeKey != null) {
           try {
             final isOccupied = await _isSlotOccupiedByActiveGame(
                 newDateKey, newFieldKey, newTimeKey);
@@ -571,7 +575,7 @@ class CloudGamesServiceInstance {
           try {
             final entryMap = Map<String, dynamic>.from(entry);
             final game = Game.fromJson(entryMap);
-            
+
             // Filter out games organized by the current user
             if (game.organizerId == userId) {
               continue;
@@ -581,7 +585,7 @@ class CloudGamesServiceInstance {
             final isPublic = entryMap['isPublic'] is bool
                 ? entryMap['isPublic'] as bool
                 : ((entryMap['isPublic'] ?? 1) == 1);
-            
+
             if (!isPublic) {
               // Check if user has an invite for this private game
               final invites = entryMap['invites'];
@@ -594,7 +598,7 @@ class CloudGamesServiceInstance {
                         (userInvite is Map &&
                             (userInvite['status']?.toString() ?? 'pending') ==
                                 'pending'));
-                
+
                 if (!hasInvite) {
                   // Private game and user not invited - exclude it
                   continue;
@@ -640,7 +644,7 @@ class CloudGamesServiceInstance {
           final isPublic = entryMap['isPublic'] is bool
               ? entryMap['isPublic'] as bool
               : ((entryMap['isPublic'] ?? 1) == 1);
-          
+
           if (!isPublic) {
             // Check if user has an invite for this private game
             final invites = entryMap['invites'];
@@ -653,7 +657,7 @@ class CloudGamesServiceInstance {
                       (userInvite is Map &&
                           (userInvite['status']?.toString() ?? 'pending') ==
                               'pending'));
-              
+
               if (!hasInvite) {
                 // Private game and user not invited - exclude it
                 continue;
@@ -888,9 +892,11 @@ class CloudGamesServiceInstance {
       // Count only games where user hasn't joined yet (excludes games they accepted)
       final userId = _currentUserId;
       if (userId == null) return 0;
-      
-      final filteredGames = games.where((g) => !g.players.contains(userId)).toList();
-      NumberedLogger.d('Badge count: ${filteredGames.length} pending invites (${games.length} total invited games)');
+
+      final filteredGames =
+          games.where((g) => !g.players.contains(userId)).toList();
+      NumberedLogger.d(
+          'Badge count: ${filteredGames.length} pending invites (${games.length} total invited games)');
       return filteredGames.length;
     });
   }
@@ -1067,14 +1073,12 @@ class CloudGamesServiceInstance {
         .onValue
         .asyncMap((event) async {
       // Get current organized games and re-filter by index
-      final organizedSnapshot = await _gamesRef
-          .orderByChild('organizerId')
-          .equalTo(userId)
-          .get();
-      
+      final organizedSnapshot =
+          await _gamesRef.orderByChild('organizerId').equalTo(userId).get();
+
       final gamesMap = <String, Game>{};
       final Set<String> createdGameIds = {};
-      
+
       if (event.snapshot.exists) {
         final createdData =
             Map<dynamic, dynamic>.from(event.snapshot.value as Map);
@@ -1086,11 +1090,13 @@ class CloudGamesServiceInstance {
         for (final entry in data.values) {
           try {
             final game = Game.fromJson(Map<String, dynamic>.from(entry));
-            if (createdGameIds.contains(game.id) && game.dateTime.isAfter(now)) {
+            if (createdGameIds.contains(game.id) &&
+                game.dateTime.isAfter(now)) {
               gamesMap[game.id] = game;
             }
           } catch (e) {
-            NumberedLogger.w('Error parsing organized game from index watch: $e');
+            NumberedLogger.w(
+                'Error parsing organized game from index watch: $e');
           }
         }
       }
@@ -1198,7 +1204,7 @@ class CloudGamesServiceInstance {
 
     void _emitCombined() {
       if (controller.isClosed) return;
-      
+
       // Merge organized and joined games (organized take precedence)
       final allGamesMap = <String, Game>{
         ...joinedGames,
@@ -1470,7 +1476,8 @@ class CloudGamesServiceInstance {
 
       // Update the game
       updates['${DbPaths.games}/$gameId/players'] = updatedPlayers;
-      updates['${DbPaths.games}/$gameId/currentPlayers'] = updatedPlayers.length;
+      updates['${DbPaths.games}/$gameId/currentPlayers'] =
+          updatedPlayers.length;
 
       // Update invite status to 'left' if invite exists (so organizer sees red cross)
       final inviteCheckSnapshot =
@@ -1656,20 +1663,10 @@ class CloudGamesServiceInstance {
         rethrow;
       }
 
-      // Send notifications after successfully writing to DB
-      for (final friendUid in friendUids) {
-        try {
-          await _notificationService.sendGameInviteNotification(
-              friendUid, gameId);
-          NumberedLogger.d('Notification sent to $friendUid');
-        } catch (e) {
-          // Log notification errors but don't fail the entire operation
-          NumberedLogger.w('Failed to send notification to $friendUid: $e');
-        }
-      }
-
+      // Notifications are automatically sent by Cloud Function onGameInviteCreate
+      // when invites are written to /games/{gameId}/invites/{inviteeUid}
       NumberedLogger.i(
-          'Game invites sent to ${friendUids.length} friends for game $gameId');
+          'Game invites sent to ${friendUids.length} friends for game $gameId. Notifications will be sent automatically by Cloud Function.');
     } catch (e, stackTrace) {
       NumberedLogger.e('Error sending game invites: $e');
       NumberedLogger.e('Stack trace: $stackTrace');
