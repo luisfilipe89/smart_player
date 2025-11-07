@@ -107,24 +107,19 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
       'color': const Color(0xFFFF9800),
     },
     {
-      'key': 'tennis',
-      'icon': Icons.sports_tennis,
-      'color': const Color(0xFF8BC34A),
-    },
-    {
       'key': 'volleyball',
       'icon': Icons.sports_volleyball,
       'color': const Color(0xFFE91E63),
     },
     {
-      'key': 'badminton',
-      'icon': Icons.sports_handball,
-      'color': const Color(0xFF9C27B0),
-    },
-    {
       'key': 'table_tennis',
       'icon': Icons.sports_tennis,
       'color': const Color(0xFF00BCD4),
+    },
+    {
+      'key': 'boules',
+      'icon': Icons.sports_cricket,
+      'color': const Color(0xFF795548),
     },
   ];
 
@@ -228,9 +223,13 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
     try {
       final fieldsActions = ref.read(fieldsActionsProvider);
 
-      // Only support soccer and basketball and keep 's-Hertogenbosch'
-      final sportType =
-          _selectedSport == 'basketball' ? 'basketball' : 'soccer';
+      final sportType = switch (_selectedSport) {
+        'basketball' => 'basketball',
+        'volleyball' => 'beachvolleyball',
+        'table_tennis' => 'table_tennis',
+        'boules' => 'boules',
+        _ => 'soccer',
+      };
 
       final rawFields = await fieldsActions.fetchFields(
         areaName: 's-Hertogenbosch',
@@ -352,14 +351,24 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
 
     try {
       final weatherActions = ref.read(weatherActionsProvider);
-      debugPrint(
-          '🌤️ Weather: Fetching for date ${_selectedDate!}, lat 51.6978, lon 5.3037');
+      final selectedFieldLat =
+          (_selectedField?['latitude'] as num?)?.toDouble() ??
+              double.tryParse(_selectedField?['latitude']?.toString() ?? '') ??
+              (_selectedField?['lat'] as num?)?.toDouble();
+      final selectedFieldLon =
+          (_selectedField?['longitude'] as num?)?.toDouble() ??
+              double.tryParse(_selectedField?['longitude']?.toString() ?? '') ??
+              (_selectedField?['lon'] as num?)?.toDouble();
+      final latitude = selectedFieldLat ?? 51.6978; // 's-Hertogenbosch fallback
+      final longitude = selectedFieldLon ?? 5.3037;
 
-      // Use a default location for 's-Hertogenbosch
+      debugPrint(
+          "🌤️ Weather: Fetching for date ${_selectedDate!}, lat $latitude, lon $longitude");
+
       final weatherData = await weatherActions.fetchWeatherForDate(
         date: _selectedDate!,
-        latitude: 51.6978, // 's-Hertogenbosch coordinates
-        longitude: 5.3037,
+        latitude: latitude,
+        longitude: longitude,
       );
 
       debugPrint('🌤️ Weather: Received ${weatherData.length} hours of data');

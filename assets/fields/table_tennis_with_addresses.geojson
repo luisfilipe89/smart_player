@@ -1,0 +1,148 @@
+{
+  "type": "FeatureCollection",
+  "generator": "overpass-turbo",
+  "copyright": "The data included in this document is from www.openstreetmap.org. The data is made available under ODbL.",
+  "timestamp": "2025-11-07T17:09:51Z",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "way/1006424012",
+        "access": "yes",
+        "leisure": "pitch",
+        "sport": "table_tennis",
+        "address_display_name": "Jacob van Maerlantstraat, Zuid, Zuidoost, 's-Hertogenbosch, Noord-Brabant, Nederland, 5216 JC, Nederland",
+        "address_short": "Jacob van Maerlantstraat, 5216 JC, 's-Hertogenbosch, Nederland",
+        "address_super_short": "Jacob van Maerlantstraat, 5216 JC"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              5.3183153,
+              51.6861011
+            ],
+            [
+              5.318309,
+              51.6860745
+            ],
+            [
+              5.3184058,
+              51.6860658
+            ],
+            [
+              5.3184121,
+              51.6860923
+            ],
+            [
+              5.3183153,
+              51.6861011
+            ]
+          ]
+        ]
+      },
+      "id": "way/1006424012"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "way/1395689594",
+        "access": "yes",
+        "leisure": "pitch",
+        "sport": "table_tennis",
+        "address_display_name": "Weymouthstraat, Hinthammerpoort, 's-Hertogenbosch, Noord-Brabant, Nederland, 5213 TR, Nederland",
+        "address_short": "Weymouthstraat, 5213 TR, 's-Hertogenbosch, Nederland",
+        "address_super_short": "Weymouthstraat, 5213 TR"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              5.3199537,
+              51.6911097
+            ],
+            [
+              5.3199905,
+              51.6911204
+            ],
+            [
+              5.3199804,
+              51.6911337
+            ],
+            [
+              5.3199436,
+              51.691123
+            ],
+            [
+              5.3199537,
+              51.6911097
+            ]
+          ]
+        ]
+      },
+      "id": "way/1395689594"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "node/8480298510",
+        "access": "yes",
+        "leisure": "pitch",
+        "sport": "table_tennis",
+        "address_display_name": "Jupitersingel, Overlaet West, Rosmalen, 's-Hertogenbosch, Noord-Brabant, Nederland, 5241 JG, Nederland",
+        "address_short": "Jupitersingel, 5241 JG, Rosmalen, Nederland",
+        "address_super_short": "Jupitersingel, 5241 JG"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          5.3507077,
+          51.7189877
+        ]
+      },
+      "id": "node/8480298510"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "node/9525279447",
+        "access": "yes",
+        "leisure": "pitch",
+        "sport": "table_tennis",
+        "address_display_name": "Bevrijdingspad, Molenhoek, Rosmalen, 's-Hertogenbosch, Noord-Brabant, Nederland, 5241 EE, Nederland",
+        "address_short": "Bevrijdingspad, 5241 EE, Rosmalen, Nederland",
+        "address_super_short": "Bevrijdingspad, 5241 EE"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          5.3646374,
+          51.7131169
+        ]
+      },
+      "id": "node/9525279447"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "node/9546068392",
+        "access": "yes",
+        "leisure": "pitch",
+        "sport": "table_tennis",
+        "address_display_name": "Terpeborch, Overlaet West, Rosmalen, 's-Hertogenbosch, Noord-Brabant, Nederland, 5241 KB, Nederland",
+        "address_short": "Terpeborch, 5241 KB, Rosmalen, Nederland",
+        "address_super_short": "Terpeborch, 5241 KB"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          5.360306,
+          51.7224741
+        ]
+      },
+      "id": "node/9546068392"
+    }
+  ]
+}

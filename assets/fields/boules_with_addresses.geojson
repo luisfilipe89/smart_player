@@ -1,0 +1,289 @@
+{
+  "type": "FeatureCollection",
+  "generator": "overpass-turbo",
+  "copyright": "The data included in this document is from www.openstreetmap.org. The data is made available under ODbL.",
+  "timestamp": "2025-11-07T17:21:01Z",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "way/71289185",
+        "leisure": "pitch",
+        "sport": "boules",
+        "address_display_name": "Spanjaardwaard, Maasakker, Empel, 's-Hertogenbosch, Noord-Brabant, Nederland, 5236 XS, Nederland",
+        "address_short": "Spanjaardwaard, 5236 XS, 's-Hertogenbosch, Nederland",
+        "address_super_short": "Spanjaardwaard, 5236 XS"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              5.3183152,
+              51.7312529
+            ],
+            [
+              5.3185531,
+              51.7312047
+            ],
+            [
+              5.3186388,
+              51.7313667
+            ],
+            [
+              5.3184009,
+              51.731415
+            ],
+            [
+              5.3183152,
+              51.7312529
+            ]
+          ]
+        ]
+      },
+      "id": "way/71289185"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "way/234116731",
+        "leisure": "pitch",
+        "sport": "boules",
+        "address_display_name": "Vincent van Goghlaan, Hintham-Zuid, Hintham, Rosmalen, 's-Hertogenbosch, Noord-Brabant, Nederland, 5246 GB, Nederland",
+        "address_short": "Vincent van Goghlaan, 5246 GB, Rosmalen, Nederland",
+        "address_super_short": "Vincent van Goghlaan, 5246 GB"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              5.3412999,
+              51.6978028
+            ],
+            [
+              5.3412168,
+              51.6977936
+            ],
+            [
+              5.341248,
+              51.6976854
+            ],
+            [
+              5.3413312,
+              51.6976947
+            ],
+            [
+              5.3412999,
+              51.6978028
+            ]
+          ]
+        ]
+      },
+      "id": "way/234116731"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "way/315604672",
+        "leisure": "pitch",
+        "sport": "boules",
+        "address_display_name": "Van Leeuwenhoekstraat, Boschveld, West, 's-Hertogenbosch, Noord-Brabant, Nederland, 5223 CW, Nederland",
+        "address_short": "Van Leeuwenhoekstraat, 5223 CW, 's-Hertogenbosch, Nederland",
+        "address_super_short": "Van Leeuwenhoekstraat, 5223 CW"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              5.2877861,
+              51.6924823
+            ],
+            [
+              5.2877795,
+              51.6924204
+            ],
+            [
+              5.2879772,
+              51.6924122
+            ],
+            [
+              5.2879838,
+              51.6924741
+            ],
+            [
+              5.2877861,
+              51.6924823
+            ]
+          ]
+        ]
+      },
+      "id": "way/315604672"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "way/362215222",
+        "leisure": "pitch",
+        "sport": "boules",
+        "address_display_name": "Crolliusstraat, Aawijk-Noord, 's-Hertogenbosch, Noord-Brabant, Nederland, 5213 GG, Nederland",
+        "address_short": "Crolliusstraat, 5213 GG, 's-Hertogenbosch, Nederland",
+        "address_super_short": "Crolliusstraat, 5213 GG"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              5.3301129,
+              51.6937055
+            ],
+            [
+              5.330144,
+              51.6936732
+            ],
+            [
+              5.3303079,
+              51.6937339
+            ],
+            [
+              5.3302769,
+              51.6937661
+            ],
+            [
+              5.3302423,
+              51.6937533
+            ],
+            [
+              5.330145,
+              51.6937174
+            ],
+            [
+              5.3301129,
+              51.6937055
+            ]
+          ]
+        ]
+      },
+      "id": "way/362215222"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "way/633052942",
+        "leisure": "pitch",
+        "sport": "boules",
+        "address_display_name": "Sint Corneliusweg, Bokhoven, 's-Hertogenbosch, Noord-Brabant, Nederland, 5221 BZ, Nederland",
+        "address_short": "Sint Corneliusweg, 5221 BZ, 's-Hertogenbosch, Nederland",
+        "address_super_short": "Sint Corneliusweg, 5221 BZ"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              5.2314014,
+              51.7382553
+            ],
+            [
+              5.2312216,
+              51.73829
+            ],
+            [
+              5.2311961,
+              51.7382393
+            ],
+            [
+              5.2313759,
+              51.7382046
+            ],
+            [
+              5.2314014,
+              51.7382553
+            ]
+          ]
+        ]
+      },
+      "id": "way/633052942"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "way/821080784",
+        "leisure": "pitch",
+        "sport": "boules",
+        "address_display_name": "2, Wuyvenhaerd, Haverleij, 's-Hertogenbosch, Noord-Brabant, Nederland, 5221 RA, Nederland",
+        "address_short": "Wuyvenhaerd, 2, 5221 RA, 's-Hertogenbosch, Nederland",
+        "address_super_short": "Wuyvenhaerd, 5221 RA"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              5.244363,
+              51.722409
+            ],
+            [
+              5.2444032,
+              51.7223983
+            ],
+            [
+              5.2444664,
+              51.7224895
+            ],
+            [
+              5.2444262,
+              51.7225002
+            ],
+            [
+              5.244363,
+              51.722409
+            ]
+          ]
+        ]
+      },
+      "id": "way/821080784"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "way/929288398",
+        "leisure": "pitch",
+        "sport": "boules",
+        "address_display_name": "Kwartierenlaan, Maasdal, Empel, 's-Hertogenbosch, Noord-Brabant, Nederland, 5235 JE, Nederland",
+        "address_short": "Kwartierenlaan, 5235 JE, 's-Hertogenbosch, Nederland",
+        "address_super_short": "Kwartierenlaan, 5235 JE"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              5.3046834,
+              51.7243104
+            ],
+            [
+              5.3046135,
+              51.7242681
+            ],
+            [
+              5.3047317,
+              51.7241931
+            ],
+            [
+              5.3048016,
+              51.7242354
+            ],
+            [
+              5.3046834,
+              51.7243104
+            ]
+          ]
+        ]
+      },
+      "id": "way/929288398"
+    }
+  ]
+}

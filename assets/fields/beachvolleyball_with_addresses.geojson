@@ -1,0 +1,92 @@
+{
+  "type": "FeatureCollection",
+  "generator": "overpass-turbo",
+  "copyright": "The data included in this document is from www.openstreetmap.org. The data is made available under ODbL.",
+  "timestamp": "2025-11-07T16:58:30Z",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "way/1034013274",
+        "leisure": "pitch",
+        "lit": "yes",
+        "sport": "beachvolleyball",
+        "address_display_name": "Sportpark De Groote Wielen, Laaghemaal, Vlietdijk, Rosmalen, 's-Hertogenbosch, Noord-Brabant, Nederland, 5241 HR, Nederland",
+        "address_short": "Laaghemaal, 5241 HR, Rosmalen, Nederland",
+        "address_super_short": "Laaghemaal, 5241 HR"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              5.354756,
+              51.7241928
+            ],
+            [
+              5.3550956,
+              51.7242457
+            ],
+            [
+              5.3548201,
+              51.7249241
+            ],
+            [
+              5.3544803,
+              51.7248711
+            ],
+            [
+              5.3547172,
+              51.7242883
+            ],
+            [
+              5.354756,
+              51.7241928
+            ]
+          ]
+        ]
+      },
+      "id": "way/1034013274"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "way/1365940624",
+        "leisure": "pitch",
+        "sport": "beachvolleyball",
+        "surface": "sand",
+        "address_display_name": "sv CHC, Kooikersweg, De Schutskamp, West, Deuteren, 's-Hertogenbosch, Noord-Brabant, Nederland, 5223 VZ, Nederland",
+        "address_short": "Kooikersweg, 5223 VZ, 's-Hertogenbosch, Nederland",
+        "address_super_short": "Kooikersweg, 5223 VZ"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              5.2788482,
+              51.6940194
+            ],
+            [
+              5.2786896,
+              51.6940905
+            ],
+            [
+              5.2784036,
+              51.6938455
+            ],
+            [
+              5.2785622,
+              51.6937744
+            ],
+            [
+              5.2788482,
+              51.6940194
+            ]
+          ]
+        ]
+      },
+      "id": "way/1365940624"
+    }
+  ]
+}

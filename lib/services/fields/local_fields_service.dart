@@ -11,11 +11,15 @@ class LocalFieldsService {
     // `areaName` kept for API compatibility; current GeoJSON is not area-specific.
     // ignore: unused_local_variable
     final _ = areaName;
-    const primaryPath = 'assets/fields/football_fields_with_addresses.geojson';
-    const fallbackPath =
-        'assets/fields/football_leisure_pitch, sport_soccer, access_yes, equipment_yes.geojson';
+    final assetCandidates = _resolveAssetCandidates(sportType);
 
-    final raw = await _tryLoad(primaryPath) ?? await _tryLoad(fallbackPath);
+    String? raw;
+    for (final path in assetCandidates) {
+      raw = await _tryLoad(path);
+      if (raw != null) {
+        break;
+      }
+    }
     if (raw == null) {
       return null;
     }
@@ -75,6 +79,40 @@ class LocalFieldsService {
         })
         .where((e) => e['lat'] != null && e['lon'] != null)
         .toList();
+  }
+
+  List<String> _resolveAssetCandidates(String sportType) {
+    final normalized = sportType.toLowerCase();
+    const soccerFallback =
+        'assets/fields/football_leisure_pitch, sport_soccer, access_yes, equipment_yes.geojson';
+
+    const defaultAssets = <String>[
+      'assets/fields/football_fields_with_addresses.geojson',
+      soccerFallback,
+    ];
+
+    const sportAssets = <String, List<String>>{
+      'soccer': defaultAssets,
+      'football': defaultAssets,
+      'basketball': <String>[
+        'assets/fields/basketball_fields_with_addresses.geojson',
+        'assets/fields/basketball_leisure_pitch, sport_basketball, access_yes.geojson',
+      ],
+      'beachvolleyball': <String>[
+        'assets/fields/beachvolleyball_with_addresses.geojson',
+        'assets/fields/beachvolleyball_leisure_pitch, sport_beachvolleyball.geojson',
+      ],
+      'table_tennis': <String>[
+        'assets/fields/table_tennis_with_addresses.geojson',
+        '_old/tabletennis_leisure_pitch, sport_tabletennis_access_yes.geojson',
+      ],
+      'boules': <String>[
+        'assets/fields/boules_with_addresses.geojson',
+        '_old/boules_leisure_pitch, sport_boules.geojson',
+      ],
+    };
+
+    return sportAssets[normalized] ?? defaultAssets;
   }
 
   Future<String?> _tryLoad(String path) async {
