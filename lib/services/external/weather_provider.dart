@@ -5,7 +5,9 @@ import 'package:move_young/providers/infrastructure/shared_preferences_provider.
 
 // Weather service provider
 final weatherServiceProvider = Provider<WeatherServiceInstance>((ref) {
-  final prefs = ref.watch(sharedPreferencesProvider);
+  final prefsAsync = ref.watch(sharedPreferencesProvider);
+  // WeatherServiceInstance accepts nullable SharedPreferences
+  final prefs = prefsAsync.valueOrNull;
   return WeatherServiceInstance(prefs);
 });
 

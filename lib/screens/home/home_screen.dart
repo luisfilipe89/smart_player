@@ -767,7 +767,7 @@ class _InvitesBadge extends StatelessWidget {
       ),
       alignment: Alignment.center,
       child: Text(
-        count > 99 ? '99+' : '$count',
+        count > 99 ? '99+' : count.toString(),
         style: const TextStyle(
           color: Colors.white,
           fontSize: 11,

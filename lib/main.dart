@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 // No explicit DartPluginRegistrant import; rely on default plugin registration
@@ -11,7 +10,8 @@ import 'dart:async';
 import 'package:move_young/screens/welcome/welcome_screen.dart';
 import 'package:move_young/theme/_theme.dart';
 import 'package:move_young/services/system/accessibility_provider.dart';
-import 'package:move_young/providers/infrastructure/shared_preferences_provider.dart';
+import 'package:move_young/providers/infrastructure/shared_preferences_provider.dart'
+    show initializeSharedPreferencesEarly, sharedPreferencesProvider;
 import 'package:move_young/providers/locale_controller.dart';
 import 'package:move_young/widgets/common/sync_status_indicator.dart';
 import 'firebase_options.dart';
@@ -32,15 +32,20 @@ void main() async {
       NumberedLogger.install();
 
       // Register background message handler BEFORE Firebase initialization
-      // This must be a top-level function and registered early
+      // This must be a top-level function and registered early (Firebase requirement)
+      // However, the actual background FlutterEngine creation is deferred
       FirebaseMessaging.onBackgroundMessage(
           _firebaseMessagingBackgroundHandler);
 
-      // Centralized bootstrap for Firebase, AppCheck, Crashlytics
+      // Only initialize critical Firebase services synchronously
+      // Non-critical services (AppCheck, Analytics) will be deferred
       await AppBootstrap.initialize();
 
-      // SharedPreferences will be initialized after first frame
-      // to avoid platform channel errors during app startup
+      // Initialize SharedPreferences EARLY in main() before runApp()
+      // This ensures platform channels are ready and plugin is registered
+      // Start initialization but don't block - it will complete asynchronously
+      // The FutureProvider will use the early-initialized instance when ready
+      initializeSharedPreferencesEarly();
 
       // Handle errors gracefully and report to Crashlytics when available
       FlutterError.onError = (FlutterErrorDetails details) {
@@ -150,17 +155,22 @@ class _MoveYoungAppState extends ConsumerState<MoveYoungApp>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    // Apply saved locale when SharedPreferences becomes available later
+    // Apply saved locale when SharedPreferences becomes available
+    // FutureProvider handles initialization automatically, no manual call needed
     _prefsSubscription = ref.listenManual(sharedPreferencesProvider, (
       previous,
       next,
     ) async {
-      if (previous == null && next != null && mounted && context.mounted) {
+      // When SharedPreferences transitions from loading to data, apply saved locale
+      final wasLoading = previous?.isLoading ?? true;
+      final hasData = next?.hasValue ?? false;
+
+      if (wasLoading && hasData && mounted && context.mounted) {
         try {
           final ctrl = ref.read(localeControllerProvider);
           final saved = await ctrl.loadSavedLocaleCode();
           final locale = ctrl.parseLocaleCode(saved);
-          if (locale != null) {
+          if (locale != null && mounted && context.mounted) {
             await context.setLocale(locale);
             debugPrint(
               '[Startup] Applied saved locale on prefs ready: ${locale.languageCode}',
@@ -171,41 +181,32 @@ class _MoveYoungAppState extends ConsumerState<MoveYoungApp>
         }
       }
     });
-    // Wait a full frame cycle before initializing
+
+    // Wait a full frame cycle before marking as initialized
     // This ensures platform channels are completely ready
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      // Initialize SharedPreferences after first frame
+      if (!mounted) return;
+
+      // Initialize non-critical Firebase services (AppCheck, Analytics)
+      // This avoids blocking the first frame with non-critical initialization
+      unawaited(AppBootstrap.initializeDeferred());
+
+      // After first frame, ensure SharedPreferences initialization is attempted
+      // The early initialization started in main() should complete by now
+      // FutureProvider will use that instance if available
+      debugPrint(
+          '[Startup] After first frame - SharedPreferences should be initializing');
+
+      // Give SharedPreferences a moment to initialize after first frame
+      // This ensures plugin registration is definitely complete
+      await Future.delayed(const Duration(milliseconds: 500));
+
+      // Mark as initialized - SharedPreferences will be available when ready
+      // Consumers handle loading/error states appropriately
       if (mounted) {
-        try {
-          await initializeSharedPreferences(
-            ref,
-          ).timeout(const Duration(seconds: 2));
-          debugPrint('[Startup] SharedPreferences init completed');
-        } catch (e) {
-          debugPrint(
-            '[Startup] SharedPreferences init timed out or failed: $e',
-          );
-        }
-        // Apply saved locale after SharedPreferences is ready
-        try {
-          final ctrl = ref.read(localeControllerProvider);
-          final saved = await ctrl.loadSavedLocaleCode();
-          final locale = ctrl.parseLocaleCode(saved);
-          if (locale != null && mounted && context.mounted) {
-            await context.setLocale(locale);
-            debugPrint(
-              '[Startup] Applied saved locale after init: ${locale.languageCode}',
-            );
-          }
-        } catch (e) {
-          debugPrint('Failed to apply saved locale: $e');
-        }
-        // Mark as initialized after SharedPreferences is ready
-        if (mounted) {
-          setState(() {
-            _isInitialized = true;
-          });
-        }
+        setState(() {
+          _isInitialized = true;
+        });
       }
     });
   }
@@ -224,11 +225,17 @@ class _MoveYoungAppState extends ConsumerState<MoveYoungApp>
     return Consumer(
       builder: (context, ref, child) {
         // Try to get high contrast mode, but don't block on it
+        // Use read() instead of watch() to avoid reactive rebuilds during startup
+        // and handle null gracefully
         bool isHighContrast = false;
         try {
-          isHighContrast = ref.watch(isHighContrastEnabledProvider);
+          // Check if SharedPreferences is available (FutureProvider may still be loading)
+          final prefsAsync = ref.read(sharedPreferencesProvider);
+          if (prefsAsync.hasValue) {
+            isHighContrast = ref.read(isHighContrastEnabledProvider);
+          }
         } catch (e) {
-          debugPrint('Error reading high contrast mode: $e');
+          // Silently use default - high contrast is optional
           isHighContrast = false;
         }
 
@@ -322,7 +329,7 @@ class ModernSplashScreen extends StatelessWidget {
                 width: 88,
                 height: 88,
                 decoration: BoxDecoration(
-                  color: AppColors.primary.withOpacity(0.08),
+                  color: AppColors.primary.withValues(alpha: 0.08),
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(

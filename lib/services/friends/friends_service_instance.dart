@@ -47,6 +47,7 @@ class FriendsServiceInstance implements IFriendsService {
   }
 
   // Ensure per-user indexes exist for discovery by contacts (email)
+  @override
   Future<void> ensureUserIndexes() async {
     final user = _auth.currentUser;
     if (user == null) return;

@@ -60,8 +60,9 @@ class _SuccessCheckmarkOverlayState extends State<SuccessCheckmarkOverlay>
             child: AnimatedBuilder(
               animation: _controller,
               builder: (_, __) {
-                if (_controller.value == 0 && !widget.show)
+                if (_controller.value == 0 && !widget.show) {
                   return const SizedBox.shrink();
+                }
                 return Opacity(
                   opacity: _fade.value,
                   child: Transform.scale(

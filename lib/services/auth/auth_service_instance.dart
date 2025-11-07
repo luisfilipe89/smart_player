@@ -6,12 +6,11 @@ import 'package:move_young/utils/logger.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'auth_service.dart';
 import '../../utils/service_error.dart';
-import '../../utils/service_base_mixin.dart';
 import '../firebase_error_handler.dart';
 
 /// Instance-based AuthService for use with Riverpod dependency injection
-/// Uses ServiceBaseMixin for standardized error handling
-class AuthServiceInstance with ServiceBaseMixin implements IAuthService {
+/// Uses direct try-catch patterns with FirebaseErrorHandler for error handling
+class AuthServiceInstance implements IAuthService {
   final FirebaseAuth _auth;
 
   AuthServiceInstance(this._auth);

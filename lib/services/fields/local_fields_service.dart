@@ -48,7 +48,9 @@ class LocalFieldsService {
             final num? cLon = center != null ? center['lon'] as num? : null;
             final double? lat = (nLat ?? cLat)?.toDouble();
             final double? lon = (nLon ?? cLon)?.toDouble();
-            if (lat == null || lon == null) return {};
+            if (lat == null || lon == null) {
+              return {};
+            }
             return {
               'id': id.isNotEmpty ? (type.isNotEmpty ? '$type:$id' : id) : null,
               'name': tags['name'] ?? 'Unnamed Field',
@@ -68,11 +70,16 @@ class LocalFieldsService {
         final tags = (m['tags'] as Map<String, dynamic>?);
         final sport = tags?['sport']?.toString();
         final leisure = tags?['leisure']?.toString();
-        if (sport == sportType) return true;
-        // Optional: allow sports centres/venues tagged with same sport
-        if (leisure == 'sports_centre' && sport == sportType) return true;
-        if ((leisure == 'pitch' || leisure == 'stadium') && sport == sportType)
+        if (sport == sportType) {
           return true;
+        }
+        // Optional: allow sports centres/venues tagged with same sport
+        if (leisure == 'sports_centre' && sport == sportType) {
+          return true;
+        }
+        if ((leisure == 'pitch' || leisure == 'stadium') && sport == sportType) {
+          return true;
+        }
         return false;
       }).toList();
     } else if (decoded is Map<String, dynamic> && decoded[sportType] is List) {
@@ -84,8 +91,8 @@ class LocalFieldsService {
         final lon = m['lon'];
         return {
           ...m,
-          'lat': lat is num ? lat.toDouble() : double.tryParse('$lat'),
-          'lon': lon is num ? lon.toDouble() : double.tryParse('$lon'),
+          'lat': lat is num ? lat.toDouble() : double.tryParse(lat.toString()),
+          'lon': lon is num ? lon.toDouble() : double.tryParse(lon.toString()),
           'tags': Map<String, dynamic>.from(m['tags'] ?? {}),
         };
       }).toList();

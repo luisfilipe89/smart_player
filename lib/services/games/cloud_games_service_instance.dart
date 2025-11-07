@@ -61,7 +61,7 @@ class CloudGamesServiceInstance {
     if (game.latitude != null && game.longitude != null) {
       final lat = game.latitude!.toStringAsFixed(5).replaceAll('.', '_');
       final lon = game.longitude!.toStringAsFixed(5).replaceAll('.', '_');
-      return '${lat}_${lon}';
+      return '${lat}_$lon';
     }
     final name = (game.location).toLowerCase();
     final sanitized = name
@@ -1145,7 +1145,7 @@ class CloudGamesServiceInstance {
     final joinedGamesDataCache = <String, Game>{};
 
     // Helper to update watched games when index changes
-    void _updateWatchedJoinedGames(Set<String> gameIds) {
+    void updateWatchedJoinedGames(Set<String> gameIds) {
       // Cancel subscriptions for games no longer in index
       final gamesToRemove = joinedGameSubscriptions.keys
           .where((id) => !gameIds.contains(id))
@@ -1202,7 +1202,7 @@ class CloudGamesServiceInstance {
     Map<String, Game> organizedGames = {};
     Map<String, Game> joinedGames = {};
 
-    void _emitCombined() {
+    void emitCombined() {
       if (controller.isClosed) return;
 
       // Merge organized and joined games (organized take precedence)
@@ -1219,7 +1219,7 @@ class CloudGamesServiceInstance {
     // Watch organized games stream (game data changes)
     organizedSub = organizedGamesStream.listen((games) {
       organizedGames = games;
-      _emitCombined();
+      emitCombined();
     }, onError: (e) {
       if (!controller.isClosed) controller.addError(e);
     });
@@ -1227,7 +1227,7 @@ class CloudGamesServiceInstance {
     // Watch created games index stream (index changes trigger re-filtering)
     organizedIndexSub = createdIndexWatchStream.listen((games) {
       organizedGames = games;
-      _emitCombined();
+      emitCombined();
     }, onError: (e) {
       if (!controller.isClosed) controller.addError(e);
     });
@@ -1240,7 +1240,7 @@ class CloudGamesServiceInstance {
       }
       // Note: Don't remove games here - let joinedGamesDataStream handle removals
       // based on index watch, which will stop emitting for removed games
-      _emitCombined();
+      emitCombined();
     }, onError: (e) {
       if (!controller.isClosed) controller.addError(e);
     });
@@ -1253,7 +1253,7 @@ class CloudGamesServiceInstance {
       }
       // Remove games that are no longer in the cache (removed from index)
       joinedGames.removeWhere((key, _) => !games.containsKey(key));
-      _emitCombined();
+      emitCombined();
     }, onError: (e) {
       if (!controller.isClosed) controller.addError(e);
     });
@@ -1264,13 +1264,13 @@ class CloudGamesServiceInstance {
         .onValue
         .listen((event) {
       if (!event.snapshot.exists) {
-        _updateWatchedJoinedGames({});
+        updateWatchedJoinedGames({});
         return;
       }
       final joinedData =
           Map<dynamic, dynamic>.from(event.snapshot.value as Map);
       final gameIds = joinedData.keys.map((k) => k.toString()).toSet();
-      _updateWatchedJoinedGames(gameIds);
+      updateWatchedJoinedGames(gameIds);
     });
 
     // Initial fetch to populate data
@@ -1308,7 +1308,7 @@ class CloudGamesServiceInstance {
         final joinedData =
             Map<dynamic, dynamic>.from(joinedSnapshot.value as Map);
         final joinedIds = joinedData.keys.map((k) => k.toString()).toSet();
-        _updateWatchedJoinedGames(joinedIds);
+        updateWatchedJoinedGames(joinedIds);
 
         for (final gameId in joinedIds) {
           try {
@@ -1326,7 +1326,7 @@ class CloudGamesServiceInstance {
         }
       }
 
-      _emitCombined();
+      emitCombined();
     });
 
     controller.onCancel = () {

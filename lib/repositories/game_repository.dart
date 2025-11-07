@@ -8,6 +8,8 @@
 ///
 /// Note: Repositories are thin wrappers that delegate to data sources.
 /// Error handling is done at the service layer, not the repository layer.
+library;
+
 import 'package:move_young/models/core/game.dart';
 import '../services/games/cloud_games_service_instance.dart';
 

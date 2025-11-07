@@ -83,7 +83,9 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
     final connected =
         await ref.read(connectivityActionsProvider).hasInternetConnection();
     if (!connected) {
-      ErrorHandlerServiceInstance().showError(context, 'error_network');
+      if (mounted) {
+        ErrorHandlerServiceInstance().showError(context, 'error_network');
+      }
       return;
     }
 

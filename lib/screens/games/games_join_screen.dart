@@ -182,7 +182,7 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
       final bool isRejoin = inviteStatuses[currentUserId] == 'left';
 
       // If rejoining, navigate immediately BEFORE joining to avoid transient state
-      if (isRejoin) {
+      if (isRejoin && mounted) {
         final ctrl = MainScaffoldController.maybeOf(context);
         ctrl?.openMyGames(
           initialTab: 0, // Joining tab (index 0)

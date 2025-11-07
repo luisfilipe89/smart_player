@@ -5,12 +5,16 @@ import '../../providers/infrastructure/shared_preferences_provider.dart';
 import '../../config/cache_config.dart';
 
 // CacheService provider with dependency injection
-// Note: Returns null if SharedPreferences is not initialized yet
+// Returns null if SharedPreferences is still loading or on error
 final cacheServiceProvider = Provider<CacheServiceInstance?>((ref) {
-  final prefs = ref.watch(sharedPreferencesProvider);
+  final prefsAsync = ref.watch(sharedPreferencesProvider);
   final config = ref.watch(cacheConfigProvider);
-  if (prefs == null) return null;
-  return CacheServiceInstance(prefs, config);
+  
+  return prefsAsync.when(
+    data: (prefs) => CacheServiceInstance(prefs, config),
+    loading: () => null,
+    error: (_, __) => null,
+  );
 });
 
 // Cache statistics provider (reactive)

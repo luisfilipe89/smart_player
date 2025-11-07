@@ -4,8 +4,12 @@ import 'favorites_service_instance.dart';
 
 /// FavoritesService provider with dependency injection
 final favoritesServiceProvider = Provider<FavoritesServiceInstance?>((ref) {
-  final prefs = ref.watch(sharedPreferencesProvider);
-  return prefs != null ? FavoritesServiceInstance(prefs) : null;
+  final prefsAsync = ref.watch(sharedPreferencesProvider);
+  return prefsAsync.when(
+    data: (prefs) => FavoritesServiceInstance(prefs),
+    loading: () => null,
+    error: (_, __) => null,
+  );
 });
 
 /// Favorites list provider (reactive)

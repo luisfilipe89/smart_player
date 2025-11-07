@@ -4,7 +4,9 @@ import 'package:move_young/providers/infrastructure/shared_preferences_provider.
 
 // Overpass service provider (constructed even if SharedPreferences not ready)
 final overpassServiceProvider = Provider<OverpassServiceInstance>((ref) {
-  final prefs = ref.watch(sharedPreferencesProvider);
+  final prefsAsync = ref.watch(sharedPreferencesProvider);
+  // OverpassServiceInstance accepts nullable SharedPreferences
+  final prefs = prefsAsync.valueOrNull;
   return OverpassServiceInstance(prefs);
 });
 
@@ -15,6 +17,7 @@ final overpassActionsProvider = Provider<OverpassActions>((ref) {
 });
 
 class OverpassActions {
+  // ignore: unused_field
   final OverpassServiceInstance _overpassService;
 
   OverpassActions(this._overpassService);

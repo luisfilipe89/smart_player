@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:move_young/utils/logger.dart';
 
 class OverpassServiceInstance {
   final SharedPreferences? _prefs;
@@ -43,7 +44,7 @@ class OverpassServiceInstance {
     // Primary query using the provided area name
     final areaSel = _areaSelector(areaName);
     final String primaryQuery = _buildSportQuery(areaSel, sportType);
-    print('🔍 Overpass Query (primary):\n$primaryQuery');
+    NumberedLogger.d('🔍 Overpass Query (primary):\n$primaryQuery');
 
     String body;
     List<Map<String, dynamic>> parsed = const [];
@@ -51,10 +52,11 @@ class OverpassServiceInstance {
       body = await _postOverpass(primaryQuery);
       parsed = _parseOverpassData(body);
     } catch (e) {
-      print('❌ Failed primary Overpass query: $e');
+      NumberedLogger.e('Failed primary Overpass query: $e');
     }
 
-    print('🔍 Overpass Response (primary): ${parsed.length} elements found');
+    NumberedLogger.d(
+        '🔍 Overpass Response (primary): ${parsed.length} elements found');
 
     // Second attempt: add country for disambiguation (e.g., “, Netherlands”)
     if (parsed.isEmpty) {
@@ -62,14 +64,15 @@ class OverpassServiceInstance {
       if (areaSelWithCountry != areaSel) {
         final String countryQuery =
             _buildSportQuery(areaSelWithCountry, sportType);
-        print('🔍 Overpass Query (country disambiguation):\n$countryQuery');
+        NumberedLogger.d(
+            '🔍 Overpass Query (country disambiguation):\n$countryQuery');
         try {
           final body2 = await _postOverpass(countryQuery);
           parsed = _parseOverpassData(body2);
         } catch (e) {
-          print('❌ Failed country Overpass query: $e');
+          NumberedLogger.e('Failed country Overpass query: $e');
         }
-        print(
+        NumberedLogger.d(
             '🔍 Overpass Response (country): ${parsed.length} elements found');
       }
     }
@@ -87,7 +90,7 @@ $areaSel3
 );
 out center tags qt;
 ''';
-      print('🔍 Overpass Query (wide, filter locally):\n$wideQuery');
+      NumberedLogger.d('🔍 Overpass Query (wide, filter locally):\n$wideQuery');
       try {
         final body3 = await _postOverpass(wideQuery);
         final wide = _parseOverpassData(body3);
@@ -96,18 +99,22 @@ out center tags qt;
           final tags = (m['tags'] as Map<String, dynamic>?);
           final sport = tags?['sport']?.toString().toLowerCase();
           final name = tags?['name']?.toString().toLowerCase() ?? '';
-          if (sport == wanted) return true;
+          if (sport == wanted) {
+            return true;
+          }
           // NL synonyms and generic terms commonly used
           if (name.contains('voetbal') ||
               name.contains('soccer') ||
-              name.contains('football')) return true;
+              name.contains('football')) {
+            return true;
+          }
           return false;
         }).toList();
         parsed = filtered;
       } catch (e) {
-        print('❌ Failed Overpass wide query: $e');
+        NumberedLogger.e('❌ Failed Overpass wide query: $e');
       }
-      print(
+      NumberedLogger.d(
           '🔍 Overpass Response (wide filtered): ${parsed.length} elements found');
     }
 
@@ -126,14 +133,15 @@ out center tags qt;
       );
       out center tags qt;
       ''';
-      print('🔍 Overpass Fallback Query (radius):\n$fallbackQuery');
+      NumberedLogger.d('🔍 Overpass Fallback Query (radius):\n$fallbackQuery');
       try {
         final fbBody = await _postOverpass(fallbackQuery);
         parsed = _parseOverpassData(fbBody);
       } catch (e) {
-        print('❌ Failed Overpass fallback (radius): $e');
+        NumberedLogger.e('❌ Failed Overpass fallback (radius): $e');
       }
-      print('🔍 Overpass Fallback Response: ${parsed.length} elements found');
+      NumberedLogger.d(
+          '🔍 Overpass Fallback Response: ${parsed.length} elements found');
     }
 
     // Only cache if we actually got something
@@ -219,7 +227,7 @@ out center tags qt;
     Exception? lastError;
     for (final url in _endpoints) {
       try {
-        print('🔌 Overpass POST -> $url');
+        NumberedLogger.d('🔌 Overpass POST -> $url');
         final resp = await http.post(
           Uri.parse(url),
           headers: _headers,

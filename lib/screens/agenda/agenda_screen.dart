@@ -362,8 +362,7 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
         }
 
         // Log the URL we are loading for easier debugging
-        // ignore: avoid_print
-        print('[Agenda] Loading image: ' + normalized);
+        debugPrint('[Agenda] Loading image: $normalized');
         return Image.network(
           normalized,
           width: double.infinity,
@@ -385,11 +384,7 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
           },
           errorBuilder:
               (BuildContext context, Object error, StackTrace? stackTrace) {
-            // ignore: avoid_print
-            print('[Agenda] Image failed: ' +
-                normalized +
-                ' err: ' +
-                error.toString());
+            debugPrint('[Agenda] Image failed: $normalized err: $error');
             return Container(
               height: AppHeights.image,
               color: AppColors.lightgrey,

@@ -6,11 +6,11 @@ import 'package:move_young/repositories/game_repository.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 class _AuthFake implements IAuthService {
-  String? _uid = 'u1';
+  final String _uid = 'u1';
   @override
   String? get currentUserId => _uid;
   @override
-  bool get isSignedIn => _uid != null;
+  bool get isSignedIn => true;
   @override
   User? get currentUser => null;
   @override

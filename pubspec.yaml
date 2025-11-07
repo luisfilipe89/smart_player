@@ -41,7 +41,7 @@ dependencies:
   http: ^1.5.0
   geolocator: ^14.0.2
   google_maps_flutter: ^2.6.0
-  shared_preferences: 2.3.2
+  shared_preferences: ^2.5.0
   cached_network_image: ^3.3.1
   flutter_cache_manager: ^3.3.1
   shimmer: ^3.0.0
@@ -55,6 +55,7 @@ dependencies:
   google_sign_in: ^6.1.6
   firebase_app_check: ^0.3.2+10
   firebase_crashlytics: ^4.3.10
+  firebase_analytics: ^11.3.3
   image_picker: ^1.0.7
   
   # Friends: QR, scanning, contacts and crypto

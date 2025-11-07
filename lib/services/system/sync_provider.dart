@@ -6,15 +6,20 @@ import '../friends/friends_provider.dart';
 import '../../providers/infrastructure/shared_preferences_provider.dart';
 
 // SyncService provider with dependency injection
+// Returns null if SharedPreferences is still loading or on error
 final syncServiceProvider = Provider<SyncServiceInstance?>((ref) {
   final cloudGamesService = ref.watch(gamesServiceProvider);
   final friendsService = ref.watch(friendsServiceProvider);
-  final prefs = ref.watch(sharedPreferencesProvider);
+  final prefsAsync = ref.watch(sharedPreferencesProvider);
 
-  return SyncServiceInstance(
-    cloudGamesService,
-    friendsService,
-    prefs,
+  return prefsAsync.when(
+    data: (prefs) => SyncServiceInstance(
+      cloudGamesService,
+      friendsService,
+      prefs,
+    ),
+    loading: () => null,
+    error: (_, __) => null,
   );
 });
 

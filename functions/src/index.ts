@@ -77,6 +77,9 @@ export const onMailNotificationCreate = onValueCreated(
             await db.ref().update(updates);
           }
         }
+      } else {
+        // Unknown notification type - log for debugging
+        console.log(`[DEBUG] onMailNotificationCreate: Unknown notification type "${type}" for notificationId ${notificationId}, payload:`, JSON.stringify(payload));
       }
 
       // Mark as processed and remove the queued mail notification
@@ -335,7 +338,12 @@ export const processNotificationRequest = onValueCreated(
           read,
         });
 
-      console.log(`Notification request processed for user ${recipientUid}, type: ${type}`);
+      console.log(`Notification request processed for user ${recipientUid}, type: ${type}, requestId: ${requestId}`);
+
+      // Log specifically for game_modified to trace source
+      if (type === "game_modified") {
+        console.log(`[DEBUG] game_modified notification created via processNotificationRequest - recipientUid: ${recipientUid}, requestId: ${requestId}, data:`, JSON.stringify(data));
+      }
 
       // Clean up the request
       await admin.database()
@@ -357,6 +365,11 @@ export const sendNotification = onValueCreated(
     const notificationId = event.params.notificationId as string;
 
     if (!notification || notification.read) return;
+
+    // Log all notifications for debugging to find where game_modified comes from
+    if (notification.type === "game_modified") {
+      console.log(`[DEBUG] game_modified notification detected - userId: ${userId}, notificationId: ${notificationId}, data:`, JSON.stringify(notification.data));
+    }
 
     try {
       const userTokensSnapshot = await admin
@@ -449,6 +462,11 @@ export const sendNotification = onValueCreated(
           title = notification.data?.title || "SMARTPLAYER";
           body = notification.data?.message || "You have a new notification";
           data.route = notification.data?.route || "/home";
+
+          // Log unknown notification types to trace where they come from
+          if (notification.type !== "default") {
+            console.log(`[DEBUG] sendNotification: Unknown notification type "${notification.type}" for userId ${userId}, notificationId ${notificationId}, data:`, JSON.stringify(notification.data));
+          }
       }
 
       const message: admin.messaging.MulticastMessage = {

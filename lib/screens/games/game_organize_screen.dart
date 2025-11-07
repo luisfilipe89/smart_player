@@ -60,6 +60,7 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
   Map<String, dynamic>? _originalField;
 
   void _showSignInInlinePrompt() {
+    if (!mounted) return;
     final messenger = ScaffoldMessenger.of(context);
     messenger.showSnackBar(
       SnackBar(
@@ -234,10 +235,10 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
       );
 
       // Debug: Check what we got back
-      print(
+      debugPrint(
           '🔍 Fetched ${rawFields.length} raw fields for sport: $sportType in area: s-Hertogenbosch');
       if (rawFields.isNotEmpty) {
-        print('🔍 First field data: ${rawFields.first}');
+        debugPrint('🔍 First field data: ${rawFields.first}');
       }
 
       // Normalize Overpass keys for UI consistency
@@ -262,7 +263,8 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
           .where((m) => m['latitude'] != null && m['longitude'] != null)
           .toList();
 
-      print('🔍 Normalized to ${fields.length} fields with valid coordinates');
+      debugPrint(
+          '🔍 Normalized to ${fields.length} fields with valid coordinates');
 
       if (mounted) {
         setState(() {
@@ -286,8 +288,7 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
       }
     } catch (e) {
       // Log the error so we can see Overpass or parsing failures
-      // ignore: avoid_print
-      print('❌ Failed to load fields: $e');
+      debugPrint('❌ Failed to load fields: $e');
       if (mounted) {
         setState(() {
           _availableFields = [];
@@ -359,12 +360,14 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
         int.parse(parts[1]),
       );
       if (!dt.isAfter(now)) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('please_select_future_time'.tr()),
-            backgroundColor: AppColors.red,
-          ),
-        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('please_select_future_time'.tr()),
+              backgroundColor: AppColors.red,
+            ),
+          );
+        }
         return;
       }
     }
@@ -374,12 +377,14 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
         _selectedDate == null ||
         _selectedTime == null ||
         widget.initialGame == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('form_fill_all_fields'.tr()),
-          backgroundColor: AppColors.red,
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('form_fill_all_fields'.tr()),
+            backgroundColor: AppColors.red,
+          ),
+        );
+      }
       return;
     }
 
@@ -426,13 +431,15 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
 
       // Send invites to newly selected friends
       final userId = ref.read(currentUserIdProvider);
-      if (userId != null && _selectedFriendUids.isNotEmpty) {
+      if (userId != null && _selectedFriendUids.isNotEmpty && mounted) {
         // Filter out already-invited friends (locked ones)
         final newInvites = _selectedFriendUids
             .where((uid) => !_lockedInvitedUids.contains(uid))
             .toList();
 
         if (newInvites.isNotEmpty) {
+          // Capture messenger before async operation to avoid BuildContext warning
+          final messenger = ScaffoldMessenger.of(context);
           try {
             await ref
                 .read(cloudGamesActionsProvider)
@@ -445,7 +452,7 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
             debugPrint('Stack trace: $stackTrace');
             // Show error to user so they know invites weren't sent
             if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
+              messenger.showSnackBar(
                 SnackBar(
                   content: Row(
                     children: [
@@ -569,6 +576,7 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
         final lon = (_selectedField?['longitude'] as num).toDouble();
         final latFixed = lat.toStringAsFixed(5).replaceAll('.', '_');
         final lonFixed = lon.toStringAsFixed(5).replaceAll('.', '_');
+        // ignore: unnecessary_brace_in_string_interps
         fieldKey = '${latFixed}_${lonFixed}';
       } else {
         final name = (_selectedField?['name']?.toString() ?? '').toLowerCase();
@@ -619,9 +627,7 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
         final gamesService = ref.read(gamesServiceProvider);
         final myGames = await gamesService.getMyGames();
         final joinable = await gamesService.getJoinableGames();
-        final all = <dynamic>[]
-          ..addAll(myGames)
-          ..addAll(joinable);
+        final all = <dynamic>[...myGames, ...joinable];
 
         String sanitizeName(String s) => s
             .toLowerCase()
@@ -695,8 +701,9 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
           final gamesService = ref.read(gamesServiceProvider);
           final myGames = await gamesService.getMyGames();
           final joinable = await gamesService.getJoinableGames();
-          final all = <dynamic>[]
-            ..addAll(myGames)
+          final all = <dynamic>[...myGames]
+
+            // ignore: prefer_spread_collections
             ..addAll(joinable);
           debugPrint(
               '🔍 Checking ${all.length} games (${myGames.length} my, ${joinable.length} joinable)');
@@ -766,13 +773,13 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
   }
 
   // Localized day of week and month abbreviations
-  String _getDayOfWeekAbbr(DateTime date) {
+  String _getDayOfWeekAbbr(DateTime date, BuildContext context) {
     // EEE => Mon, Tue (localized). Some locales add a trailing '.' → strip it
     final s = DateFormat('EEE', context.locale.toString()).format(date);
     return s.replaceAll('.', '').toUpperCase();
   }
 
-  String _getMonthAbbr(DateTime date) {
+  String _getMonthAbbr(DateTime date, BuildContext context) {
     // MMM => Jan, Feb (localized). Some locales add a trailing '.' → strip it
     final s = DateFormat('MMM', context.locale.toString()).format(date);
     return s.replaceAll('.', '').toUpperCase();
@@ -791,32 +798,38 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
         int.parse(parts[1]),
       );
       if (!dt.isAfter(now)) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('please_select_future_time'.tr()),
-            backgroundColor: AppColors.red,
-          ),
-        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('please_select_future_time'.tr()),
+              backgroundColor: AppColors.red,
+            ),
+          );
+        }
         return;
       }
     }
     if (_selectedSport == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('please_select_sport'.tr()),
-          backgroundColor: AppColors.red,
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('please_select_sport'.tr()),
+            backgroundColor: AppColors.red,
+          ),
+        );
+      }
       return;
     }
 
     if (_selectedDate == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('please_select_date'.tr()),
-          backgroundColor: AppColors.red,
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('please_select_date'.tr()),
+            backgroundColor: AppColors.red,
+          ),
+        );
+      }
       return;
     }
 
@@ -900,8 +913,11 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
 
         // Send in-app invites to selected friends in the background (non-blocking)
         // This ensures consistent transition timing whether friends are invited or not
-        if (_selectedFriendUids.isNotEmpty) {
-          ref.read(cloudGamesActionsProvider)
+        if (_selectedFriendUids.isNotEmpty && mounted) {
+          // Capture messenger before async operation to avoid BuildContext warning
+          final messenger = ScaffoldMessenger.of(context);
+          ref
+              .read(cloudGamesActionsProvider)
               .sendGameInvitesToFriends(createdId, _selectedFriendUids.toList())
               .then((_) {
             debugPrint(
@@ -912,7 +928,7 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
             debugPrint('Stack trace: $stackTrace');
             // Show error to user so they know invites weren't sent (if still mounted)
             if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
+              messenger.showSnackBar(
                 SnackBar(
                   content: Row(
                     children: [
@@ -1113,7 +1129,7 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
               children: [
                 // Month abbreviation
                 Text(
-                  _getMonthAbbr(date),
+                  _getMonthAbbr(date, context),
                   style: AppTextStyles.superSmall.copyWith(
                     color: isSelected
                         ? AppColors.blue
@@ -1135,7 +1151,7 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                 ),
                 // Day of week
                 Text(
-                  _getDayOfWeekAbbr(date),
+                  _getDayOfWeekAbbr(date, context),
                   style: AppTextStyles.superSmall.copyWith(
                     color: isSelected
                         ? AppColors.blue
@@ -1665,7 +1681,8 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                                           SizedBox(
                                             width: 40,
                                             child: Center(
-                                              child: Text('$_maxPlayers',
+                                              child: Text(
+                                                  _maxPlayers.toString(),
                                                   style: AppTextStyles.body),
                                             ),
                                           ),

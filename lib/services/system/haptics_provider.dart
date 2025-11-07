@@ -5,8 +5,12 @@ import 'package:move_young/providers/infrastructure/shared_preferences_provider.
 
 // HapticsService provider with dependency injection
 final hapticsServiceProvider = Provider<HapticsServiceInstance?>((ref) {
-  final prefs = ref.watch(sharedPreferencesProvider);
-  return prefs != null ? HapticsServiceInstance(prefs) : null;
+  final prefsAsync = ref.watch(sharedPreferencesProvider);
+  return prefsAsync.when(
+    data: (prefs) => HapticsServiceInstance(prefs),
+    loading: () => null,
+    error: (_, __) => null,
+  );
 });
 
 // Haptics enabled state provider (reactive)

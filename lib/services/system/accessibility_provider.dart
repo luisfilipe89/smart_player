@@ -8,19 +8,21 @@ import 'package:move_young/utils/logger.dart';
 // AccessibilityService provider with dependency injection
 final accessibilityServiceProvider =
     Provider<AccessibilityServiceInstance?>((ref) {
-  final prefs = ref.watch(sharedPreferencesProvider);
+  final prefsAsync = ref.watch(sharedPreferencesProvider);
 
-  if (prefs == null) {
-    return null;
-  }
-
-  final service = AccessibilityServiceInstance(prefs);
-  // Initialize asynchronously but don't await - this will populate the stream
-  // Wrap in try-catch to handle any initialization errors gracefully
-  service.initialize().catchError((error) {
-    NumberedLogger.w('Accessibility service initialization error: $error');
-  });
-  return service;
+  return prefsAsync.when(
+    data: (prefs) {
+      final service = AccessibilityServiceInstance(prefs);
+      // Initialize asynchronously but don't await - this will populate the stream
+      // Wrap in try-catch to handle any initialization errors gracefully
+      service.initialize().catchError((error) {
+        NumberedLogger.w('Accessibility service initialization error: $error');
+      });
+      return service;
+    },
+    loading: () => null,
+    error: (_, __) => null,
+  );
 });
 
 // High contrast mode provider (reactive)

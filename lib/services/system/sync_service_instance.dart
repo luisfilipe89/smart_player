@@ -147,7 +147,7 @@ class SyncServiceInstance {
       // Check max retries
       if (op.retryCount >= _maxRetries) {
         NumberedLogger.w(
-            'Sync operation ${op.id} exceeded max retries (${_maxRetries}), marking as permanently failed');
+            'Sync operation ${op.id} exceeded max retries ($_maxRetries), marking as permanently failed');
         continue; // Skip permanently failed operations
       }
 

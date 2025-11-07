@@ -357,6 +357,8 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen>
     // Auto-close if request received
     if (myUid != null) {
       try {
+        // Capture navigator before setting up stream listener to avoid BuildContext warning
+        final navigator = Navigator.of(context, rootNavigator: true);
         _qrAutoCloseSub = ref
             .read(friendsActionsProvider)
             .watchFriendRequestReceived(myUid)
@@ -364,7 +366,7 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen>
           (_) {
             if (!mounted) return;
             try {
-              Navigator.of(context, rootNavigator: true).maybePop();
+              navigator.maybePop();
               Future.delayed(const Duration(milliseconds: 150), () {
                 if (mounted) {
                   _tabController.animateTo(1);
@@ -497,6 +499,9 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen>
   }
 
   Future<void> _importContacts() async {
+    if (!mounted) return;
+    // Capture messenger before async operation to avoid BuildContext warning
+    final messenger = ScaffoldMessenger.of(context);
     var status = await Permission.contacts.status;
     if (!status.isGranted) {
       final res = await Permission.contacts.request();
@@ -526,7 +531,7 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen>
           if (go != true) return;
         } else {
           if (!mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(
+          messenger.showSnackBar(
             SnackBar(content: Text('permission_contacts_denied'.tr())),
           );
           return;
@@ -767,6 +772,9 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen>
     }
 
     if (!mounted) return;
+    // Capture navigator and messenger before async operation
+    final navigator = Navigator.of(context);
+    final messenger = ScaffoldMessenger.of(context);
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -781,13 +789,13 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen>
           .searchUsersByDisplayName(searchQuery);
 
       if (!mounted) return;
-      Navigator.pop(context);
+      navigator.pop();
 
       if (users.isEmpty) {
         if (looksLikeEmail) {
           await _showEmailInviteDialog(searchQuery);
         } else {
-          ScaffoldMessenger.of(context).showSnackBar(
+          messenger.showSnackBar(
             SnackBar(content: Text('friends_search_no_results'.tr())),
           );
         }
@@ -797,8 +805,8 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen>
       _showSearchResults(users, searchQuery);
     } catch (e) {
       if (!mounted) return;
-      Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(
+      navigator.pop();
+      messenger.showSnackBar(
         SnackBar(content: Text('friends_search_error'.tr())),
       );
     }
@@ -839,7 +847,7 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen>
 
     if (myEmail != null && email.trim().toLowerCase() == myEmail) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      messenger.showSnackBar(
         SnackBar(content: Text('friends_cannot_invite_self'.tr())),
       );
       return;
@@ -849,7 +857,7 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen>
     final canSend = await emailActions.canSendInviteToEmail(email.trim());
     if (!canSend) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      messenger.showSnackBar(
         SnackBar(content: Text('friends_invite_rate_limited'.tr())),
       );
       return;
@@ -948,15 +956,18 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen>
   }
 
   Future<void> _sendFriendRequest(String targetUid) async {
+    if (!mounted) return;
+    // Capture messenger before async operation to avoid BuildContext warning
+    final messenger = ScaffoldMessenger.of(context);
     try {
       await ref.read(friendsActionsProvider).sendFriendRequest(targetUid);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      messenger.showSnackBar(
         SnackBar(content: Text('friends_request_sent'.tr())),
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      messenger.showSnackBar(
         SnackBar(content: Text('Error: ${e.toString()}')),
       );
     }
@@ -1126,7 +1137,9 @@ class _FriendsList extends ConsumerWidget {
                                                       .read(
                                                           hapticsActionsProvider)
                                                       ?.heavyImpact();
-                                                  Navigator.pop(ctx, true);
+                                                  if (ctx.mounted) {
+                                                    Navigator.pop(ctx, true);
+                                                  }
                                                 },
                                                 child: Text('ok'.tr())),
                                           ],
@@ -1156,7 +1169,9 @@ class _FriendsList extends ConsumerWidget {
                                                       .read(
                                                           hapticsActionsProvider)
                                                       ?.heavyImpact();
-                                                  Navigator.pop(ctx, true);
+                                                  if (ctx.mounted) {
+                                                    Navigator.pop(ctx, true);
+                                                  }
                                                 },
                                                 child: Text('ok'.tr())),
                                           ],
@@ -1397,10 +1412,13 @@ class _SuggestionsSectionState extends ConsumerState<_SuggestionsSection> {
   }
 
   Future<void> _sendFriendRequest(String targetUid) async {
+    if (!mounted) return;
+    // Capture messenger before async operation to avoid BuildContext warning
+    final messenger = ScaffoldMessenger.of(context);
     try {
       await ref.read(friendsActionsProvider).sendFriendRequest(targetUid);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        messenger.showSnackBar(
           SnackBar(content: Text('friends_request_sent'.tr())),
         );
         setState(() {
@@ -1409,7 +1427,7 @@ class _SuggestionsSectionState extends ConsumerState<_SuggestionsSection> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        messenger.showSnackBar(
           SnackBar(content: Text('Error: ${e.toString()}')),
         );
       }
@@ -1599,7 +1617,7 @@ class _QrBottomSheetContent extends ConsumerWidget {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const SizedBox(
               height: 120,
-              child: const _FriendsSkeleton(),
+              child: _FriendsSkeleton(),
             );
           }
           if (snapshot.hasError || !snapshot.hasData || snapshot.data == null) {
@@ -1765,6 +1783,9 @@ class _RequestsListState extends ConsumerState<_RequestsList> {
                                           ref
                                               .read(hapticsActionsProvider)
                                               ?.mediumImpact();
+                                          // Capture messenger before async operation to avoid BuildContext warning
+                                          final messenger =
+                                              ScaffoldMessenger.of(context);
                                           final ok = await ref
                                               .read(friendsActionsProvider)
                                               .acceptFriendRequest(fromUid);
@@ -1773,8 +1794,7 @@ class _RequestsListState extends ConsumerState<_RequestsList> {
                                             setState(() {
                                               _dismissed.add(fromUid);
                                             });
-                                            ScaffoldMessenger.of(context)
-                                                .showSnackBar(
+                                            messenger.showSnackBar(
                                               SnackBar(
                                                 behavior:
                                                     SnackBarBehavior.floating,

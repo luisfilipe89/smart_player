@@ -1,4 +1,20 @@
 {
     "java.configuration.updateBuildConfiguration": "automatic",
-    "java.jdt.ls.vmargs": "-XX:+UseParallelGC -XX:GCTimeRatio=4 -XX:AdaptiveSizePolicyWeight=90 -Dsun.zip.disableMemoryMapping=true -Xmx64G -Xms100m -Xlog:disable"
+    "java.jdt.ls.vmargs": "-XX:+UseParallelGC -XX:GCTimeRatio=4 -XX:AdaptiveSizePolicyWeight=90 -Dsun.zip.disableMemoryMapping=true -Xmx64G -Xms100m -Xlog:disable",
+    "files.exclude": {
+        "**/lib_old_right_after": true,
+        "**/lib_old_working": true
+    },
+    "search.exclude": {
+        "**/lib_old_right_after": true,
+        "**/lib_old_working": true
+    },
+    "java.import.gradle.enabled": true,
+    "java.import.gradle.wrapper.enabled": true,
+    "java.import.gradle.home": null,
+    "java.project.exclude": [
+        "**/lib_old_right_after/**",
+        "**/lib_old_working/**"
+    ],
+    "java.configuration.maven.userSettings": null
 }

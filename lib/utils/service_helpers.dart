@@ -1,6 +1,5 @@
 import 'package:firebase_database/firebase_database.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:flutter/foundation.dart';
 import 'service_error.dart';
 import 'package:flutter/material.dart';
 import '../services/firebase_error_handler.dart';

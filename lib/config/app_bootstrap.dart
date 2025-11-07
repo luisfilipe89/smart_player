@@ -3,36 +3,36 @@ import 'package:flutter/foundation.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
-import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:firebase_analytics/firebase_analytics.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../firebase_options.dart';
 
 /// Centralized bootstrap utility to initialize platform services in order.
 class AppBootstrap {
-  /// Initializes Firebase, AppCheck, Crashlytics, background messaging,
-  /// and optionally pre-warms SharedPreferences and Local Notifications.
-  static Future<void> initialize({
-    bool initializeLocalNotifications = false,
-    FlutterLocalNotificationsPlugin? localNotifications,
-  }) async {
-    // Firebase core
+  /// Initializes only critical Firebase services synchronously.
+  /// Returns immediately after Firebase core is initialized.
+  /// Non-critical services are deferred to initializeDeferred().
+  static Future<void> initialize() async {
+    // Only initialize Firebase core - this is critical for app functionality
     await _initFirebase();
+    
+    // Enable Crashlytics immediately for error reporting
+    // This is lightweight and should be available early
+    unawaited(_initCrashlytics());
+  }
 
-    // Background messaging handler registration
-    _registerBackgroundMessaging();
-
-    // AppCheck and Crashlytics
-    await _initAppCheck();
-    await _initCrashlytics();
+  /// Initializes non-critical Firebase services after first frame.
+  /// Call this from addPostFrameCallback to avoid blocking startup.
+  /// Note: Background message handler is registered in main() before Firebase init
+  /// (Firebase requirement), but the background FlutterEngine creation happens lazily.
+  static Future<void> initializeDeferred() async {
+    // AppCheck and Analytics - non-critical for first frame
+    unawaited(_initAppCheck());
+    unawaited(_initAnalytics());
 
     // Optionally pre-warm SharedPreferences
     unawaited(_warmSharedPreferences());
-
-    // Optionally pre-initialize local notifications
-    if (initializeLocalNotifications && localNotifications != null) {
-      unawaited(_warmLocalNotifications(localNotifications));
-    }
   }
 
   static Future<void> _initFirebase() async {
@@ -41,20 +41,6 @@ class AppBootstrap {
         options: DefaultFirebaseOptions.currentPlatform,
       );
     } catch (_) {}
-  }
-
-  static void _registerBackgroundMessaging() {
-    try {
-      // Note: Background message handler must be a top-level function
-      // It's defined in main.dart as _firebaseMessagingBackgroundHandler
-      // We only register it once; if already registered, this is a no-op
-      // The registration is handled by the function itself being passed
-      // but since we want to use the top-level function, we don't need to do anything here
-      // The background handler is already a top-level function in main.dart
-      // Firebase Messaging will use it automatically if it's available
-    } catch (_) {
-      // Ignore errors - background messaging is optional
-    }
   }
 
   static Future<void> _initAppCheck() async {
@@ -75,23 +61,21 @@ class AppBootstrap {
     } catch (_) {}
   }
 
+  static Future<void> _initAnalytics() async {
+    try {
+      // Firebase Analytics is automatically initialized when Firebase.initializeApp() is called
+      // Defer logAppOpen() to avoid blocking startup - it's just a metric
+      // This will be called after first frame for better startup performance
+      await Future.delayed(const Duration(milliseconds: 500));
+      await FirebaseAnalytics.instance.logAppOpen();
+    } catch (_) {
+      // Analytics initialization is optional and may fail in some environments
+    }
+  }
+
   static Future<void> _warmSharedPreferences() async {
     try {
       await SharedPreferences.getInstance();
-    } catch (_) {}
-  }
-
-  static Future<void> _warmLocalNotifications(
-      FlutterLocalNotificationsPlugin plugin) async {
-    try {
-      await plugin.initialize(const InitializationSettings(
-        android: AndroidInitializationSettings('@mipmap/ic_launcher'),
-        iOS: DarwinInitializationSettings(
-          requestAlertPermission: true,
-          requestBadgePermission: true,
-          requestSoundPermission: true,
-        ),
-      ));
     } catch (_) {}
   }
 }
