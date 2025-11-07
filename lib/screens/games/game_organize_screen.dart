@@ -15,6 +15,9 @@ import 'package:move_young/services/friends/friends_provider.dart';
 import 'package:move_young/screens/main_scaffold.dart';
 import 'package:move_young/widgets/common/success_checkmark_overlay.dart';
 import 'package:move_young/providers/infrastructure/firebase_providers.dart';
+import 'package:move_young/services/system/location_provider.dart';
+import 'package:move_young/screens/maps/gmaps_screen.dart';
+import 'package:geolocator/geolocator.dart';
 
 class GameOrganizeScreen extends ConsumerStatefulWidget {
   final Game? initialGame;
@@ -25,6 +28,7 @@ class GameOrganizeScreen extends ConsumerStatefulWidget {
 }
 
 class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
+  static const double _kMaxDistanceMetersToDisplay = 500000; // 500 km
   String? _selectedSport;
   DateTime? _selectedDate;
   String? _selectedTime;
@@ -234,6 +238,13 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
         bypassCache: true, // Force fresh fetch to debug
       );
 
+      Position? userPosition;
+      try {
+        userPosition = await ref.read(currentPositionProvider.future);
+      } catch (e) {
+        debugPrint('📍 Could not obtain user position: $e');
+      }
+
       // Debug: Check what we got back
       debugPrint(
           '🔍 Fetched ${rawFields.length} raw fields for sport: $sportType in area: s-Hertogenbosch');
@@ -252,20 +263,50 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
             final lat = f['lat'] ?? f['latitude'];
             final lon = f['lon'] ?? f['longitude'];
             final lit = f['lit'] ?? f['lighting'];
+            double? latDouble;
+            double? lonDouble;
+            if (lat is num) latDouble = lat.toDouble();
+            if (lon is num) lonDouble = lon.toDouble();
+            latDouble ??= double.tryParse(lat?.toString() ?? '');
+            lonDouble ??= double.tryParse(lon?.toString() ?? '');
+            double? distance;
+            if (userPosition != null &&
+                latDouble != null &&
+                lonDouble != null) {
+              distance = Geolocator.distanceBetween(
+                userPosition.latitude,
+                userPosition.longitude,
+                latDouble,
+                lonDouble,
+              );
+              if (!distance.isFinite ||
+                  distance > _kMaxDistanceMetersToDisplay) {
+                distance = null;
+              }
+            }
             return {
               'id': f['id'],
               'name': name,
               'address': address,
               'addressSuperShort': addressSuperShort ?? address,
-              'latitude': lat,
-              'longitude': lon,
+              'latitude': latDouble ?? lat,
+              'longitude': lonDouble ?? lon,
               'surface': f['surface'],
               'lighting':
                   (lit == true) || (lit?.toString().toLowerCase() == 'yes'),
+              if (distance != null) 'distance': distance,
             };
           })
           .where((m) => m['latitude'] != null && m['longitude'] != null)
           .toList();
+
+      if (userPosition != null) {
+        fields.sort((a, b) {
+          final da = (a['distance'] as num?)?.toDouble() ?? double.infinity;
+          final db = (b['distance'] as num?)?.toDouble() ?? double.infinity;
+          return da.compareTo(db);
+        });
+      }
 
       debugPrint(
           '🔍 Normalized to ${fields.length} fields with valid coordinates');
@@ -1274,6 +1315,10 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
     final surface = field['surface'] ?? 'Unknown';
     final lighting = field['lighting'] ?? false;
     final addressSuperShort = field['addressSuperShort'] ?? '';
+    final distanceMeters = (field['distance'] as num?)?.toDouble();
+    final distanceKm = distanceMeters != null
+        ? (distanceMeters / 1000).clamp(0, double.infinity)
+        : null;
 
     return InkWell(
       onTap: onTap,
@@ -1318,6 +1363,19 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                 overflow: TextOverflow.ellipsis,
               ),
             if (addressSuperShort.isNotEmpty) const SizedBox(height: 4),
+            if (distanceKm != null && distanceKm.isFinite)
+              Text(
+                '${distanceKm.toStringAsFixed(distanceKm < 10 ? 1 : 0)} km away',
+                style: AppTextStyles.superSmall.copyWith(
+                  color: AppColors.grey,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w500,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            if (distanceKm != null && distanceKm.isFinite)
+              const SizedBox(height: 4),
             Text(
               surface,
               style: AppTextStyles.superSmall.copyWith(
@@ -1534,14 +1592,114 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
 
                             // Available Fields Section (only show if sport is selected)
                             if (_selectedSport != null) ...[
-                              PanelHeader(
-                                'choose_field'.tr(),
+                              Padding(
+                                padding: AppPaddings.symmHorizontalReg,
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.center,
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        'choose_field'.tr(),
+                                        style: AppTextStyles.headline,
+                                        textAlign: TextAlign.start,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    TextButton.icon(
+                                      onPressed: (_isLoadingFields ||
+                                              _availableFields.isEmpty)
+                                          ? null
+                                          : () {
+                                              final mapLocations =
+                                                  _availableFields
+                                                      .map<
+                                                              Map<String,
+                                                                  dynamic>>(
+                                                          (field) {
+                                                        final lat =
+                                                            field['latitude'] ??
+                                                                field['lat'];
+                                                        final lon = field[
+                                                                'longitude'] ??
+                                                            field['lon'];
+                                                        final latDouble = lat
+                                                                is num
+                                                            ? lat.toDouble()
+                                                            : double.tryParse(
+                                                                lat?.toString() ??
+                                                                    '');
+                                                        final lonDouble = lon
+                                                                is num
+                                                            ? lon.toDouble()
+                                                            : double.tryParse(
+                                                                lon?.toString() ??
+                                                                    '');
+                                                        if (latDouble == null ||
+                                                            lonDouble == null) {
+                                                          return <String,
+                                                              dynamic>{};
+                                                        }
+                                                        return {
+                                                          'name': field[
+                                                                  'name'] ??
+                                                              'Unnamed Field',
+                                                          'lat': latDouble,
+                                                          'lon': lonDouble,
+                                                          'lit':
+                                                              (field['lighting'] ==
+                                                                      true)
+                                                                  ? 'yes'
+                                                                  : 'no',
+                                                          'surface':
+                                                              field['surface'],
+                                                        };
+                                                      })
+                                                      .where((loc) =>
+                                                          loc.isNotEmpty)
+                                                      .toList();
+
+                                              if (mapLocations.isEmpty) {
+                                                ScaffoldMessenger.of(context)
+                                                    .showSnackBar(
+                                                  SnackBar(
+                                                    content: Text(
+                                                        'no_fields_available'
+                                                            .tr()),
+                                                  ),
+                                                );
+                                                return;
+                                              }
+
+                                              final mapTitle =
+                                                  _selectedSport == 'basketball'
+                                                      ? 'basketball_courts'.tr()
+                                                      : 'football_fields'.tr();
+
+                                              Navigator.of(context).push(
+                                                MaterialPageRoute(
+                                                  builder: (_) =>
+                                                      GenericMapScreen(
+                                                    title: mapTitle,
+                                                    locations: mapLocations,
+                                                  ),
+                                                ),
+                                              );
+                                            },
+                                      icon: const Icon(Icons.map_outlined),
+                                      label: Text('show_on_map'.tr()),
+                                    ),
+                                  ],
+                                ),
                               ),
+                              const SizedBox(height: AppHeights.small),
                               Padding(
                                 padding: AppPaddings.symmHorizontalReg,
                                 child: Column(
                                   mainAxisSize: MainAxisSize.min,
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
                                   children: [
+                                    const SizedBox(height: 8),
                                     if (_isLoadingFields)
                                       const Center(
                                           child: CircularProgressIndicator())

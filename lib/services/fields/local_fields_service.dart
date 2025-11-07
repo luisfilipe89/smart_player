@@ -11,8 +11,7 @@ class LocalFieldsService {
     // `areaName` kept for API compatibility; current GeoJSON is not area-specific.
     // ignore: unused_local_variable
     final _ = areaName;
-    const primaryPath =
-        'assets/fields/football_leisure_pitch_with_addresses.geojson';
+    const primaryPath = 'assets/fields/football_fields_with_addresses.geojson';
     const fallbackPath =
         'assets/fields/football_leisure_pitch, sport_soccer, access_yes, equipment_yes.geojson';
 
