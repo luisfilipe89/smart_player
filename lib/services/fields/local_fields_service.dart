@@ -12,9 +12,11 @@ class LocalFieldsService {
     // ignore: unused_local_variable
     final _ = areaName;
     const primaryPath =
+        'assets/fields/football_leisure_pitch_with_addresses.geojson';
+    const fallbackPath =
         'assets/fields/football_leisure_pitch, sport_soccer, access_yes, equipment_yes.geojson';
 
-    final raw = await _tryLoad(primaryPath);
+    final raw = await _tryLoad(primaryPath) ?? await _tryLoad(fallbackPath);
     if (raw == null) {
       return null;
     }
@@ -46,6 +48,9 @@ class LocalFieldsService {
             'surface': properties['surface'],
             'lit': properties['lit'],
             'addr:street': properties['addr:street'],
+            'address_short': properties['address_short'],
+            'address_super_short': properties['address_super_short'],
+            'address_display_name': properties['address_display_name'],
             'tags': properties,
           };
         })

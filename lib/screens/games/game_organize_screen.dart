@@ -245,7 +245,10 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
       final fields = rawFields
           .map<Map<String, dynamic>>((f) {
             final name = f['name'] ?? 'Unnamed Field';
-            final address = f['addr:street'] ?? f['address'];
+            final addressSuperShort =
+                f['address_super_short'] ?? f['addressSuperShort'];
+            final address =
+                f['address_short'] ?? f['addr:street'] ?? f['address'];
             final lat = f['lat'] ?? f['latitude'];
             final lon = f['lon'] ?? f['longitude'];
             final lit = f['lit'] ?? f['lighting'];
@@ -253,6 +256,7 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
               'id': f['id'],
               'name': name,
               'address': address,
+              'addressSuperShort': addressSuperShort ?? address,
               'latitude': lat,
               'longitude': lon,
               'surface': f['surface'],
@@ -1269,7 +1273,7 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
   }) {
     final surface = field['surface'] ?? 'Unknown';
     final lighting = field['lighting'] ?? false;
-    final address = field['address'] ?? '';
+    final addressSuperShort = field['addressSuperShort'] ?? '';
 
     return InkWell(
       onTap: onTap,
@@ -1301,7 +1305,19 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: 2),
+            if (addressSuperShort.isNotEmpty)
+              Text(
+                addressSuperShort,
+                style: AppTextStyles.superSmall.copyWith(
+                  color: AppColors.grey,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w500,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            if (addressSuperShort.isNotEmpty) const SizedBox(height: 4),
             Text(
               surface,
               style: AppTextStyles.superSmall.copyWith(
@@ -1320,7 +1336,7 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                 const SizedBox(width: 4),
                 Expanded(
                   child: Text(
-                    address,
+                    lighting ? 'Lighting available' : 'No lighting available',
                     style: AppTextStyles.superSmall.copyWith(
                       color: AppColors.grey,
                       fontSize: 9,
