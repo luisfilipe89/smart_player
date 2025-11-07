@@ -8,107 +8,151 @@ class LocalFieldsService {
     required String areaName,
     required String sportType,
   }) async {
-    final slug = _slugArea(areaName);
-    final primaryPath = 'assets/fields/den_bosch_fields.json';
-    final fallbackPath = 'assets/fields/$slug.fields.json';
+    // `areaName` kept for API compatibility; current GeoJSON is not area-specific.
+    // ignore: unused_local_variable
+    final _ = areaName;
+    const primaryPath =
+        'assets/fields/football_leisure_pitch, sport_soccer, access_yes, equipment_yes.geojson';
 
-    String? raw;
-    try {
-      raw = await rootBundle.loadString(primaryPath);
-    } catch (_) {
-      // ignore and try fallback
-    }
+    final raw = await _tryLoad(primaryPath);
     if (raw == null) {
-      try {
-        raw = await rootBundle.loadString(fallbackPath);
-      } catch (_) {
-        return null;
-      }
-    }
-
-    final decoded = jsonDecode(raw);
-
-    List<Map<String, dynamic>> items = [];
-
-    if (decoded is Map<String, dynamic> && decoded.containsKey('elements')) {
-      // Overpass-style JSON -> normalize and filter by sport
-      final elements = (decoded['elements'] as List?)?.cast<dynamic>() ?? [];
-      items = elements
-          .map<Map<String, dynamic>>((e) {
-            final m = Map<String, dynamic>.from(e as Map);
-            final tags = Map<String, dynamic>.from(m['tags'] ?? {});
-            final type = (m['type'] ?? '').toString();
-            final idRaw = m['id'];
-            final id = idRaw != null ? idRaw.toString() : '';
-            final num? nLat = m['lat'] as num?;
-            final num? nLon = m['lon'] as num?;
-            final Map<String, dynamic>? center =
-                m['center'] as Map<String, dynamic>?;
-            final num? cLat = center != null ? center['lat'] as num? : null;
-            final num? cLon = center != null ? center['lon'] as num? : null;
-            final double? lat = (nLat ?? cLat)?.toDouble();
-            final double? lon = (nLon ?? cLon)?.toDouble();
-            if (lat == null || lon == null) {
-              return {};
-            }
-            return {
-              'id': id.isNotEmpty ? (type.isNotEmpty ? '$type:$id' : id) : null,
-              'name': tags['name'] ?? 'Unnamed Field',
-              'lat': lat,
-              'lon': lon,
-              'surface': tags['surface'],
-              'lit': tags['lit'],
-              'addr:street': tags['addr:street'],
-              'tags': tags,
-            };
-          })
-          .where((m) => m.isNotEmpty)
-          .toList();
-
-      // Keep only requested sport
-      items = items.where((m) {
-        final tags = (m['tags'] as Map<String, dynamic>?);
-        final sport = tags?['sport']?.toString();
-        final leisure = tags?['leisure']?.toString();
-        if (sport == sportType) {
-          return true;
-        }
-        // Optional: allow sports centres/venues tagged with same sport
-        if (leisure == 'sports_centre' && sport == sportType) {
-          return true;
-        }
-        if ((leisure == 'pitch' || leisure == 'stadium') && sport == sportType) {
-          return true;
-        }
-        return false;
-      }).toList();
-    } else if (decoded is Map<String, dynamic> && decoded[sportType] is List) {
-      // Pre-normalized schema keyed by sport
-      final list = (decoded[sportType] as List).cast<dynamic>();
-      items = list.map<Map<String, dynamic>>((e) {
-        final m = Map<String, dynamic>.from(e as Map);
-        final lat = m['lat'];
-        final lon = m['lon'];
-        return {
-          ...m,
-          'lat': lat is num ? lat.toDouble() : double.tryParse(lat.toString()),
-          'lon': lon is num ? lon.toDouble() : double.tryParse(lon.toString()),
-          'tags': Map<String, dynamic>.from(m['tags'] ?? {}),
-        };
-      }).toList();
-    } else {
       return null;
     }
 
-    return items.where((e) => e['lat'] != null && e['lon'] != null).toList();
+    final decoded = jsonDecode(raw);
+    if (decoded is! Map<String, dynamic>) {
+      return null;
+    }
+
+    final features =
+        (decoded['features'] as List?)?.cast<dynamic>() ?? const <dynamic>[];
+
+    final items = features
+        .map<Map<String, dynamic>>((feature) {
+          final map = Map<String, dynamic>.from(feature as Map);
+          final properties =
+              Map<String, dynamic>.from(map['properties'] as Map? ?? const {});
+          final id = (map['id'] ?? properties['@id'])?.toString();
+          final coords = _extractLatLon(map['geometry']);
+          if (coords == null) {
+            return const <String, dynamic>{};
+          }
+
+          return {
+            'id': id,
+            'name': properties['name'] ?? 'Unnamed Field',
+            'lat': coords.$1,
+            'lon': coords.$2,
+            'surface': properties['surface'],
+            'lit': properties['lit'],
+            'addr:street': properties['addr:street'],
+            'tags': properties,
+          };
+        })
+        .where((m) => m.isNotEmpty)
+        .toList();
+
+    return items
+        .where((m) {
+          final tags = m['tags'] as Map<String, dynamic>?;
+          final sport = tags?['sport']?.toString();
+          final leisure = tags?['leisure']?.toString();
+          if (sport == sportType) {
+            return true;
+          }
+          if (leisure == 'sports_centre' && sport == sportType) {
+            return true;
+          }
+          if ((leisure == 'pitch' || leisure == 'stadium') &&
+              sport == sportType) {
+            return true;
+          }
+          return false;
+        })
+        .where((e) => e['lat'] != null && e['lon'] != null)
+        .toList();
   }
 
-  String _slugArea(String areaName) {
-    final lower = areaName.toLowerCase();
-    final dashed = lower
-        .replaceAll(RegExp(r'[^a-z0-9]+'), '-')
-        .replaceAll(RegExp(r'-+'), '-')
-        .trim();
-    return dashed;
+  Future<String?> _tryLoad(String path) async {
+    try {
+      return await rootBundle.loadString(path);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  (double, double)? _extractLatLon(dynamic geometry) {
+    if (geometry is! Map) {
+      return null;
+    }
+    final type = geometry['type']?.toString();
+    final coordinates = geometry['coordinates'];
+
+    if (type == 'Point' && coordinates is List && coordinates.length >= 2) {
+      final lon = _toDouble(coordinates[0]);
+      final lat = _toDouble(coordinates[1]);
+      if (lat != null && lon != null) {
+        return (lat, lon);
+      }
+      return null;
+    }
+
+    if (type == 'Polygon' && coordinates is List && coordinates.isNotEmpty) {
+      final firstRing = coordinates.first;
+      if (firstRing is List && firstRing.isNotEmpty) {
+        double sumLat = 0;
+        double sumLon = 0;
+        int count = 0;
+        for (final point in firstRing) {
+          if (point is List && point.length >= 2) {
+            final lon = _toDouble(point[0]);
+            final lat = _toDouble(point[1]);
+            if (lat != null && lon != null) {
+              sumLat += lat;
+              sumLon += lon;
+              count++;
+            }
+          }
+        }
+        if (count > 0) {
+          return (sumLat / count, sumLon / count);
+        }
+      }
+    }
+
+    if (type == 'MultiPolygon' &&
+        coordinates is List &&
+        coordinates.isNotEmpty) {
+      for (final polygon in coordinates) {
+        final result =
+            _extractLatLon({'type': 'Polygon', 'coordinates': polygon});
+        if (result != null) {
+          return result;
+        }
+      }
+    }
+
+    if (type == 'LineString' && coordinates is List && coordinates.isNotEmpty) {
+      final first = coordinates.first;
+      if (first is List && first.length >= 2) {
+        final lon = _toDouble(first[0]);
+        final lat = _toDouble(first[1]);
+        if (lat != null && lon != null) {
+          return (lat, lon);
+        }
+      }
+    }
+
+    return null;
+  }
+
+  double? _toDouble(dynamic value) {
+    if (value is num) {
+      return value.toDouble();
+    }
+    if (value is String) {
+      return double.tryParse(value);
+    }
+    return null;
   }
 }
