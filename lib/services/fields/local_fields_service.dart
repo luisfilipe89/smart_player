@@ -83,12 +83,8 @@ class LocalFieldsService {
 
   List<String> _resolveAssetCandidates(String sportType) {
     final normalized = sportType.toLowerCase();
-    const soccerFallback =
-        'assets/fields/football_leisure_pitch, sport_soccer, access_yes, equipment_yes.geojson';
-
     const defaultAssets = <String>[
       'assets/fields/football_fields_with_addresses.geojson',
-      soccerFallback,
     ];
 
     const sportAssets = <String, List<String>>{
@@ -96,19 +92,18 @@ class LocalFieldsService {
       'football': defaultAssets,
       'basketball': <String>[
         'assets/fields/basketball_fields_with_addresses.geojson',
-        'assets/fields/basketball_leisure_pitch, sport_basketball, access_yes.geojson',
       ],
       'beachvolleyball': <String>[
         'assets/fields/beachvolleyball_with_addresses.geojson',
-        'assets/fields/beachvolleyball_leisure_pitch, sport_beachvolleyball.geojson',
       ],
       'table_tennis': <String>[
         'assets/fields/table_tennis_with_addresses.geojson',
-        '_old/tabletennis_leisure_pitch, sport_tabletennis_access_yes.geojson',
       ],
       'boules': <String>[
         'assets/fields/boules_with_addresses.geojson',
-        '_old/boules_leisure_pitch, sport_boules.geojson',
+      ],
+      'skateboard': <String>[
+        'assets/fields/skateboard_with_addresses.geojson',
       ],
     };
 

@@ -117,8 +117,13 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
       'color': const Color(0xFF00BCD4),
     },
     {
+      'key': 'skateboard',
+      'icon': Icons.skateboarding,
+      'color': const Color(0xFFF9A825),
+    },
+    {
       'key': 'boules',
-      'icon': Icons.sports_cricket,
+      'icon': Icons.scatter_plot,
       'color': const Color(0xFF795548),
     },
   ];
@@ -227,6 +232,7 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
         'basketball' => 'basketball',
         'volleyball' => 'beachvolleyball',
         'table_tennis' => 'table_tennis',
+        'skateboard' => 'skateboard',
         'boules' => 'boules',
         _ => 'soccer',
       };
