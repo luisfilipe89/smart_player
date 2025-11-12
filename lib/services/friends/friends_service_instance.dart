@@ -14,6 +14,12 @@ import '../notifications/notification_interface.dart';
 import '../../utils/service_error.dart';
 import 'friends_service.dart';
 
+class _ProfileAccess {
+  final bool allowed;
+  final String visibility;
+  const _ProfileAccess({required this.allowed, required this.visibility});
+}
+
 /// Instance-based FriendsService for use with Riverpod dependency injection
 /// Error handling uses direct try-catch patterns for clarity and flexibility
 class FriendsServiceInstance implements IFriendsService {
@@ -29,6 +35,63 @@ class FriendsServiceInstance implements IFriendsService {
     this._db,
     this._notificationService,
   );
+
+  static const _visibilityPublic = 'public';
+  static const _visibilityFriends = 'friends';
+  static const _visibilityPrivate = 'private';
+  static const _visibilityRestricted = 'restricted';
+
+  Future<DataSnapshot> _readPath(String path) => _db.ref(path).get();
+
+  Future<String> _getUserVisibility(String uid) async {
+    try {
+      final snapshot = await _safeGet(DbPaths.userVisibility(uid));
+      final value = snapshot.value;
+      if (value is String && value.isNotEmpty) {
+        return value;
+      }
+    } catch (e) {
+      NumberedLogger.w('Error getting visibility for $uid: $e');
+    }
+    return _visibilityPublic;
+  }
+
+  Future<bool> _areFriends(String userA, String userB) async {
+    try {
+      final snapshot =
+          await _readPath('${DbPaths.userFriends(userA)}/$userB');
+      return snapshot.exists && snapshot.value == true;
+    } catch (e) {
+      NumberedLogger.w('Error checking friendship between $userA and $userB: $e');
+      return false;
+    }
+  }
+
+  Future<_ProfileAccess> _profileAccessFor(String targetUid) async {
+    final visibility = await _getUserVisibility(targetUid);
+    final currentUid = _auth.currentUser?.uid;
+    if (currentUid == null) {
+      return _ProfileAccess(allowed: false, visibility: visibility);
+    }
+
+    if (currentUid == targetUid) {
+      return _ProfileAccess(allowed: true, visibility: visibility);
+    }
+
+    switch (visibility) {
+      case _visibilityPublic:
+        return const _ProfileAccess(allowed: true, visibility: _visibilityPublic);
+      case _visibilityFriends:
+        final friends = await _areFriends(targetUid, currentUid);
+        return friends
+            ? _ProfileAccess(allowed: true, visibility: visibility)
+            : _ProfileAccess(allowed: false, visibility: visibility);
+      case _visibilityPrivate:
+        return _ProfileAccess(allowed: false, visibility: visibility);
+      default:
+        return _ProfileAccess(allowed: false, visibility: visibility);
+    }
+  }
 
   // Centralized helper to log RTDB reads and surface the exact failing path
   Future<DataSnapshot> _safeGet(String path) async {
@@ -370,6 +433,11 @@ class FriendsServiceInstance implements IFriendsService {
   // Get user profile
   Future<Map<String, String>?> _getUserProfile(String uid) async {
     try {
+      final access = await _profileAccessFor(uid);
+      if (!access.allowed) {
+        return null;
+      }
+
       final snapshot = await _safeGet('users/$uid/profile');
       if (snapshot.exists) {
         final profileData = snapshot.value as Map<dynamic, dynamic>;
@@ -377,6 +445,7 @@ class FriendsServiceInstance implements IFriendsService {
           'uid': uid,
           'displayName': profileData['displayName']?.toString() ?? 'Unknown',
           'photoURL': profileData['photoURL']?.toString() ?? '',
+          'visibility': access.visibility,
         };
       }
       return null;
@@ -390,6 +459,17 @@ class FriendsServiceInstance implements IFriendsService {
   @override
   Future<Map<String, String?>> fetchMinimalProfile(String uid) async {
     try {
+      final access = await _profileAccessFor(uid);
+      if (!access.allowed) {
+        return {
+          'uid': uid,
+          'displayName': null,
+          'photoURL': null,
+          'visibility': _visibilityRestricted,
+          'visibilitySetting': access.visibility,
+        };
+      }
+
       final snapshot = await _safeGet('users/$uid/profile');
       if (snapshot.exists) {
         final profileData = snapshot.value as Map<dynamic, dynamic>;
@@ -397,12 +477,14 @@ class FriendsServiceInstance implements IFriendsService {
           'uid': uid,
           'displayName': profileData['displayName']?.toString(),
           'photoURL': profileData['photoURL']?.toString(),
+          'visibility': access.visibility,
         };
       }
       return {
         'uid': uid,
         'displayName': null,
         'photoURL': null,
+        'visibility': access.visibility,
       };
     } catch (e) {
       NumberedLogger.e('Error fetching minimal profile for $uid: $e');
@@ -410,6 +492,8 @@ class FriendsServiceInstance implements IFriendsService {
         'uid': uid,
         'displayName': null,
         'photoURL': null,
+        'visibility': _visibilityRestricted,
+        'visibilitySetting': _visibilityPublic,
       };
     }
   }

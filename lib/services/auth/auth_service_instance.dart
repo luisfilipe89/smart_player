@@ -63,27 +63,6 @@ class AuthServiceInstance implements IAuthService {
   @override
   Stream<User?> get userChanges => _auth.userChanges();
 
-  // Sign in anonymously
-  @override
-  Future<UserCredential> signInAnonymously() async {
-    try {
-      NumberedLogger.d('Auth: signInAnonymously start');
-      final userCredential = await _auth.signInAnonymously().timeout(
-            const Duration(seconds: 12),
-          );
-      NumberedLogger.d(
-          'Auth: signInAnonymously success uid=${userCredential.user?.uid}');
-      return userCredential;
-    } on TimeoutException catch (e) {
-      throw NetworkException('network_error', originalError: e);
-    } on FirebaseAuthException catch (e) {
-      throw FirebaseErrorHandler.toServiceException(e);
-    } catch (e) {
-      NumberedLogger.e('Error signing in anonymously: $e');
-      throw FirebaseErrorHandler.toServiceException(e);
-    }
-  }
-
   // Sign in with Google
   @override
   Future<UserCredential?> signInWithGoogle() async {
@@ -152,7 +131,7 @@ class AuthServiceInstance implements IAuthService {
       await _auth.currentUser?.reload();
       return userCredential;
     } on FirebaseAuthException catch (e) {
-      throw FirebaseErrorHandler.toServiceException(e);
+      throw AuthException(_mapFirebaseError(e, isSignup: false), code: e.code);
     } catch (e) {
       NumberedLogger.e('Error signing in with email: $e');
       throw FirebaseErrorHandler.toServiceException(e);
@@ -178,7 +157,7 @@ class AuthServiceInstance implements IAuthService {
 
       return userCredential;
     } on FirebaseAuthException catch (e) {
-      throw FirebaseErrorHandler.toServiceException(e);
+      throw AuthException(_mapFirebaseError(e, isSignup: true), code: e.code);
     } catch (e) {
       NumberedLogger.e('Error creating account: $e');
       throw FirebaseErrorHandler.toServiceException(e);
@@ -256,21 +235,27 @@ class AuthServiceInstance implements IAuthService {
 
   // Delete user account
   @override
-  Future<bool> deleteAccount() async {
+  Future<DeleteAccountResult> deleteAccount() async {
     try {
       final user = _auth.currentUser;
       if (user == null) {
         NumberedLogger.w('No user to delete');
-        return false;
+        return const DeleteAccountResult.failure('not_signed_in');
       }
 
-      // Delete the user account
       await user.delete();
       NumberedLogger.i('User account deleted successfully');
-      return true;
+      return const DeleteAccountResult.success();
+    } on FirebaseAuthException catch (e) {
+      if (e.code == 'requires-recent-login') {
+        NumberedLogger.w('Account deletion requires recent login');
+        return const DeleteAccountResult.requiresRecentLogin();
+      }
+      NumberedLogger.e('Error deleting account (auth): $e');
+      return DeleteAccountResult.failure(e.message ?? e.code);
     } catch (e) {
       NumberedLogger.e('Error deleting account: $e');
-      return false;
+      return DeleteAccountResult.failure(e.toString());
     }
   }
 
@@ -368,6 +353,33 @@ class AuthServiceInstance implements IAuthService {
       }
     }
     return false;
+  }
+
+  @override
+  Future<void> reauthenticateWithPassword(String password) async {
+    final user = _auth.currentUser;
+    if (user == null) throw AuthException('Not signed in');
+
+    final email = user.email;
+    if (email == null || email.isEmpty) {
+      throw ValidationException('No email on account');
+    }
+    if (password.isEmpty) {
+      throw ValidationException('auth_password_required');
+    }
+
+    try {
+      final credential = EmailAuthProvider.credential(
+        email: email,
+        password: password,
+      );
+      await user.reauthenticateWithCredential(credential);
+      NumberedLogger.i('User reauthenticated successfully');
+    } on FirebaseAuthException catch (e) {
+      throw AuthException(_mapFirebaseError(e, isSignup: false), code: e.code);
+    } catch (e) {
+      throw ServiceException('Reauthentication failed', originalError: e);
+    }
   }
 
   // Map FirebaseAuthException to friendly message

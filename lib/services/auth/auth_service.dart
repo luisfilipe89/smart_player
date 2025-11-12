@@ -13,7 +13,6 @@ abstract class IAuthService {
   Stream<User?> get userChanges;
 
   // Auth flows
-  Future<UserCredential> signInAnonymously();
   Future<UserCredential?> signInWithGoogle();
   Future<UserCredential> signInWithEmailAndPassword(
       String email, String password);
@@ -32,8 +31,34 @@ abstract class IAuthService {
   Future<void> changeEmail(
       {required String currentPassword, required String newEmail});
   Future<void> updateDisplayName(String displayName);
-  Future<bool> deleteAccount();
+  Future<DeleteAccountResult> deleteAccount();
+  Future<void> reauthenticateWithPassword(String password);
 
   // Providers
   bool get hasPasswordProvider;
+}
+
+enum DeleteAccountStatus {
+  success,
+  requiresRecentLogin,
+  failure,
+}
+
+class DeleteAccountResult {
+  final DeleteAccountStatus status;
+  final String? errorMessage;
+
+  const DeleteAccountResult._(this.status, [this.errorMessage]);
+
+  const DeleteAccountResult.success() : this._(DeleteAccountStatus.success);
+
+  const DeleteAccountResult.requiresRecentLogin()
+      : this._(DeleteAccountStatus.requiresRecentLogin);
+
+  const DeleteAccountResult.failure([String? message])
+      : this._(DeleteAccountStatus.failure, message);
+
+  bool get isSuccess => status == DeleteAccountStatus.success;
+  bool get needsReauthentication =>
+      status == DeleteAccountStatus.requiresRecentLogin;
 }

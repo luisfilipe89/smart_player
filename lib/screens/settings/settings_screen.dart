@@ -7,6 +7,7 @@ import 'package:move_young/theme/app_back_button.dart';
 import 'package:move_young/services/system/haptics_provider.dart';
 import 'package:move_young/services/system/profile_settings_provider.dart';
 import 'package:move_young/screens/settings/notification_settings_screen.dart';
+import 'package:move_young/utils/service_error.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -25,26 +26,41 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     super.dispose();
   }
 
-  Future<void> _deleteAccount() async {
+  Future<void> _deleteAccount({bool allowReauthRetry = true}) async {
     setState(() => _submitting = true);
     try {
       final authActions = ref.read(authActionsProvider);
-      final ok = await authActions.deleteAccount();
+      final result = await authActions.deleteAccount();
       if (!mounted) return;
       final scaffoldMessenger = ScaffoldMessenger.of(context);
       final navigator = Navigator.of(context);
-      if (ok == true) {
+
+      if (result.isSuccess) {
         scaffoldMessenger.showSnackBar(
           SnackBar(content: Text('settings_account_deleted'.tr())),
         );
         navigator.pop();
-      } else {
-        scaffoldMessenger.showSnackBar(
-          SnackBar(
-              content: Text('settings_account_delete_failed'.tr()),
-              backgroundColor: Colors.red),
-        );
+        return;
       }
+
+      if (result.needsReauthentication && allowReauthRetry) {
+        scaffoldMessenger.showSnackBar(
+          SnackBar(content: Text('settings_delete_requires_recent_login'.tr())),
+        );
+        setState(() => _submitting = false);
+        final reauthenticated = await _handleReauthenticationFlow();
+        if (reauthenticated) {
+          await _deleteAccount(allowReauthRetry: false);
+        }
+        return;
+      }
+
+      scaffoldMessenger.showSnackBar(
+        SnackBar(
+          content: Text('settings_account_delete_failed'.tr()),
+          backgroundColor: Colors.red,
+        ),
+      );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -52,6 +68,165 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       );
     } finally {
       if (mounted) setState(() => _submitting = false);
+    }
+  }
+
+  Future<bool> _handleReauthenticationFlow() async {
+    final authActions = ref.read(authActionsProvider);
+    if (!authActions.hasPasswordProvider) {
+      if (!mounted) return false;
+      await showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text('settings_delete_reauth_title'.tr()),
+          content: Text('settings_delete_reauth_other_providers'.tr()),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text('ok'.tr()),
+            ),
+          ],
+        ),
+      );
+      return false;
+    }
+
+    while (mounted) {
+      final password = await _promptForPassword();
+      if (password == null) {
+        return false;
+      }
+      try {
+        await authActions.reauthenticateWithPassword(password);
+        if (!mounted) return false;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('settings_delete_reauth_success'.tr())),
+        );
+        return true;
+      } on ServiceException catch (e) {
+        if (!mounted) return false;
+        final message = e.message.tr();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(message), backgroundColor: Colors.red),
+        );
+      } catch (_) {
+        if (!mounted) return false;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('settings_delete_reauth_failed'.tr()),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+    return false;
+  }
+
+  Future<String?> _promptForPassword() async {
+    final controller = TextEditingController();
+    final formKey = GlobalKey<FormState>();
+    String? password;
+    try {
+      password = await showModalBottomSheet<String>(
+        context: context,
+        isScrollControlled: true,
+        builder: (sheetContext) {
+          bool obscure = true;
+          return StatefulBuilder(
+            builder: (context, setSheetState) {
+              final bottomInset = MediaQuery.of(sheetContext).viewInsets.bottom;
+              return SafeArea(
+                child: Padding(
+                  padding: EdgeInsets.only(
+                    left: AppSpacing.lg,
+                    right: AppSpacing.lg,
+                    top: AppSpacing.lg,
+                    bottom: AppSpacing.lg + bottomInset,
+                  ),
+                  child: Form(
+                    key: formKey,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'settings_delete_reauth_title'.tr(),
+                          style: AppTextStyles.h3,
+                        ),
+                        const SizedBox(height: AppSpacing.sm),
+                        Text(
+                          'settings_delete_reauth_subtitle'.tr(),
+                          style: AppTextStyles.bodyMuted,
+                        ),
+                        const SizedBox(height: AppSpacing.lg),
+                        TextFormField(
+                          controller: controller,
+                          obscureText: obscure,
+                          autofillHints: const [AutofillHints.password],
+                          decoration: InputDecoration(
+                            labelText: 'settings_delete_password_hint'.tr(),
+                            border: OutlineInputBorder(
+                              borderRadius:
+                                  BorderRadius.circular(AppRadius.card),
+                            ),
+                            suffixIcon: IconButton(
+                              icon: Icon(
+                                obscure
+                                    ? Icons.visibility_off
+                                    : Icons.visibility,
+                              ),
+                              onPressed: () =>
+                                  setSheetState(() => obscure = !obscure),
+                            ),
+                          ),
+                          validator: (value) => (value == null || value.isEmpty)
+                              ? 'settings_delete_password_error'.tr()
+                              : null,
+                          textInputAction: TextInputAction.done,
+                          onFieldSubmitted: (_) {
+                            if (formKey.currentState?.validate() ?? false) {
+                              Navigator.of(sheetContext)
+                                  .pop(controller.text.trim());
+                            }
+                          },
+                        ),
+                        const SizedBox(height: AppSpacing.lg),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton(
+                                onPressed: () =>
+                                    Navigator.of(sheetContext).pop(),
+                                child: Text('cancel'.tr()),
+                              ),
+                            ),
+                            const SizedBox(width: AppSpacing.md),
+                            Expanded(
+                              child: ElevatedButton(
+                                onPressed: () {
+                                  if (formKey.currentState?.validate() ??
+                                      false) {
+                                    Navigator.of(sheetContext)
+                                        .pop(controller.text.trim());
+                                  }
+                                },
+                                child: Text('settings_delete_continue'.tr()),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            },
+          );
+        },
+      );
+      return password;
+    } finally {
+      controller.dispose();
     }
   }
 

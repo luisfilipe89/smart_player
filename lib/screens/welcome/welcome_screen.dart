@@ -19,9 +19,8 @@ class WelcomeScreen extends ConsumerStatefulWidget {
 
 class _WelcomeScreenState extends ConsumerState<WelcomeScreen> {
   bool _loadingGoogle = false;
-  bool _loadingAnon = false;
 
-  bool get _isLoading => _loadingGoogle || _loadingAnon;
+  bool get _isLoading => _loadingGoogle;
 
   bool get _isIOS => !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;
 
@@ -101,8 +100,9 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> {
                         context: context,
                         icon: _brandIcon('apple'),
                         label: 'auth_continue_apple'.tr(),
-                        onPressed:
-                            _isLoading ? null : () => _showComingSoon(context),
+                        onPressed: _isLoading
+                            ? null
+                            : () => _showComingSoon(context),
                         loading: false,
                       ),
                       const SizedBox(height: AppSpacing.md),
@@ -143,26 +143,6 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> {
                     // Continue with Email
                     _buildEmailButton(context, disabled: _isLoading),
                     const SizedBox(height: AppSpacing.md),
-
-                    // Skip for now (anonymous)
-                    TextButton(
-                      onPressed: _isLoading
-                          ? null
-                          : () => _continueAnonymously(context),
-                      child: _loadingAnon
-                          ? const SizedBox(
-                              height: 18,
-                              width: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : Text(
-                              'auth_skip_for_now'.tr(),
-                              style: AppTextStyles.body.copyWith(
-                                color: AppColors.grey,
-                                decoration: TextDecoration.underline,
-                              ),
-                            ),
-                    ),
                   ],
                 ),
 
@@ -245,38 +225,14 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> {
     }
   }
 
-  void _continueAnonymously(BuildContext context) async {
-    setState(() => _loadingAnon = true);
-    bool navigated = false;
-    try {
-      final authActions = ref.read(authActionsProvider);
-      debugPrint('UI: Skip for now tapped');
-      await authActions.signInAnonymously();
-      if (context.mounted) {
-        navigated = true;
-        _navigateToMainApp(context);
-      }
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error: ${e.toString()}'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    } finally {
-      if (!navigated && mounted) setState(() => _loadingAnon = false);
-    }
-  }
-
   void _continueWithGoogle(BuildContext context) async {
     setState(() => _loadingGoogle = true);
     bool navigated = false;
     try {
       // Check active internet connection before starting Google sign-in
-      final hasInternet =
-          await ref.read(connectivityActionsProvider).hasInternetConnection();
+      final hasInternet = await ref
+          .read(connectivityActionsProvider)
+          .hasInternetConnection();
       if (!hasInternet) {
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(

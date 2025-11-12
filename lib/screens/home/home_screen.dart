@@ -1,6 +1,5 @@
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:move_young/models/external/event_model.dart';
 import 'package:move_young/services/load_events_from_json.dart';
@@ -46,7 +45,9 @@ class _HomeScreenNewState extends ConsumerState<HomeScreenNew> {
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       precacheImage(
-          const AssetImage('assets/images/general_public.jpg'), context);
+        const AssetImage('assets/images/general_public.jpg'),
+        context,
+      );
     });
   }
 
@@ -68,8 +69,9 @@ class _HomeScreenNewState extends ConsumerState<HomeScreenNew> {
   Future<void> _fetch() async {
     setState(() => _state = _LoadState.loading);
     try {
-      final loaded =
-          await loadEventsFromJson(lang: context.locale.languageCode);
+      final loaded = await loadEventsFromJson(
+        lang: context.locale.languageCode,
+      );
       if (!mounted) return;
       setState(() {
         events = loaded;
@@ -82,9 +84,9 @@ class _HomeScreenNewState extends ConsumerState<HomeScreenNew> {
       }());
       if (!mounted) return;
       setState(() => _state = _LoadState.error);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('events_load_failed'.tr())),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('events_load_failed'.tr())));
     }
   }
 
@@ -161,10 +163,7 @@ class _HomeScreenNewState extends ConsumerState<HomeScreenNew> {
         backgroundColor: AppColors.white,
         elevation: 0,
         leading: IconButton(
-          icon: Icon(
-            Icons.account_circle_outlined,
-            color: AppColors.blackIcon,
-          ),
+          icon: Icon(Icons.account_circle_outlined, color: AppColors.blackIcon),
           onPressed: () => _showUserMenu(context),
         ),
         title: const Text('SMARTPLAYER'),
@@ -198,10 +197,7 @@ class _HomeScreenNewState extends ConsumerState<HomeScreenNew> {
           ? FloatingActionButton(
               onPressed: () => _showUserBottomSheet(context),
               backgroundColor: AppColors.primary,
-              child: const Icon(
-                Icons.person_add,
-                color: Colors.white,
-              ),
+              child: const Icon(Icons.person_add, color: Colors.white),
             )
           : null,
       body: SafeArea(
@@ -219,7 +215,8 @@ class _HomeScreenNewState extends ConsumerState<HomeScreenNew> {
           child: ListView(
             physics: const AlwaysScrollableScrollPhysics(),
             padding: AppPaddings.symmHorizontalReg.copyWith(
-              bottom: kBottomNavigationBarHeight +
+              bottom:
+                  kBottomNavigationBarHeight +
                   MediaQuery.of(context).padding.bottom +
                   16,
             ),
@@ -252,9 +249,10 @@ class _HomeScreenNewState extends ConsumerState<HomeScreenNew> {
                         Navigator.of(context).pushNamed('/organize-game');
                       },
                       onTapJoin: () async {
-                        HapticFeedback.lightImpact();
-                        await Navigator.of(context)
-                            .pushNamed('/discover-games');
+                        ref.read(hapticsActionsProvider)?.lightImpact();
+                        await Navigator.of(
+                          context,
+                        ).pushNamed('/discover-games');
                         if (mounted) {
                           await _refreshInvites();
                         }
@@ -269,8 +267,9 @@ class _HomeScreenNewState extends ConsumerState<HomeScreenNew> {
                       onSeeAll: () {
                         final haptics = ref.read(hapticsServiceProvider);
                         haptics?.selectionClick();
-                        MainScaffold.maybeOf(context)
-                            ?.switchToTab(kTabAgenda, popToRoot: true);
+                        MainScaffold.maybeOf(
+                          context,
+                        )?.switchToTab(kTabAgenda, popToRoot: true);
                       },
                     ),
                     const SizedBox(height: AppHeights.huge),
@@ -289,8 +288,10 @@ class _HomeScreenNewState extends ConsumerState<HomeScreenNew> {
     _showUserBottomSheet(context);
   }
 
-  void _showUserBottomSheet(BuildContext context,
-      {bool showSignInPrompt = false}) {
+  void _showUserBottomSheet(
+    BuildContext context, {
+    bool showSignInPrompt = false,
+  }) {
     final isSignedIn = ref.read(isSignedInProvider);
     final userAsync = ref.read(currentUserProvider);
 
@@ -298,6 +299,8 @@ class _HomeScreenNewState extends ConsumerState<HomeScreenNew> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
+      enableDrag: true,
+      isDismissible: true,
       builder: (context) => Container(
         decoration: const BoxDecoration(
           color: AppColors.white,
@@ -318,6 +321,14 @@ class _HomeScreenNewState extends ConsumerState<HomeScreenNew> {
                 decoration: BoxDecoration(
                   color: AppColors.grey.withValues(alpha: 0.3),
                   borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              Align(
+                alignment: Alignment.centerRight,
+                child: IconButton(
+                  icon: const Icon(Icons.close),
+                  color: AppColors.grey,
+                  onPressed: () => Navigator.of(context).pop(),
                 ),
               ),
 
@@ -343,67 +354,73 @@ class _HomeScreenNewState extends ConsumerState<HomeScreenNew> {
 
               // User Header
               if (isSignedIn)
-                Builder(builder: (_) {
-                  final user = userAsync.value;
-                  final displayName =
-                      user?.displayName ?? user?.email ?? 'User';
-                  final email = user?.email ?? '';
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 24, vertical: 16),
-                    child: Row(
-                      children: [
-                        Hero(
-                          tag: 'avatar-${user?.uid ?? 'me'}',
-                          child: CircleAvatar(
-                            radius: 24,
-                            backgroundColor: AppColors.primary,
-                            child: Text(
-                              displayName.isNotEmpty
-                                  ? displayName[0].toUpperCase()
-                                  : 'U',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 20,
-                                fontWeight: FontWeight.w600,
+                Builder(
+                  builder: (_) {
+                    final user = userAsync.value;
+                    final displayName =
+                        user?.displayName ?? user?.email ?? 'User';
+                    final email = user?.email ?? '';
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 24,
+                        vertical: 16,
+                      ),
+                      child: Row(
+                        children: [
+                          Hero(
+                            tag: 'avatar-${user?.uid ?? 'me'}',
+                            child: CircleAvatar(
+                              radius: 24,
+                              backgroundColor: AppColors.primary,
+                              child: Text(
+                                displayName.isNotEmpty
+                                    ? displayName[0].toUpperCase()
+                                    : 'U',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.w600,
+                                ),
                               ),
                             ),
                           ),
-                        ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                displayName,
-                                style: AppTextStyles.h3.copyWith(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w600,
-                                  color: AppColors.blackText,
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  displayName,
+                                  style: AppTextStyles.h3.copyWith(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppColors.blackText,
+                                  ),
                                 ),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                email.isNotEmpty ? email : 'user@example.com',
-                                style: AppTextStyles.body.copyWith(
-                                  color: AppColors.grey,
-                                  fontSize: 14,
+                                const SizedBox(height: 2),
+                                Text(
+                                  email.isNotEmpty ? email : 'user@example.com',
+                                  style: AppTextStyles.body.copyWith(
+                                    color: AppColors.grey,
+                                    fontSize: 14,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
-                        ),
-                      ],
-                    ),
-                  );
-                })
+                        ],
+                      ),
+                    );
+                  },
+                )
               else
                 Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24,
+                    vertical: 16,
+                  ),
                   child: Row(
                     children: [
                       CircleAvatar(
@@ -537,9 +554,8 @@ class _HomeScreenNewState extends ConsumerState<HomeScreenNew> {
                           Navigator.of(context).pop();
                           await Navigator.of(context).push(
                             MaterialPageRoute(
-                              builder: (context) => const AuthScreen(
-                                startWithRegistration: true,
-                              ),
+                              builder: (context) =>
+                                  const AuthScreen(startWithRegistration: true),
                             ),
                           );
                         },
@@ -580,8 +596,8 @@ class _HomeScreenNewState extends ConsumerState<HomeScreenNew> {
                 color: isDestructive
                     ? Colors.red.shade600
                     : isSecondary
-                        ? AppColors.grey
-                        : AppColors.primary,
+                    ? AppColors.grey
+                    : AppColors.primary,
                 size: 22,
               ),
               const SizedBox(width: 16),
@@ -592,8 +608,8 @@ class _HomeScreenNewState extends ConsumerState<HomeScreenNew> {
                     color: isDestructive
                         ? Colors.red.shade600
                         : isSecondary
-                            ? AppColors.grey
-                            : AppColors.blackText,
+                        ? AppColors.grey
+                        : AppColors.blackText,
                     fontWeight: FontWeight.w500,
                     fontSize: 15,
                     letterSpacing: 0.2,
@@ -676,8 +692,10 @@ class _ActivitiesCard extends ConsumerWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('check_for_fields'.tr(),
-                        style: AppTextStyles.smallCardTitle),
+                    Text(
+                      'check_for_fields'.tr(),
+                      style: AppTextStyles.smallCardTitle,
+                    ),
                     const SizedBox(height: 1),
                     Text('look_for_fields'.tr(), style: AppTextStyles.small),
                   ],
@@ -814,8 +832,10 @@ class _UpcomingEventsCard extends ConsumerWidget {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('upcoming_events'.tr(),
-                        style: AppTextStyles.smallCardTitle),
+                    Text(
+                      'upcoming_events'.tr(),
+                      style: AppTextStyles.smallCardTitle,
+                    ),
                     const SizedBox(height: AppHeights.superSmall),
                     Text('join_sports_event'.tr(), style: AppTextStyles.small),
                   ],
@@ -823,7 +843,8 @@ class _UpcomingEventsCard extends ConsumerWidget {
                 if (state == _LoadState.success && events.isNotEmpty)
                   TextButton(
                     style: TextButton.styleFrom(
-                        padding: AppPaddings.symmHorizontalSmall),
+                      padding: AppPaddings.symmHorizontalSmall,
+                    ),
                     onPressed: onSeeAll,
                     child: Text('see_all'.tr(), style: AppTextStyles.small),
                   ),
@@ -858,8 +879,10 @@ class _UpcomingEventsCard extends ConsumerWidget {
               const Icon(Icons.error_outline, color: AppColors.grey),
               const SizedBox(width: AppWidths.small),
               Expanded(
-                child: Text('events_load_failed'.tr(),
-                    style: AppTextStyles.bodyMuted),
+                child: Text(
+                  'events_load_failed'.tr(),
+                  style: AppTextStyles.bodyMuted,
+                ),
               ),
               TextButton(onPressed: onRetry, child: Text('retry'.tr())),
             ],
@@ -875,8 +898,10 @@ class _UpcomingEventsCard extends ConsumerWidget {
                 const Icon(Icons.inbox, color: AppColors.grey),
                 const SizedBox(width: AppWidths.small),
                 Expanded(
-                  child: Text('no_upcoming_events'.tr(),
-                      style: AppTextStyles.bodyMuted),
+                  child: Text(
+                    'no_upcoming_events'.tr(),
+                    style: AppTextStyles.bodyMuted,
+                  ),
                 ),
               ],
             ),
@@ -898,63 +923,94 @@ class _UpcomingEventsCard extends ConsumerWidget {
               return ListTile(
                 contentPadding: AppPaddings.symmHorizontalMedium,
                 leading: const Icon(Icons.event),
-                title: Text(e.title,
-                    style: AppTextStyles.cardTitle,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis),
+                title: Text(
+                  e.title,
+                  style: AppTextStyles.cardTitle,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
                 subtitle: Padding(
                   padding: AppPaddings.topSuperSmall,
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(children: [
-                        const Icon(Icons.access_time,
-                            size: 14, color: AppColors.grey),
-                        const SizedBox(width: AppWidths.small),
-                        Expanded(
-                          child: Text(e.dateTime,
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.access_time,
+                            size: 14,
+                            color: AppColors.grey,
+                          ),
+                          const SizedBox(width: AppWidths.small),
+                          Expanded(
+                            child: Text(
+                              e.dateTime,
                               style: AppTextStyles.small,
                               maxLines: 1,
-                              overflow: TextOverflow.ellipsis),
-                        ),
-                      ]),
-                      Row(children: [
-                        const Icon(Icons.group,
-                            size: 14, color: AppColors.grey),
-                        const SizedBox(width: AppWidths.small),
-                        Expanded(
-                          child: Text(e.targetGroup,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.group,
+                            size: 14,
+                            color: AppColors.grey,
+                          ),
+                          const SizedBox(width: AppWidths.small),
+                          Expanded(
+                            child: Text(
+                              e.targetGroup,
                               style: AppTextStyles.small,
                               maxLines: 1,
-                              overflow: TextOverflow.ellipsis),
-                        ),
-                      ]),
-                      Row(children: [
-                        const Icon(Icons.location_on,
-                            size: 14, color: AppColors.grey),
-                        const SizedBox(width: AppWidths.small),
-                        Expanded(
-                          child: Text(e.location,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.location_on,
+                            size: 14,
+                            color: AppColors.grey,
+                          ),
+                          const SizedBox(width: AppWidths.small),
+                          Expanded(
+                            child: Text(
+                              e.location,
                               style: AppTextStyles.small,
                               maxLines: 1,
-                              overflow: TextOverflow.ellipsis),
-                        ),
-                      ]),
-                      Row(children: [
-                        const Icon(Icons.euro, size: 14, color: AppColors.grey),
-                        const SizedBox(width: AppWidths.small),
-                        Expanded(
-                          child: Text(e.cost,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.euro,
+                            size: 14,
+                            color: AppColors.grey,
+                          ),
+                          const SizedBox(width: AppWidths.small),
+                          Expanded(
+                            child: Text(
+                              e.cost,
                               style: AppTextStyles.smallMuted,
                               maxLines: 1,
-                              overflow: TextOverflow.ellipsis),
-                        ),
-                      ]),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
                     ],
                   ),
                 ),
                 trailing: const Icon(Icons.chevron_right),
-                onTap: () => HapticFeedback.selectionClick(),
+                onTap: () => ref.read(hapticsActionsProvider)?.selectionClick(),
               );
             },
           ),
@@ -968,12 +1024,7 @@ class _EventsSkeleton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        _buildSkeletonItem(),
-        _buildSkeletonItem(),
-      ],
-    );
+    return Column(children: [_buildSkeletonItem(), _buildSkeletonItem()]);
   }
 
   Widget _buildSkeletonItem() {
@@ -1068,15 +1119,19 @@ class _HomeImageTile extends StatelessWidget {
                     mainAxisAlignment: MainAxisAlignment.center,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(title,
-                          style: AppTextStyles.smallCardTitle,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis),
+                      Text(
+                        title,
+                        style: AppTextStyles.smallCardTitle,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                       const SizedBox(height: 2),
-                      Text(subtitle,
-                          style: AppTextStyles.superSmall,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis),
+                      Text(
+                        subtitle,
+                        style: AppTextStyles.superSmall,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ],
                   ),
                 ),

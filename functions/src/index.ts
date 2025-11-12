@@ -1,9 +1,11 @@
 import * as admin from "firebase-admin";
 import { setGlobalOptions } from "firebase-functions/v2";
+import { onUserDeleted } from "firebase-functions/v2/auth";
 import { onValueCreated, onValueDeleted, onValueWritten } from "firebase-functions/v2/database";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { onRequest } from "firebase-functions/v2/https";
 import * as puppeteer from "puppeteer";
+import { createHash } from "crypto";
 
 admin.initializeApp();
 setGlobalOptions({ region: "europe-west1" });
@@ -114,6 +116,88 @@ export const onGameDelete = onValueDeleted("/games/{gameId}", async (event) => {
     }
   } catch (e) {
     console.error("Error cleaning up after game delete:", e);
+  }
+});
+
+function toDisplayNameLower(name?: string | null): string | null {
+  if (!name) return null;
+  const trimmed = name.trim();
+  if (!trimmed) return null;
+  return trimmed.toLowerCase();
+}
+
+function deriveNameLowerFromEmail(email?: string | null): string | null {
+  if (!email) return null;
+  const prefix = email.split("@")[0] ?? "";
+  const cleaned = prefix.replace(/[^A-Za-z]/g, "");
+  const base = (cleaned || prefix).trim();
+  if (!base) return null;
+  return base.toLowerCase();
+}
+
+export const cleanupAuthUserDelete = onUserDeleted(async (event) => {
+  const uid = event.data?.uid;
+  if (!uid) return;
+
+  const db = admin.database();
+  const updates: Record<string, any> = {
+    [`/users/${uid}`]: null,
+    [`/publicProfiles/${uid}`]: null,
+  };
+
+  const rawEmail = event.data?.email;
+  const email =
+    typeof rawEmail === "string" && rawEmail.trim().length
+      ? rawEmail.trim().toLowerCase()
+      : undefined;
+  if (email) {
+    const emailHash = createHash("sha256").update(email).digest("hex");
+    updates[`/usersByEmailHash/${emailHash}`] = null;
+  }
+
+  const displayNameLower = toDisplayNameLower(event.data?.displayName);
+  if (displayNameLower) {
+    updates[`/usersByDisplayNameLower/${displayNameLower}/${uid}`] = null;
+  }
+
+  const derivedNameLower = deriveNameLowerFromEmail(email);
+  if (derivedNameLower) {
+    updates[`/usersByDisplayNameLower/${derivedNameLower}/${uid}`] = null;
+  }
+
+  try {
+    const tokensSnap = await db.ref("/friendTokens").once("value");
+    const tokens = tokensSnap.val() as Record<string, any> | null;
+    if (tokens) {
+      for (const [tokenId, tokenData] of Object.entries(tokens)) {
+        const owner = tokenData?.uid ?? tokenData?.ownerUid;
+        if (owner === uid) {
+          updates[`/friendTokens/${tokenId}`] = null;
+        }
+      }
+    }
+  } catch (error) {
+    console.error("Error loading friend tokens during auth delete cleanup:", error);
+  }
+
+  try {
+    if (Object.keys(updates).length > 0) {
+      await db.ref().update(updates);
+    }
+  } catch (error) {
+    console.error("Error cleaning database during auth delete cleanup:", error);
+  }
+
+  try {
+    await admin
+      .storage()
+      .bucket()
+      .file(`users/${uid}/profile.jpg`)
+      .delete({ ignoreNotFound: true });
+  } catch (error: any) {
+    if (error?.code !== 404) {
+      console.error("Error deleting profile image during auth delete cleanup:", error);
+    }
   }
 });
 

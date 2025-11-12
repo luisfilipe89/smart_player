@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -252,7 +251,8 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
 
       // Debug: Check what we got back
       debugPrint(
-          '🔍 Fetched ${rawFields.length} raw fields for sport: $sportType in area: s-Hertogenbosch');
+        '🔍 Fetched ${rawFields.length} raw fields for sport: $sportType in area: s-Hertogenbosch',
+      );
       if (rawFields.isNotEmpty) {
         debugPrint('🔍 First field data: ${rawFields.first}');
       }
@@ -314,7 +314,8 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
       }
 
       debugPrint(
-          '🔍 Normalized to ${fields.length} fields with valid coordinates');
+        '🔍 Normalized to ${fields.length} fields with valid coordinates',
+      );
 
       if (mounted) {
         setState(() {
@@ -359,17 +360,18 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
       final weatherActions = ref.read(weatherActionsProvider);
       final selectedFieldLat =
           (_selectedField?['latitude'] as num?)?.toDouble() ??
-              double.tryParse(_selectedField?['latitude']?.toString() ?? '') ??
-              (_selectedField?['lat'] as num?)?.toDouble();
+          double.tryParse(_selectedField?['latitude']?.toString() ?? '') ??
+          (_selectedField?['lat'] as num?)?.toDouble();
       final selectedFieldLon =
           (_selectedField?['longitude'] as num?)?.toDouble() ??
-              double.tryParse(_selectedField?['longitude']?.toString() ?? '') ??
-              (_selectedField?['lon'] as num?)?.toDouble();
+          double.tryParse(_selectedField?['longitude']?.toString() ?? '') ??
+          (_selectedField?['lon'] as num?)?.toDouble();
       final latitude = selectedFieldLat ?? 51.6978; // 's-Hertogenbosch fallback
       final longitude = selectedFieldLon ?? 5.3037;
 
       debugPrint(
-          "🌤️ Weather: Fetching for date ${_selectedDate!}, lat $latitude, lon $longitude");
+        "🌤️ Weather: Fetching for date ${_selectedDate!}, lat $latitude, lon $longitude",
+      );
 
       final weatherData = await weatherActions.fetchWeatherForDate(
         date: _selectedDate!,
@@ -505,7 +507,8 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                 .read(cloudGamesActionsProvider)
                 .sendGameInvitesToFriends(current.id, newInvites);
             debugPrint(
-                '✅ Successfully sent invites to ${newInvites.length} friends');
+              '✅ Successfully sent invites to ${newInvites.length} friends',
+            );
           } catch (e, stackTrace) {
             // Log error but don't fail game update
             debugPrint('❌ Failed to send game invites: $e');
@@ -521,8 +524,9 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                       Expanded(
                         child: Text(
                           'Game updated but failed to send invites: ${e.toString().replaceAll('Exception: ', '')}',
-                          style:
-                              AppTextStyles.body.copyWith(color: Colors.white),
+                          style: AppTextStyles.body.copyWith(
+                            color: Colors.white,
+                          ),
                         ),
                       ),
                     ],
@@ -551,13 +555,17 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
         // Navigate to My Games → Organized and highlight the updated game
         final ctrl = MainScaffoldController.maybeOf(context);
         ctrl?.openMyGames(
-            initialTab: 1, highlightGameId: updatedGame.id, popToRoot: true);
+          initialTab: 1,
+          highlightGameId: updatedGame.id,
+          popToRoot: true,
+        );
       }
     } catch (e) {
       if (mounted) {
         String errorMsg = 'game_creation_failed'.tr();
         final es = e.toString();
-        final isSlotUnavailable = es.contains('new_slot_unavailable') ||
+        final isSlotUnavailable =
+            es.contains('new_slot_unavailable') ||
             es.contains('time_slot_unavailable');
 
         if (isSlotUnavailable) {
@@ -566,18 +574,12 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
             SnackBar(
               content: Row(
                 children: [
-                  const Icon(
-                    Icons.block,
-                    color: Colors.white,
-                    size: 20,
-                  ),
+                  const Icon(Icons.block, color: Colors.white, size: 20),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
                       errorMsg,
-                      style: AppTextStyles.body.copyWith(
-                        color: Colors.white,
-                      ),
+                      style: AppTextStyles.body.copyWith(color: Colors.white),
                     ),
                   ),
                 ],
@@ -587,7 +589,7 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
               behavior: SnackBarBehavior.floating,
             ),
           );
-          HapticFeedback.mediumImpact();
+          ref.read(hapticsActionsProvider)?.mediumImpact();
         } else {
           if (es.contains('not_authorized')) {
             errorMsg = 'not_authorized'.tr();
@@ -614,7 +616,8 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
     debugPrint('🔍 _loadBookedSlots() called');
     if (_selectedField == null || _selectedDate == null) {
       debugPrint(
-          '🔍 _loadBookedSlots() early return: field=${_selectedField?.toString()}, date=${_selectedDate?.toString()}');
+        '🔍 _loadBookedSlots() early return: field=${_selectedField?.toString()}, date=${_selectedDate?.toString()}',
+      );
       return;
     }
     try {
@@ -650,9 +653,11 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
       final db = ref.read(firebaseDatabaseProvider);
       final path = 'slots/$dateKey/$fieldKey';
       debugPrint(
-          '🔍 Loading booked slots: dateKey=$dateKey, fieldKey=$fieldKey, path=$path');
+        '🔍 Loading booked slots: dateKey=$dateKey, fieldKey=$fieldKey, path=$path',
+      );
       debugPrint(
-          '🔍 Selected field: ${_selectedField?['name']}, id=${_selectedField?['id']}, lat=${_selectedField?['latitude']}, lon=${_selectedField?['longitude']}');
+        '🔍 Selected field: ${_selectedField?['name']}, id=${_selectedField?['id']}, lat=${_selectedField?['latitude']}, lon=${_selectedField?['longitude']}',
+      );
 
       final times = <String>{};
       try {
@@ -669,15 +674,18 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
             final normalizedTime = t.trim();
             times.add(normalizedTime);
             debugPrint(
-                '🔍 Found booked time: $normalizedTime (raw: ${k.toString()})');
+              '🔍 Found booked time: $normalizedTime (raw: ${k.toString()})',
+            );
           }
         } else {
           debugPrint(
-              '🔍 No slots found at path: $path (exists=${snapshot.exists})');
+            '🔍 No slots found at path: $path (exists=${snapshot.exists})',
+          );
         }
       } catch (e) {
         debugPrint(
-            '🔍 Firebase slots read failed (may be permission denied): $e');
+          '🔍 Firebase slots read failed (may be permission denied): $e',
+        );
         // Continue to fallback
       }
 
@@ -722,7 +730,8 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
           // Skip cancelled games - they've freed their slots
           if (!g.isActive) {
             debugPrint(
-                '🔍 Verification skipping cancelled game ${g.id} at ${g.location}');
+              '🔍 Verification skipping cancelled game ${g.id} at ${g.location}',
+            );
             continue;
           }
           final gDateKey =
@@ -734,7 +743,8 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
           final timeStr = '$hh:$mm';
           activeGameTimes.add(timeStr);
           debugPrint(
-              '🔍 Verification found active game time: $timeStr from game ${g.id} at ${g.location}');
+            '🔍 Verification found active game time: $timeStr from game ${g.id} at ${g.location}',
+          );
         }
 
         // Filter out slots that don't belong to active games
@@ -742,13 +752,15 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
         final removedTimes = times.difference(activeGameTimes);
         if (removedTimes.isNotEmpty) {
           debugPrint(
-              '🔍 Filtered out ${removedTimes.length} stale slots from cancelled games: $removedTimes');
+            '🔍 Filtered out ${removedTimes.length} stale slots from cancelled games: $removedTimes',
+          );
         }
         // Use active games as the authoritative source (they already include Firebase slots if correct)
         times.clear();
         times.addAll(activeGameTimes);
         debugPrint(
-            '🔍 After verification: ${times.length} valid booked times (from ${activeGameTimes.length} active games)');
+          '🔍 After verification: ${times.length} valid booked times (from ${activeGameTimes.length} active games)',
+        );
       } catch (e) {
         debugPrint('🔍 Verification error: $e');
         // If verification fails, fall back to original behavior
@@ -762,11 +774,11 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
           final myGames = await gamesService.getMyGames();
           final joinable = await gamesService.getJoinableGames();
           final all = <dynamic>[...myGames]
-
             // ignore: prefer_spread_collections
             ..addAll(joinable);
           debugPrint(
-              '🔍 Checking ${all.length} games (${myGames.length} my, ${joinable.length} joinable)');
+            '🔍 Checking ${all.length} games (${myGames.length} my, ${joinable.length} joinable)',
+          );
 
           String sanitizeName(String s) => s
               .toLowerCase()
@@ -799,7 +811,8 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
             // Skip cancelled games - they've freed their slots
             if (!g.isActive) {
               debugPrint(
-                  '🔍 Fallback skipping cancelled game ${g.id} at ${g.location}');
+                '🔍 Fallback skipping cancelled game ${g.id} at ${g.location}',
+              );
               continue;
             }
             final gDateKey =
@@ -811,7 +824,8 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
             final timeStr = '$hh:$mm';
             times.add(timeStr);
             debugPrint(
-                '🔍 Fallback found booked time: $timeStr from game ${g.id} at ${g.location}');
+              '🔍 Fallback found booked time: $timeStr from game ${g.id} at ${g.location}',
+            );
           }
           debugPrint('🔍 Fallback found ${times.length} booked times total');
         } catch (e) {
@@ -969,7 +983,10 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
         // Navigate immediately for consistent UX transition regardless of invite status
         final ctrl = MainScaffoldController.maybeOf(context);
         ctrl?.openMyGames(
-            initialTab: 1, highlightGameId: createdId, popToRoot: true);
+          initialTab: 1,
+          highlightGameId: createdId,
+          popToRoot: true,
+        );
 
         // Send in-app invites to selected friends in the background (non-blocking)
         // This ensures consistent transition timing whether friends are invited or not
@@ -980,42 +997,50 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
               .read(cloudGamesActionsProvider)
               .sendGameInvitesToFriends(createdId, _selectedFriendUids.toList())
               .then((_) {
-            debugPrint(
-                '✅ Successfully sent invites to ${_selectedFriendUids.length} friends');
-          }).catchError((e, stackTrace) {
-            // Log error but don't fail game creation or interrupt navigation
-            debugPrint('❌ Failed to send game invites: $e');
-            debugPrint('Stack trace: $stackTrace');
-            // Show error to user so they know invites weren't sent (if still mounted)
-            if (mounted) {
-              messenger.showSnackBar(
-                SnackBar(
-                  content: Row(
-                    children: [
-                      const Icon(Icons.warning, color: Colors.white, size: 20),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          'Game created but failed to send invites: ${e.toString().replaceAll('Exception: ', '')}',
-                          style:
-                              AppTextStyles.body.copyWith(color: Colors.white),
-                        ),
+                debugPrint(
+                  '✅ Successfully sent invites to ${_selectedFriendUids.length} friends',
+                );
+              })
+              .catchError((e, stackTrace) {
+                // Log error but don't fail game creation or interrupt navigation
+                debugPrint('❌ Failed to send game invites: $e');
+                debugPrint('Stack trace: $stackTrace');
+                // Show error to user so they know invites weren't sent (if still mounted)
+                if (mounted) {
+                  messenger.showSnackBar(
+                    SnackBar(
+                      content: Row(
+                        children: [
+                          const Icon(
+                            Icons.warning,
+                            color: Colors.white,
+                            size: 20,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Game created but failed to send invites: ${e.toString().replaceAll('Exception: ', '')}',
+                              style: AppTextStyles.body.copyWith(
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
-                  backgroundColor: AppColors.orange,
-                  duration: const Duration(seconds: 5),
-                ),
-              );
-            }
-          });
+                      backgroundColor: AppColors.orange,
+                      duration: const Duration(seconds: 5),
+                    ),
+                  );
+                }
+              });
         }
       }
     } catch (e) {
       if (mounted) {
         String errorMsg = 'game_creation_failed'.tr();
         final es = e.toString();
-        final isSlotUnavailable = es.contains('new_slot_unavailable') ||
+        final isSlotUnavailable =
+            es.contains('new_slot_unavailable') ||
             es.contains('time_slot_unavailable');
 
         if (isSlotUnavailable) {
@@ -1024,18 +1049,12 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
             SnackBar(
               content: Row(
                 children: [
-                  const Icon(
-                    Icons.block,
-                    color: Colors.white,
-                    size: 20,
-                  ),
+                  const Icon(Icons.block, color: Colors.white, size: 20),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
                       errorMsg,
-                      style: AppTextStyles.body.copyWith(
-                        color: Colors.white,
-                      ),
+                      style: AppTextStyles.body.copyWith(color: Colors.white),
                     ),
                   ),
                 ],
@@ -1045,7 +1064,7 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
               behavior: SnackBarBehavior.floating,
             ),
           );
-          HapticFeedback.mediumImpact();
+          ref.read(hapticsActionsProvider)?.mediumImpact();
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -1102,9 +1121,10 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                       color: disabled
                           ? AppColors.grey.withValues(alpha: 0.06)
                           : (isSelected
-                              ? AppColors.blue.withValues(alpha: 0.1)
-                              : (sport['color'] as Color)
-                                  .withValues(alpha: 0.1)),
+                                ? AppColors.blue.withValues(alpha: 0.1)
+                                : (sport['color'] as Color).withValues(
+                                    alpha: 0.1,
+                                  )),
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: Icon(
@@ -1113,8 +1133,8 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                       color: disabled
                           ? AppColors.grey
                           : (isSelected
-                              ? AppColors.blue
-                              : sport['color'] as Color),
+                                ? AppColors.blue
+                                : sport['color'] as Color),
                     ),
                   ),
                 ),
@@ -1194,8 +1214,8 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                     color: isSelected
                         ? AppColors.blue
                         : isToday
-                            ? AppColors.blue
-                            : AppColors.grey,
+                        ? AppColors.blue
+                        : AppColors.grey,
                     fontWeight: FontWeight.w600,
                     fontSize: 7,
                   ),
@@ -1216,8 +1236,8 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                     color: isSelected
                         ? AppColors.blue
                         : isToday
-                            ? AppColors.blue
-                            : AppColors.grey,
+                        ? AppColors.blue
+                        : AppColors.grey,
                     fontWeight: FontWeight.w600,
                     fontSize: 7,
                   ),
@@ -1248,19 +1268,19 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
         color: isSelected
             ? AppColors.blue.withValues(alpha: 0.06)
             : (isDisabled
-                ? AppColors.lightgrey.withValues(alpha: 0.18)
-                : AppColors.white),
+                  ? AppColors.lightgrey.withValues(alpha: 0.18)
+                  : AppColors.white),
         border: isSelected
             ? Border.all(color: AppColors.blue, width: 2)
             : (isDisabled
-                ? Border.all(
-                    color: AppColors.grey.withValues(alpha: 0.5),
-                    width: 1,
-                  )
-                : Border.all(
-                    color: AppColors.grey.withValues(alpha: 0.3),
-                    width: 1,
-                  )),
+                  ? Border.all(
+                      color: AppColors.grey.withValues(alpha: 0.5),
+                      width: 1,
+                    )
+                  : Border.all(
+                      color: AppColors.grey.withValues(alpha: 0.3),
+                      width: 1,
+                    )),
       ),
       child: Material(
         color: Colors.transparent,
@@ -1281,9 +1301,9 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                     color: isDisabled
                         ? AppColors.lightgrey.withValues(alpha: 0.25)
                         : (hasWeatherData && weatherIcon != null
-                            ? (weatherColor?.withValues(alpha: 0.15) ??
-                                AppColors.lightgrey.withValues(alpha: 0.15))
-                            : AppColors.lightgrey.withValues(alpha: 0.15)),
+                              ? (weatherColor?.withValues(alpha: 0.15) ??
+                                    AppColors.lightgrey.withValues(alpha: 0.15))
+                              : AppColors.lightgrey.withValues(alpha: 0.15)),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Center(
@@ -1438,8 +1458,9 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
       child: Container(
         height: 60, // Much smaller
         decoration: BoxDecoration(
-          color:
-              isSelected ? AppColors.blue.withValues(alpha: 0.1) : Colors.white,
+          color: isSelected
+              ? AppColors.blue.withValues(alpha: 0.1)
+              : Colors.white,
           borderRadius: BorderRadius.circular(AppRadius.card),
           border: Border.all(
             color: isSelected
@@ -1478,8 +1499,11 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
     if (widget.initialGame != null && _selectedSport == null) {
       final g = widget.initialGame!;
       _selectedSport = g.sport;
-      _selectedDate =
-          DateTime(g.dateTime.year, g.dateTime.month, g.dateTime.day);
+      _selectedDate = DateTime(
+        g.dateTime.year,
+        g.dateTime.month,
+        g.dateTime.day,
+      );
       _selectedTime = g.formattedTime;
       _maxPlayers = g.maxPlayers;
       _selectedField = {
@@ -1491,8 +1515,11 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
 
       // Store original values for change detection
       _originalSport = g.sport;
-      _originalDate =
-          DateTime(g.dateTime.year, g.dateTime.month, g.dateTime.day);
+      _originalDate = DateTime(
+        g.dateTime.year,
+        g.dateTime.month,
+        g.dateTime.day,
+      );
       _originalTime = g.formattedTime;
       _originalMaxPlayers = g.maxPlayers;
       _originalField = {
@@ -1540,9 +1567,7 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            PanelHeader(
-                              'choose_sport'.tr(),
-                            ),
+                            PanelHeader('choose_sport'.tr()),
 
                             // Sport Selection - Horizontal Scrollable List
                             Padding(
@@ -1580,8 +1605,10 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                                                   isSelected: isSelected,
                                                   disabled: isEdit,
                                                   onTap: () {
-                                                    HapticFeedback
-                                                        .lightImpact();
+                                                    ref
+                                                        .read(
+                                                            hapticsActionsProvider)
+                                                        ?.lightImpact();
                                                     setState(() {
                                                       _selectedSport =
                                                           sport['key'];
@@ -1621,65 +1648,69 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                                     ),
                                     const SizedBox(width: 8),
                                     TextButton.icon(
-                                      onPressed: (_isLoadingFields ||
+                                      onPressed:
+                                          (_isLoadingFields ||
                                               _availableFields.isEmpty)
                                           ? null
                                           : () {
-                                              final mapLocations =
-                                                  _availableFields
-                                                      .map<
-                                                              Map<String,
-                                                                  dynamic>>(
-                                                          (field) {
-                                                        final lat =
-                                                            field['latitude'] ??
-                                                                field['lat'];
-                                                        final lon = field[
-                                                                'longitude'] ??
-                                                            field['lon'];
-                                                        final latDouble = lat
-                                                                is num
-                                                            ? lat.toDouble()
-                                                            : double.tryParse(
-                                                                lat?.toString() ??
-                                                                    '');
-                                                        final lonDouble = lon
-                                                                is num
-                                                            ? lon.toDouble()
-                                                            : double.tryParse(
-                                                                lon?.toString() ??
-                                                                    '');
-                                                        if (latDouble == null ||
-                                                            lonDouble == null) {
-                                                          return <String,
-                                                              dynamic>{};
-                                                        }
-                                                        return {
-                                                          'name': field[
-                                                                  'name'] ??
-                                                              'Unnamed Field',
-                                                          'lat': latDouble,
-                                                          'lon': lonDouble,
-                                                          'lit':
-                                                              (field['lighting'] ==
-                                                                      true)
-                                                                  ? 'yes'
-                                                                  : 'no',
-                                                          'surface':
-                                                              field['surface'],
-                                                        };
-                                                      })
-                                                      .where((loc) =>
-                                                          loc.isNotEmpty)
-                                                      .toList();
+                                              final mapLocations = _availableFields
+                                                  .map<Map<String, dynamic>>((
+                                                    field,
+                                                  ) {
+                                                    final lat =
+                                                        field['latitude'] ??
+                                                        field['lat'];
+                                                    final lon =
+                                                        field['longitude'] ??
+                                                        field['lon'];
+                                                    final latDouble = lat is num
+                                                        ? lat.toDouble()
+                                                        : double.tryParse(
+                                                            lat?.toString() ??
+                                                                '',
+                                                          );
+                                                    final lonDouble = lon is num
+                                                        ? lon.toDouble()
+                                                        : double.tryParse(
+                                                            lon?.toString() ??
+                                                                '',
+                                                          );
+                                                    if (latDouble == null ||
+                                                        lonDouble == null) {
+                                                      return <
+                                                        String,
+                                                        dynamic
+                                                      >{};
+                                                    }
+                                                    return {
+                                                      'name':
+                                                          field['name'] ??
+                                                          'Unnamed Field',
+                                                      'lat': latDouble,
+                                                      'lon': lonDouble,
+                                                      'lit':
+                                                          (field['lighting'] ==
+                                                              true)
+                                                          ? 'yes'
+                                                          : 'no',
+                                                      'surface':
+                                                          field['surface'],
+                                                    };
+                                                  })
+                                                  .where(
+                                                    (loc) => loc.isNotEmpty,
+                                                  )
+                                                  .toList();
 
                                               if (mapLocations.isEmpty) {
-                                                ScaffoldMessenger.of(context)
-                                                    .showSnackBar(
+                                                ScaffoldMessenger.of(
+                                                  context,
+                                                ).showSnackBar(
                                                   SnackBar(
                                                     content: Text(
-                                                        'no_fields_available'
-                                                            .tr()),
+                                                      'no_fields_available'
+                                                          .tr(),
+                                                    ),
                                                   ),
                                                 );
                                                 return;
@@ -1687,16 +1718,16 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
 
                                               final mapTitle =
                                                   _selectedSport == 'basketball'
-                                                      ? 'basketball_courts'.tr()
-                                                      : 'football_fields'.tr();
+                                                  ? 'basketball_courts'.tr()
+                                                  : 'football_fields'.tr();
 
                                               Navigator.of(context).push(
                                                 MaterialPageRoute(
                                                   builder: (_) =>
                                                       GenericMapScreen(
-                                                    title: mapTitle,
-                                                    locations: mapLocations,
-                                                  ),
+                                                        title: mapTitle,
+                                                        locations: mapLocations,
+                                                      ),
                                                 ),
                                               );
                                             },
@@ -1717,18 +1748,22 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                                     const SizedBox(height: 8),
                                     if (_isLoadingFields)
                                       const Center(
-                                          child: CircularProgressIndicator())
+                                        child: CircularProgressIndicator(),
+                                      )
                                     else if (_availableFields.isEmpty)
                                       Container(
                                         height: 100,
                                         decoration: BoxDecoration(
-                                          color: AppColors.grey
-                                              .withValues(alpha: 0.1),
+                                          color: AppColors.grey.withValues(
+                                            alpha: 0.1,
+                                          ),
                                           borderRadius: BorderRadius.circular(
-                                              AppRadius.card),
+                                            AppRadius.card,
+                                          ),
                                           border: Border.all(
-                                            color: AppColors.grey
-                                                .withValues(alpha: 0.3),
+                                            color: AppColors.grey.withValues(
+                                              alpha: 0.3,
+                                            ),
                                             width: 1,
                                           ),
                                         ),
@@ -1736,7 +1771,8 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                                           child: Text(
                                             'no_fields_available'.tr(),
                                             style: AppTextStyles.body.copyWith(
-                                                color: AppColors.grey),
+                                              color: AppColors.grey,
+                                            ),
                                           ),
                                         ),
                                       )
@@ -1756,7 +1792,8 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
 
                                               return Padding(
                                                 padding: EdgeInsets.only(
-                                                  right: index <
+                                                  right:
+                                                      index <
                                                           _availableFields
                                                                   .length -
                                                               1
@@ -1767,8 +1804,10 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                                                   field: field,
                                                   isSelected: isSelected,
                                                   onTap: () {
-                                                    HapticFeedback
-                                                        .lightImpact();
+                                                    ref
+                                                        .read(
+                                                            hapticsActionsProvider)
+                                                        ?.lightImpact();
                                                     setState(() {
                                                       _selectedField = field;
                                                       // Clear previous field's busy times and selected time
@@ -1801,42 +1840,57 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                                       offset: const Offset(0, -6),
                                       child: Row(
                                         children: [
-                                          const Icon(Icons.group_outlined,
-                                              color: AppColors.grey, size: 18),
+                                          const Icon(
+                                            Icons.group_outlined,
+                                            color: AppColors.grey,
+                                            size: 18,
+                                          ),
                                           const SizedBox(width: 8),
                                           Expanded(
                                             child: SliderTheme(
                                               data: SliderTheme.of(context)
                                                   .copyWith(
-                                                activeTrackColor:
-                                                    (widget.initialGame != null)
+                                                    activeTrackColor:
+                                                        (widget.initialGame !=
+                                                            null)
                                                         ? AppColors.grey
-                                                            .withValues(
-                                                                alpha: 0.4)
+                                                              .withValues(
+                                                                alpha: 0.4,
+                                                              )
                                                         : AppColors.blue,
-                                                inactiveTrackColor: (widget
-                                                            .initialGame !=
-                                                        null)
-                                                    ? AppColors.grey
-                                                        .withValues(alpha: 0.2)
-                                                    : AppColors.blue
-                                                        .withValues(alpha: 0.2),
-                                                thumbColor:
-                                                    (widget.initialGame != null)
+                                                    inactiveTrackColor:
+                                                        (widget.initialGame !=
+                                                            null)
                                                         ? AppColors.grey
-                                                        : AppColors.blue,
-                                                overlayColor: (widget
-                                                            .initialGame !=
-                                                        null)
-                                                    ? AppColors.grey
-                                                        .withValues(alpha: 0.1)
-                                                    : AppColors.blue
-                                                        .withValues(alpha: 0.1),
-                                                valueIndicatorColor:
-                                                    (widget.initialGame != null)
+                                                              .withValues(
+                                                                alpha: 0.2,
+                                                              )
+                                                        : AppColors.blue
+                                                              .withValues(
+                                                                alpha: 0.2,
+                                                              ),
+                                                    thumbColor:
+                                                        (widget.initialGame !=
+                                                            null)
                                                         ? AppColors.grey
                                                         : AppColors.blue,
-                                              ),
+                                                    overlayColor:
+                                                        (widget.initialGame !=
+                                                            null)
+                                                        ? AppColors.grey
+                                                              .withValues(
+                                                                alpha: 0.1,
+                                                              )
+                                                        : AppColors.blue
+                                                              .withValues(
+                                                                alpha: 0.1,
+                                                              ),
+                                                    valueIndicatorColor:
+                                                        (widget.initialGame !=
+                                                            null)
+                                                        ? AppColors.grey
+                                                        : AppColors.blue,
+                                                  ),
                                               child: Slider(
                                                 value: _maxPlayers.toDouble(),
                                                 min: 2,
@@ -1846,22 +1900,24 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                                                 onChangeStart: (_) {
                                                   ref
                                                       .read(
-                                                          hapticsActionsProvider)
+                                                        hapticsActionsProvider,
+                                                      )
                                                       ?.selectionClick();
                                                 },
                                                 onChanged:
                                                     (widget.initialGame != null)
-                                                        ? null
-                                                        : (v) {
-                                                            setState(() {
-                                                              _maxPlayers =
-                                                                  v.round();
-                                                            });
-                                                          },
+                                                    ? null
+                                                    : (v) {
+                                                        setState(() {
+                                                          _maxPlayers = v
+                                                              .round();
+                                                        });
+                                                      },
                                                 onChangeEnd: (_) {
                                                   ref
                                                       .read(
-                                                          hapticsActionsProvider)
+                                                        hapticsActionsProvider,
+                                                      )
                                                       ?.lightImpact();
                                                 },
                                               ),
@@ -1871,8 +1927,9 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                                             width: 40,
                                             child: Center(
                                               child: Text(
-                                                  _maxPlayers.toString(),
-                                                  style: AppTextStyles.body),
+                                                _maxPlayers.toString(),
+                                                style: AppTextStyles.body,
+                                              ),
                                             ),
                                           ),
                                         ],
@@ -1885,9 +1942,7 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                               // Date Selection Section (only show if field is selected)
                               Transform.translate(
                                 offset: const Offset(0, -8),
-                                child: PanelHeader(
-                                  'choose_date'.tr(),
-                                ),
+                                child: PanelHeader('choose_date'.tr()),
                               ),
                               Padding(
                                 padding: AppPaddings.symmHorizontalReg,
@@ -1905,7 +1960,8 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                                             final date = _availableDates[index];
                                             final isSelected =
                                                 _selectedDate == date;
-                                            final isToday = date.day ==
+                                            final isToday =
+                                                date.day ==
                                                     DateTime.now().day &&
                                                 date.month ==
                                                     DateTime.now().month &&
@@ -1914,7 +1970,8 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
 
                                             return Padding(
                                               padding: EdgeInsets.only(
-                                                right: index <
+                                                right:
+                                                    index <
                                                         _availableDates.length -
                                                             1
                                                     ? AppWidths.regular
@@ -1925,7 +1982,11 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                                                 isSelected: isSelected,
                                                 isToday: isToday,
                                                 onTap: () {
-                                                  HapticFeedback.lightImpact();
+                                                  ref
+                                                      .read(
+                                                        hapticsActionsProvider,
+                                                      )
+                                                      ?.lightImpact();
                                                   setState(() {
                                                     if (isSelected) {
                                                       // If clicking on the already selected date, unselect it
@@ -1957,9 +2018,7 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
 
                             // Time Selection Section (only show if date is selected)
                             if (_selectedDate != null) ...[
-                              PanelHeader(
-                                'choose_time'.tr(),
-                              ),
+                              PanelHeader('choose_time'.tr()),
                               Padding(
                                 padding: AppPaddings.symmHorizontalReg,
                                 child: Column(
@@ -1976,40 +2035,49 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                                             final time = _availableTimes[index];
                                             final isSelected =
                                                 _selectedTime == time;
-                                            final isBooked =
-                                                _bookedTimes.contains(time);
+                                            final isBooked = _bookedTimes
+                                                .contains(time);
                                             if (index == 0) {
                                               debugPrint(
-                                                  '🔍 UI: First time slot check - time=$time, isBooked=$isBooked, _bookedTimes=${_bookedTimes.toList()}');
+                                                '🔍 UI: First time slot check - time=$time, isBooked=$isBooked, _bookedTimes=${_bookedTimes.toList()}',
+                                              );
                                             }
                                             // Only show weather if data is available
                                             final hasWeatherData =
                                                 _weatherData.isNotEmpty;
                                             final weatherCondition =
                                                 hasWeatherData
-                                                    ? _weatherData[time]
-                                                    : null;
-
-                                            final weatherIcon = hasWeatherData &&
-                                                    weatherCondition != null
-                                                ? ref
-                                                    .read(
-                                                        weatherActionsProvider)
-                                                    .getWeatherIcon(
-                                                        time, weatherCondition)
+                                                ? _weatherData[time]
                                                 : null;
-                                            final weatherColor = hasWeatherData &&
+
+                                            final weatherIcon =
+                                                hasWeatherData &&
                                                     weatherCondition != null
                                                 ? ref
-                                                    .read(
-                                                        weatherActionsProvider)
-                                                    .getWeatherColor(
-                                                        weatherCondition)
+                                                      .read(
+                                                        weatherActionsProvider,
+                                                      )
+                                                      .getWeatherIcon(
+                                                        time,
+                                                        weatherCondition,
+                                                      )
+                                                : null;
+                                            final weatherColor =
+                                                hasWeatherData &&
+                                                    weatherCondition != null
+                                                ? ref
+                                                      .read(
+                                                        weatherActionsProvider,
+                                                      )
+                                                      .getWeatherColor(
+                                                        weatherCondition,
+                                                      )
                                                 : null;
 
                                             return Padding(
                                               padding: EdgeInsets.only(
-                                                right: index <
+                                                right:
+                                                    index <
                                                         _availableTimes.length -
                                                             1
                                                     ? AppWidths.regular
@@ -2030,8 +2098,8 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                                                   onTap: () {
                                                     if (isBooked) {
                                                       ScaffoldMessenger.of(
-                                                              context)
-                                                          .showSnackBar(
+                                                        context,
+                                                      ).showSnackBar(
                                                         SnackBar(
                                                           content: Row(
                                                             children: [
@@ -2042,7 +2110,8 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                                                                 size: 20,
                                                               ),
                                                               const SizedBox(
-                                                                  width: 12),
+                                                                width: 12,
+                                                              ),
                                                               Expanded(
                                                                 child: Text(
                                                                   'time_slot_unavailable'
@@ -2050,9 +2119,9 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                                                                   style: AppTextStyles
                                                                       .body
                                                                       .copyWith(
-                                                                    color: Colors
-                                                                        .white,
-                                                                  ),
+                                                                        color: Colors
+                                                                            .white,
+                                                                      ),
                                                                 ),
                                                               ),
                                                             ],
@@ -2061,18 +2130,25 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                                                               AppColors.red,
                                                           duration:
                                                               const Duration(
-                                                                  seconds: 3),
+                                                                seconds: 3,
+                                                              ),
                                                           behavior:
                                                               SnackBarBehavior
                                                                   .floating,
                                                         ),
                                                       );
-                                                      HapticFeedback
-                                                          .mediumImpact();
+                                                      ref
+                                                          .read(
+                                                            hapticsActionsProvider,
+                                                          )
+                                                          ?.mediumImpact();
                                                       return;
                                                     }
-                                                    HapticFeedback
-                                                        .lightImpact();
+                                                    ref
+                                                        .read(
+                                                          hapticsActionsProvider,
+                                                        )
+                                                        ?.lightImpact();
                                                     setState(() {
                                                       _selectedTime = time;
                                                     });
@@ -2107,20 +2183,25 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                                             icon: Icons.public,
                                             isSelected: _isPublic,
                                             onTap: () {
-                                              HapticFeedback.lightImpact();
+                                              ref
+                                                  .read(hapticsActionsProvider)
+                                                  ?.lightImpact();
                                               setState(() => _isPublic = true);
                                             },
                                           ),
                                         ),
                                         const SizedBox(
-                                            width: AppWidths.regular),
+                                          width: AppWidths.regular,
+                                        ),
                                         Expanded(
                                           child: _buildVisibilityCard(
                                             title: 'private'.tr(),
                                             icon: Icons.lock,
                                             isSelected: !_isPublic,
                                             onTap: () {
-                                              HapticFeedback.lightImpact();
+                                              ref
+                                                  .read(hapticsActionsProvider)
+                                                  ?.lightImpact();
                                               setState(() => _isPublic = false);
                                             },
                                           ),
@@ -2148,7 +2229,8 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                                         children: [
                                           // Render each selected friend as a chip
                                           ...(_selectedFriendUids.map(
-                                              (uid) => _buildFriendChip(uid))),
+                                            (uid) => _buildFriendChip(uid),
+                                          )),
                                           // "Add more" button chip
                                           _buildAddFriendChip(),
                                         ],
@@ -2171,21 +2253,22 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                                 child: ElevatedButton(
                                   onPressed: _isFormComplete && !_isLoading
                                       ? (widget.initialGame != null
-                                          ? _updateGame
-                                          : _createGame)
+                                            ? _updateGame
+                                            : _createGame)
                                       : null,
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor: _isFormComplete
                                         ? (widget.initialGame != null
-                                            ? (_hasChanges
-                                                ? Colors.orange
-                                                : AppColors.green)
-                                            : AppColors.blue)
+                                              ? (_hasChanges
+                                                    ? Colors.orange
+                                                    : AppColors.green)
+                                              : AppColors.blue)
                                         : AppColors.grey,
                                     foregroundColor: Colors.white,
                                     shape: RoundedRectangleBorder(
-                                      borderRadius:
-                                          BorderRadius.circular(AppRadius.card),
+                                      borderRadius: BorderRadius.circular(
+                                        AppRadius.card,
+                                      ),
                                     ),
                                     elevation: 0,
                                   ),
@@ -2197,19 +2280,19 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                                             strokeWidth: 2,
                                             valueColor:
                                                 AlwaysStoppedAnimation<Color>(
-                                              Colors.white,
-                                            ),
+                                                  Colors.white,
+                                                ),
                                           ),
                                         )
                                       : Text(
                                           widget.initialGame != null
                                               ? 'update_game'.tr()
                                               : 'create_game'.tr(),
-                                          style:
-                                              AppTextStyles.cardTitle.copyWith(
-                                            color: Colors.white,
-                                            fontWeight: FontWeight.w600,
-                                          ),
+                                          style: AppTextStyles.cardTitle
+                                              .copyWith(
+                                                color: Colors.white,
+                                                fontWeight: FontWeight.w600,
+                                              ),
                                         ),
                                 ),
                               ),
@@ -2257,10 +2340,7 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                 : null,
           ),
           label: Text(name),
-          deleteIcon: Icon(
-            locked ? Icons.lock : Icons.close,
-            size: 16,
-          ),
+          deleteIcon: Icon(locked ? Icons.lock : Icons.close, size: 16),
           onDeleted: locked
               ? null
               : () {
@@ -2295,8 +2375,9 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
       builder: (context) => _FriendSelectionSheet(
         currentUid: ref.read(currentUserIdProvider) ?? '',
         initiallySelected: _selectedFriendUids,
-        lockedUids:
-            widget.initialGame != null ? _lockedInvitedUids : const <String>{},
+        lockedUids: widget.initialGame != null
+            ? _lockedInvitedUids
+            : const <String>{},
         onApply: (selectedUids) {
           // Apply changes when Done is pressed
           setState(() {
@@ -2315,10 +2396,9 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
   Future<void> _loadLockedInvites() async {
     if (widget.initialGame == null) return;
     try {
-      final statuses =
-          await ref.read(cloudGamesActionsProvider).getGameInviteStatuses(
-                widget.initialGame!.id,
-              );
+      final statuses = await ref
+          .read(cloudGamesActionsProvider)
+          .getGameInviteStatuses(widget.initialGame!.id);
       if (!mounted) return;
       setState(() {
         _lockedInvitedUids
@@ -2388,8 +2468,9 @@ class _FriendSelectionSheetState extends ConsumerState<_FriendSelectionSheet> {
   void _handleApply() {
     ref.read(hapticsActionsProvider)?.selectionClick();
     // Apply selections (excluding locked ones from the set we pass back)
-    final newSelections =
-        _selectedUids.where((uid) => !widget.lockedUids.contains(uid)).toSet();
+    final newSelections = _selectedUids
+        .where((uid) => !widget.lockedUids.contains(uid))
+        .toSet();
     widget.onApply(newSelections);
     Navigator.of(context).pop();
   }
@@ -2544,33 +2625,41 @@ class _SearchableFriendPicker extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return Container(
-      decoration: const BoxDecoration(
-        color: AppColors.white,
-      ),
-      child: ref.watch(watchFriendsListProvider).when(
+      decoration: const BoxDecoration(color: AppColors.white),
+      child: ref
+          .watch(watchFriendsListProvider)
+          .when(
             data: (friendUids) {
               if (friendUids.isEmpty) {
                 return Padding(
                   padding: const EdgeInsets.all(16),
-                  child: Text('no_friends_to_invite'.tr(),
-                      style:
-                          AppTextStyles.small.copyWith(color: AppColors.grey)),
+                  child: Text(
+                    'no_friends_to_invite'.tr(),
+                    style: AppTextStyles.small.copyWith(color: AppColors.grey),
+                  ),
                 );
               }
 
               // Fetch all profiles upfront to avoid FutureBuilder in ListView
               return FutureBuilder<Map<String, Map<String, String?>>>(
-                future: Future.wait(friendUids.map((id) => ref
-                    .read(friendsActionsProvider)
-                    .fetchMinimalProfile(id))).then((profiles) {
-                  final map = <String, Map<String, String?>>{};
-                  for (int i = 0;
-                      i < friendUids.length && i < profiles.length;
-                      i++) {
-                    map[friendUids[i]] = profiles[i];
-                  }
-                  return map;
-                }),
+                future:
+                    Future.wait(
+                      friendUids.map(
+                        (id) => ref
+                            .read(friendsActionsProvider)
+                            .fetchMinimalProfile(id),
+                      ),
+                    ).then((profiles) {
+                      final map = <String, Map<String, String?>>{};
+                      for (
+                        int i = 0;
+                        i < friendUids.length && i < profiles.length;
+                        i++
+                      ) {
+                        map[friendUids[i]] = profiles[i];
+                      }
+                      return map;
+                    }),
                 builder: (context, snap) {
                   if (snap.connectionState == ConnectionState.waiting) {
                     return const Center(child: CircularProgressIndicator());
@@ -2579,9 +2668,12 @@ class _SearchableFriendPicker extends ConsumerWidget {
                   if (!snap.hasData || snap.data == null) {
                     return Padding(
                       padding: const EdgeInsets.all(16),
-                      child: Text('no_friends_to_invite'.tr(),
-                          style: AppTextStyles.small
-                              .copyWith(color: AppColors.grey)),
+                      child: Text(
+                        'no_friends_to_invite'.tr(),
+                        style: AppTextStyles.small.copyWith(
+                          color: AppColors.grey,
+                        ),
+                      ),
                     );
                   }
 
@@ -2592,17 +2684,20 @@ class _SearchableFriendPicker extends ConsumerWidget {
                       ? friendUids
                       : friendUids.where((uid) {
                           final name = profiles[uid]?['displayName'] ?? '';
-                          return name
-                              .toLowerCase()
-                              .contains(searchQuery.toLowerCase());
+                          return name.toLowerCase().contains(
+                            searchQuery.toLowerCase(),
+                          );
                         }).toList();
 
                   if (filtered.isEmpty) {
                     return Padding(
                       padding: const EdgeInsets.all(16),
-                      child: Text('no_friends_yet'.tr(),
-                          style: AppTextStyles.small
-                              .copyWith(color: AppColors.grey)),
+                      child: Text(
+                        'no_friends_yet'.tr(),
+                        style: AppTextStyles.small.copyWith(
+                          color: AppColors.grey,
+                        ),
+                      ),
                     );
                   }
 
@@ -2613,7 +2708,8 @@ class _SearchableFriendPicker extends ConsumerWidget {
                         const Divider(height: 1, color: AppColors.lightgrey),
                     itemBuilder: (context, i) {
                       final uid = filtered[i];
-                      final data = profiles[uid] ??
+                      final data =
+                          profiles[uid] ??
                           const {'displayName': 'User', 'photoURL': null};
                       final name = data['displayName'] ?? 'User';
                       final photo = data['photoURL'];
@@ -2628,12 +2724,16 @@ class _SearchableFriendPicker extends ConsumerWidget {
                               : null,
                           child: (photo == null || photo.isEmpty)
                               ? Text(
-                                  name.isNotEmpty ? name[0].toUpperCase() : '?')
+                                  name.isNotEmpty ? name[0].toUpperCase() : '?',
+                                )
                               : null,
                         ),
-                        title: Text(name,
-                            style: AppTextStyles.body.copyWith(
-                                color: locked ? AppColors.grey : null)),
+                        title: Text(
+                          name,
+                          style: AppTextStyles.body.copyWith(
+                            color: locked ? AppColors.grey : null,
+                          ),
+                        ),
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
@@ -2664,8 +2764,10 @@ class _SearchableFriendPicker extends ConsumerWidget {
             loading: () => const Center(child: CircularProgressIndicator()),
             error: (_, __) => Padding(
               padding: const EdgeInsets.all(16),
-              child: Text('no_friends_to_invite'.tr(),
-                  style: AppTextStyles.small.copyWith(color: AppColors.grey)),
+              child: Text(
+                'no_friends_to_invite'.tr(),
+                style: AppTextStyles.small.copyWith(color: AppColors.grey),
+              ),
             ),
           ),
     );
