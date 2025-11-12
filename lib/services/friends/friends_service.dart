@@ -7,6 +7,7 @@ abstract class IFriendsService {
   Future<bool> sendFriendRequest(String toUid);
   Future<bool> acceptFriendRequest(String fromUid);
   Future<bool> declineFriendRequest(String fromUid);
+  Future<bool> cancelFriendRequest(String toUid);
   Future<bool> removeFriend(String friendUid);
   Future<bool> blockFriend(String friendUid);
 

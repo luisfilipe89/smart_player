@@ -99,6 +99,8 @@ class FriendsActions {
       _friendsService.acceptFriendRequest(fromUid);
   Future<bool> declineFriendRequest(String fromUid) =>
       _friendsService.declineFriendRequest(fromUid);
+  Future<bool> cancelFriendRequest(String toUid) =>
+      _friendsService.cancelFriendRequest(toUid);
   Future<bool> removeFriend(String friendUid) =>
       _friendsService.removeFriend(friendUid);
   Future<bool> blockFriend(String friendUid) =>

@@ -460,6 +460,24 @@ class NotificationServiceInstance implements INotificationService {
     }
   }
 
+  @override
+  Future<void> sendFriendRemovedNotification({
+    required String removedUserUid,
+    required String removerUid,
+  }) async {
+    try {
+      await _db.ref('mail/notifications').push().set({
+        'type': 'friend_removed',
+        'toUid': removedUserUid,
+        'fromUid': removerUid,
+        'ts': DateTime.now().toIso8601String(),
+      });
+      NumberedLogger.i('Queued friend removed notification to $removedUserUid');
+    } catch (e) {
+      NumberedLogger.e('Error sending friend removed notification: $e');
+    }
+  }
+
   Future<void> cancelNotification(int id) async {
     await _local.cancel(id);
   }

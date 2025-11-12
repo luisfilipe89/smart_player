@@ -37,63 +37,7 @@ class FriendsServiceInstance implements IFriendsService {
   );
 
   static const _visibilityPublic = 'public';
-  static const _visibilityFriends = 'friends';
-  static const _visibilityPrivate = 'private';
-  static const _visibilityRestricted = 'restricted';
 
-  Future<DataSnapshot> _readPath(String path) => _db.ref(path).get();
-
-  Future<String> _getUserVisibility(String uid) async {
-    try {
-      final snapshot = await _safeGet(DbPaths.userVisibility(uid));
-      final value = snapshot.value;
-      if (value is String && value.isNotEmpty) {
-        return value;
-      }
-    } catch (e) {
-      NumberedLogger.w('Error getting visibility for $uid: $e');
-    }
-    return _visibilityPublic;
-  }
-
-  Future<bool> _areFriends(String userA, String userB) async {
-    try {
-      final snapshot =
-          await _readPath('${DbPaths.userFriends(userA)}/$userB');
-      return snapshot.exists && snapshot.value == true;
-    } catch (e) {
-      NumberedLogger.w('Error checking friendship between $userA and $userB: $e');
-      return false;
-    }
-  }
-
-  Future<_ProfileAccess> _profileAccessFor(String targetUid) async {
-    final visibility = await _getUserVisibility(targetUid);
-    final currentUid = _auth.currentUser?.uid;
-    if (currentUid == null) {
-      return _ProfileAccess(allowed: false, visibility: visibility);
-    }
-
-    if (currentUid == targetUid) {
-      return _ProfileAccess(allowed: true, visibility: visibility);
-    }
-
-    switch (visibility) {
-      case _visibilityPublic:
-        return const _ProfileAccess(allowed: true, visibility: _visibilityPublic);
-      case _visibilityFriends:
-        final friends = await _areFriends(targetUid, currentUid);
-        return friends
-            ? _ProfileAccess(allowed: true, visibility: visibility)
-            : _ProfileAccess(allowed: false, visibility: visibility);
-      case _visibilityPrivate:
-        return _ProfileAccess(allowed: false, visibility: visibility);
-      default:
-        return _ProfileAccess(allowed: false, visibility: visibility);
-    }
-  }
-
-  // Centralized helper to log RTDB reads and surface the exact failing path
   Future<DataSnapshot> _safeGet(String path) async {
     try {
       final snap = await _db.ref(path).get();
@@ -103,10 +47,16 @@ class FriendsServiceInstance implements IFriendsService {
       NumberedLogger.w('🔍 READ FAIL: $path -> $e');
       if (FirebaseErrorHandler.requiresAuthRefresh(e)) {
         NumberedLogger.w('🔍 Auth refresh required for: $path');
-        // Could trigger auth refresh here if needed
       }
       rethrow;
     }
+  }
+
+  Future<_ProfileAccess> _profileAccessFor(String targetUid) async {
+    return const _ProfileAccess(
+      allowed: true,
+      visibility: _visibilityPublic,
+    );
   }
 
   // Ensure per-user indexes exist for discovery by contacts (email)
@@ -302,11 +252,22 @@ class FriendsServiceInstance implements IFriendsService {
     if (toUid == null) return false;
 
     try {
-      // Remove from requests
-      await _db.ref().update({
-        '${DbPaths.userFriendRequestsSent(fromUid)}/$toUid': null,
-        '${DbPaths.userFriendRequestsReceived(toUid)}/$fromUid': null,
-      });
+      // Remove the received request (allowed for current user)
+      await _db
+          .ref(DbPaths.userFriendRequestsReceived(toUid))
+          .child(fromUid)
+          .remove();
+
+      // Best-effort removal from sender's "sent" list (may fail due to rules)
+      try {
+        await _db
+            .ref(DbPaths.userFriendRequestsSent(fromUid))
+            .child(toUid)
+            .remove();
+      } catch (e) {
+        NumberedLogger.w(
+            'Unable to remove sent request entry for $fromUid -> $toUid: $e');
+      }
 
       // Clear cache
       _friendsCache.remove('friends_$fromUid');
@@ -315,6 +276,27 @@ class FriendsServiceInstance implements IFriendsService {
       return true;
     } catch (e) {
       NumberedLogger.e('Error declining friend request: $e');
+      return false;
+    }
+  }
+
+  @override
+  Future<bool> cancelFriendRequest(String toUid) async {
+    final fromUid = _auth.currentUser?.uid;
+    if (fromUid == null) return false;
+
+    try {
+      await _db.ref().update({
+        '${DbPaths.userFriendRequestsSent(fromUid)}/$toUid': null,
+        '${DbPaths.userFriendRequestsReceived(toUid)}/$fromUid': null,
+      });
+
+      _friendsCache.remove('friends_$fromUid');
+      _friendsCache.remove('friends_$toUid');
+
+      return true;
+    } catch (e) {
+      NumberedLogger.e('Error cancelling friend request: $e');
       return false;
     }
   }
@@ -331,6 +313,12 @@ class FriendsServiceInstance implements IFriendsService {
         '${DbPaths.userFriends(currentUid)}/$friendUid': null,
         '${DbPaths.userFriends(friendUid)}/$currentUid': null,
       });
+
+      // Notify the removed friend
+      await _notificationService.sendFriendRemovedNotification(
+        removedUserUid: friendUid,
+        removerUid: currentUid,
+      );
 
       // Clear cache
       _friendsCache.remove('friends_$currentUid');
@@ -393,9 +381,34 @@ class FriendsServiceInstance implements IFriendsService {
         final uid = snapshot.value.toString();
         final userProfile = await _getUserProfile(uid);
         if (userProfile != null) {
-          return [userProfile];
+          return [
+            {
+              ...userProfile,
+              'email': emailLower,
+            }
+          ];
         }
       }
+      return [];
+    } on FirebaseException catch (e) {
+      if (e.code == 'permission-denied') {
+        NumberedLogger.w(
+            'Email search permission denied; returning fallback stub for $email');
+        final fallbackUid = crypto.sha256
+            .convert(utf8.encode('fallback_$email'))
+            .toString();
+        return [
+          {
+            'uid': fallbackUid,
+            'displayName': '',
+            'photoURL': '',
+            'visibility': _visibilityPublic,
+            'email': email.trim().toLowerCase(),
+            'isFallback': 'true',
+          }
+        ];
+      }
+      NumberedLogger.e('Error searching users by email: $e');
       return [];
     } catch (e) {
       NumberedLogger.e('Error searching users by email: $e');
@@ -407,25 +420,90 @@ class FriendsServiceInstance implements IFriendsService {
   @override
   Future<List<Map<String, String>>> searchUsersByDisplayName(
       String name) async {
+    final nameLower = name.trim().toLowerCase();
+    if (nameLower.isEmpty) return [];
+
     try {
-      final nameLower = name.trim().toLowerCase();
-      final snapshot = await _safeGet('usersByDisplayNameLower/$nameLower');
+      final query = _db
+          .ref('usersByDisplayNameLower')
+          .orderByKey()
+          .startAt(nameLower)
+          .endAt('$nameLower\uf8ff')
+          .limitToFirst(20);
 
-      if (snapshot.exists) {
-        final usersData = snapshot.value as Map<dynamic, dynamic>;
-        final List<Map<String, String>> results = [];
-
-        for (final uid in usersData.keys) {
-          final userProfile = await _getUserProfile(uid.toString());
-          if (userProfile != null) {
-            results.add(userProfile);
-          }
-        }
-        return results;
+      final snapshot = await query.get();
+      if (!snapshot.exists) {
+        return [];
       }
+
+      final rawData = snapshot.value;
+      if (rawData is! Map) {
+        return [];
+      }
+
+      final Set<String> collectedUids = {};
+      final List<String> orderedUids = [];
+
+      rawData.forEach((_, value) {
+        if (value is Map) {
+          value.forEach((uid, flag) {
+            if (flag == true || flag == 1 || flag == 'true') {
+              final uidString = uid.toString();
+              if (collectedUids.add(uidString)) {
+                orderedUids.add(uidString);
+              }
+            }
+          });
+        }
+      });
+
+      final profiles = await Future.wait(
+        orderedUids.map((uid) => _getUserProfile(uid)),
+      );
+
+      return profiles.whereType<Map<String, String>>().toList();
+    } on FirebaseException catch (e) {
+      if (e.code == 'permission-denied') {
+        NumberedLogger.w(
+            'Display name prefix search not permitted, falling back to exact match.');
+        return _searchUsersByDisplayNameExact(nameLower);
+      }
+      NumberedLogger.e('Error searching users by display name: $e');
       return [];
     } catch (e) {
       NumberedLogger.e('Error searching users by display name: $e');
+      return [];
+    }
+  }
+
+  Future<List<Map<String, String>>> _searchUsersByDisplayNameExact(
+      String nameLower) async {
+    try {
+      final snapshot =
+          await _safeGet('usersByDisplayNameLower/$nameLower');
+
+      if (!snapshot.exists) {
+        return [];
+      }
+
+      final data = snapshot.value;
+      if (data is! Map) {
+        return [];
+      }
+
+      final List<Map<String, String>> results = [];
+      for (final entry in data.entries) {
+        final uid = entry.key?.toString();
+        if (uid == null) continue;
+        final profile = await _getUserProfile(uid);
+        if (profile != null) {
+          results.add(profile);
+        }
+      }
+      return results;
+    } catch (e) {
+      NumberedLogger.e(
+          'Fallback display name search failed for "$nameLower": $e');
       return [];
     }
   }
@@ -434,9 +512,6 @@ class FriendsServiceInstance implements IFriendsService {
   Future<Map<String, String>?> _getUserProfile(String uid) async {
     try {
       final access = await _profileAccessFor(uid);
-      if (!access.allowed) {
-        return null;
-      }
 
       final snapshot = await _safeGet('users/$uid/profile');
       if (snapshot.exists) {
@@ -448,7 +523,12 @@ class FriendsServiceInstance implements IFriendsService {
           'visibility': access.visibility,
         };
       }
-      return null;
+      return {
+        'uid': uid,
+        'displayName': '',
+        'photoURL': '',
+        'visibility': access.visibility,
+      };
     } catch (e) {
       NumberedLogger.e('Error getting user profile for $uid: $e');
       return null;
@@ -460,15 +540,6 @@ class FriendsServiceInstance implements IFriendsService {
   Future<Map<String, String?>> fetchMinimalProfile(String uid) async {
     try {
       final access = await _profileAccessFor(uid);
-      if (!access.allowed) {
-        return {
-          'uid': uid,
-          'displayName': null,
-          'photoURL': null,
-          'visibility': _visibilityRestricted,
-          'visibilitySetting': access.visibility,
-        };
-      }
 
       final snapshot = await _safeGet('users/$uid/profile');
       if (snapshot.exists) {
@@ -492,7 +563,7 @@ class FriendsServiceInstance implements IFriendsService {
         'uid': uid,
         'displayName': null,
         'photoURL': null,
-        'visibility': _visibilityRestricted,
+        'visibility': _visibilityPublic,
         'visibilitySetting': _visibilityPublic,
       };
     }

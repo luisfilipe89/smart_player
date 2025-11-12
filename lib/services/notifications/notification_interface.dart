@@ -9,4 +9,10 @@ abstract class INotificationService {
 
   /// Send a game reminder notification
   Future<void> sendGameReminderNotification(String gameId, DateTime gameTime);
+
+  /// Notify a user that a friend removed them
+  Future<void> sendFriendRemovedNotification({
+    required String removedUserUid,
+    required String removerUid,
+  });
 }

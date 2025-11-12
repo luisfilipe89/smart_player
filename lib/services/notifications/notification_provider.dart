@@ -158,6 +158,14 @@ class NotificationActions {
       _notificationService.sendGameInviteNotification(toUid, gameId);
   Future<void> sendGameReminderNotification(String gameId, DateTime gameTime) =>
       _notificationService.sendGameReminderNotification(gameId, gameTime);
+  Future<void> sendFriendRemovedNotification({
+    required String removedUserUid,
+    required String removerUid,
+  }) =>
+      _notificationService.sendFriendRemovedNotification(
+        removedUserUid: removedUserUid,
+        removerUid: removerUid,
+      );
   Future<void> cancelNotification(int id) =>
       _notificationService.cancelNotification(id);
   Future<void> cancelAllNotifications() =>

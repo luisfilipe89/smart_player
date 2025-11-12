@@ -3,13 +3,7 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:mobile_scanner/mobile_scanner.dart';
-import 'package:permission_handler/permission_handler.dart';
-import 'package:flutter_contacts/flutter_contacts.dart';
 import 'dart:async';
-import 'package:url_launcher/url_launcher.dart';
-import 'package:share_plus/share_plus.dart';
-import 'package:qr_flutter/qr_flutter.dart';
 
 import 'package:move_young/services/auth/auth_provider.dart';
 import 'package:move_young/services/friends/friends_provider.dart';
@@ -121,8 +115,6 @@ class _MiniListSkeleton extends StatelessWidget {
 class _FriendsScreenState extends ConsumerState<FriendsScreen>
     with SingleTickerProviderStateMixin {
   late final TabController _tabController;
-  StreamSubscription<void>? _qrAutoCloseSub;
-
   @override
   void initState() {
     super.initState();
@@ -135,7 +127,6 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen>
 
   @override
   void dispose() {
-    _qrAutoCloseSub?.cancel();
     _tabController.dispose();
     super.dispose();
   }
@@ -304,36 +295,13 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen>
                   const SizedBox(height: 8),
                   _ActionTile(
                     icon: Icons.search,
-                    title: 'friends_search_user'.tr(),
+                    title: 'friends_search_user_email'.tr(),
                     onTap: () async {
                       Navigator.of(context).pop();
                       await _showSearchDialog();
                     },
                   ),
-                  _ActionTile(
-                    icon: Icons.ios_share_outlined,
-                    title: 'friends_invite_via_message'.tr(),
-                    onTap: () async {
-                      Navigator.of(context).pop();
-                      await _showInviteByMessage();
-                    },
-                  ),
-                  _ActionTile(
-                    icon: Icons.qr_code,
-                    title: 'friends_my_qr'.tr(),
-                    onTap: () async {
-                      Navigator.of(context).pop();
-                      await _showMyQr();
-                    },
-                  ),
-                  _ActionTile(
-                    icon: Icons.qr_code_scanner,
-                    title: 'friends_scan_qr'.tr(),
-                    onTap: () async {
-                      Navigator.of(context).pop();
-                      await _scanQr();
-                    },
-                  ),
+                  // QR options removed
                   const SizedBox(height: 12),
                 ],
               ),
@@ -344,646 +312,20 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen>
     );
   }
 
-  Future<void> _showMyQr() async {
-    if (!mounted) return;
-    final String? myUid = ref.read(currentUserIdProvider);
-
-    // Cancel any existing subscription before creating new one
-    _qrAutoCloseSub?.cancel();
-
-    final dialogFuture = showDialog(
-      context: context,
-      builder: (dialogContext) {
-        return _QrBottomSheetContent();
-      },
-    );
-
-    // Auto-close if request received
-    if (myUid != null) {
-      try {
-        // Capture navigator before setting up stream listener to avoid BuildContext warning
-        final navigator = Navigator.of(context, rootNavigator: true);
-        _qrAutoCloseSub = ref
-            .read(friendsActionsProvider)
-            .watchFriendRequestReceived(myUid)
-            .listen(
-          (_) {
-            if (!mounted) return;
-            try {
-              navigator.maybePop();
-              Future.delayed(const Duration(milliseconds: 150), () {
-                if (mounted) {
-                  _tabController.animateTo(1);
-                }
-              });
-            } catch (_) {}
-          },
-          onError: (error) {
-            debugPrint('Error in QR auto-close subscription: $error');
-          },
-          cancelOnError: false, // Keep subscription alive on error
-        );
-      } catch (e) {
-        debugPrint('Error setting up QR auto-close subscription: $e');
-      }
-
-      // Cancel subscription when dialog closes
-      unawaited(
-        dialogFuture.whenComplete(() {
-          _qrAutoCloseSub?.cancel();
-          _qrAutoCloseSub = null;
-        }),
-      );
-    }
-  }
-
-  Future<void> _scanQr() async {
-    final currentContext = context;
-    final scaffoldMessenger = ScaffoldMessenger.of(currentContext);
-
-    final camStatus = await Permission.camera.request();
-    if (!camStatus.isGranted) {
-      if (!mounted) return;
-      scaffoldMessenger.showSnackBar(
-        SnackBar(
-          content: Text('permission_camera_denied'.tr()),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return;
-    }
-
-    String? scanned;
-    try {
-      if (currentContext.mounted) {
-        scanned = await showDialog<String>(
-          context: currentContext,
-          builder: (context) {
-            return AlertDialog(
-              title: Text('friends_scan_qr'.tr()),
-              content: SizedBox(
-                width: 260,
-                height: 260,
-                child: MobileScanner(
-                  onDetect: (capture) {
-                    final barcodes = capture.barcodes;
-                    if (barcodes.isNotEmpty) {
-                      scanned = barcodes.first.rawValue;
-                      if (Navigator.of(context).canPop()) {
-                        Navigator.of(context).pop(scanned);
-                      }
-                    }
-                  },
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () {
-                    if (Navigator.of(context).canPop()) {
-                      Navigator.of(context).pop();
-                    }
-                  },
-                  child: Text('cancel'.tr()),
-                ),
-              ],
-            );
-          },
-        );
-      }
-    } catch (e) {
-      scanned = null;
-    }
-
-    if (scanned == null || scanned!.isEmpty) {
-      if (!mounted) return;
-      scaffoldMessenger.showSnackBar(
-        SnackBar(
-          content: Text('friends_no_qr_detected'.tr()),
-          backgroundColor: Colors.orange,
-        ),
-      );
-      return;
-    }
-
-    if (!mounted) return;
-    scaffoldMessenger.showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            const SizedBox(
-              width: 16,
-              height: 16,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            ),
-            const SizedBox(width: 12),
-            Text('friends_processing_qr'.tr()),
-          ],
-        ),
-        duration: const Duration(seconds: 2),
-      ),
-    );
-
-    // Process QR token
-    final success =
-        await ref.read(friendsActionsProvider).consumeFriendToken(scanned!);
-    if (!mounted) return;
-    if (success) {
-      scaffoldMessenger.showSnackBar(
-        SnackBar(
-          content: Text('friends_request_sent'.tr()),
-          backgroundColor: Colors.green,
-        ),
-      );
-    } else {
-      scaffoldMessenger.showSnackBar(
-        SnackBar(
-          content: Text('friends_invalid_qr_code'.tr()),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
-  }
-
-  Future<void> _importContacts() async {
-    if (!mounted) return;
-    // Capture messenger before async operation to avoid BuildContext warning
-    final messenger = ScaffoldMessenger.of(context);
-    var status = await Permission.contacts.status;
-    if (!status.isGranted) {
-      final res = await Permission.contacts.request();
-      if (!res.isGranted) {
-        if (res.isPermanentlyDenied) {
-          if (!mounted) return;
-          final go = await showDialog<bool>(
-            context: context,
-            builder: (ctx) => AlertDialog(
-              title: Text('permission_required'.tr()),
-              content: Text('permission_contacts_denied'.tr()),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(ctx, false),
-                  child: Text('cancel'.tr()),
-                ),
-                TextButton(
-                  onPressed: () async {
-                    Navigator.pop(ctx, true);
-                    await openAppSettings();
-                  },
-                  child: Text('open_settings'.tr()),
-                ),
-              ],
-            ),
-          );
-          if (go != true) return;
-        } else {
-          if (!mounted) return;
-          messenger.showSnackBar(
-            SnackBar(content: Text('permission_contacts_denied'.tr())),
-          );
-          return;
-        }
-      }
-    }
-
-    final contacts = await FlutterContacts.getContacts(withProperties: true);
-    if (!mounted) return;
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) {
-        return Container(
-          decoration: const BoxDecoration(
-            color: AppColors.white,
-            borderRadius: BorderRadius.only(
-              topLeft: Radius.circular(20),
-              topRight: Radius.circular(20),
-            ),
-          ),
-          constraints: BoxConstraints(
-            maxHeight: MediaQuery.of(context).size.height * 0.7,
-          ),
-          child: SafeArea(
-            child: ListView.builder(
-              itemCount: contacts.length,
-              itemBuilder: (context, i) {
-                final c = contacts[i];
-                final String? phone =
-                    c.phones.isNotEmpty ? c.phones.first.number : null;
-                if (phone == null || phone.isEmpty) {
-                  return const SizedBox.shrink();
-                }
-                return ListTile(
-                  leading: const Icon(Icons.person_outline),
-                  title: Text(c.displayName),
-                  subtitle: Text(phone),
-                  trailing: Wrap(
-                    spacing: 8,
-                    children: [
-                      TextButton(
-                        onPressed: () =>
-                            _sendSmsFriendInvite(phone, c.displayName),
-                        child: const Text('SMS'),
-                      ),
-                      TextButton(
-                        onPressed: () =>
-                            _sendWhatsAppFriendInvite(phone, c.displayName),
-                        child: const Text('WhatsApp'),
-                      ),
-                    ],
-                  ),
-                  onTap: () => _sendSmsFriendInvite(phone, c.displayName),
-                );
-              },
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  String _normalizePhoneForWa(String phone) {
-    final digitsOnly = phone.replaceAll(RegExp(r'[^0-9+]'), '');
-    return digitsOnly.startsWith('+') ? digitsOnly.substring(1) : digitsOnly;
-  }
-
-  String _friendInviteUrl(String token) =>
-      'https://smartplayer.app/f?token=$token';
-
-  String _friendInviteMessage({required String token, String? name}) {
-    final hello = "Hey${name != null && name.isNotEmpty ? ' $name' : ''}!";
-    final link = _friendInviteUrl(token);
-    return "$hello Add me on SMARTPLAYER: $link\nIf the link doesn't open, copy this code into the app: $token";
-  }
-
-  Future<void> _inviteViaShare() async {
-    final token = await _generateFriendToken();
-    if (token == null || !mounted) return;
-    final text = _friendInviteMessage(token: token);
-    await Share.share(text, subject: 'Add me on SMARTPLAYER');
-  }
-
-  Future<void> _sendSmsFriendInvite(String phone, String? name) async {
-    final token = await _generateFriendToken();
-    if (token == null) return;
-    final text = _friendInviteMessage(token: token, name: name);
-    final uri = Uri.parse('sms:$phone?body=${Uri.encodeComponent(text)}');
-    try {
-      final can = await canLaunchUrl(uri);
-      if (can) {
-        await launchUrl(uri);
-      } else {
-        await Share.share(text);
-      }
-    } catch (_) {
-      await Share.share(text);
-    }
-  }
-
-  Future<void> _sendWhatsAppFriendInvite(String phone, String? name) async {
-    final token = await _generateFriendToken();
-    if (token == null) return;
-    final text = _friendInviteMessage(token: token, name: name);
-    final waNumber = _normalizePhoneForWa(phone);
-    final uri = Uri.parse(
-      'https://wa.me/$waNumber?text=${Uri.encodeComponent(text)}',
-    );
-    try {
-      final can = await canLaunchUrl(uri);
-      if (can) {
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
-      } else {
-        await Share.share(text);
-      }
-    } catch (_) {
-      await Share.share(text);
-    }
-  }
-
-  Future<String?> _generateFriendToken() async {
-    try {
-      final uid = ref.read(currentUserIdProvider);
-      if (uid == null) return null;
-
-      // Generate a simple token (would need proper implementation in service)
-      return 'friend_${uid}_${DateTime.now().millisecondsSinceEpoch}';
-    } catch (e) {
-      return null;
-    }
-  }
-
-  Future<void> _showInviteByMessage() async {
-    if (!mounted) return;
-    await showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (context) {
-        return Container(
-          decoration: const BoxDecoration(
-            color: AppColors.white,
-            borderRadius: BorderRadius.only(
-              topLeft: Radius.circular(20),
-              topRight: Radius.circular(20),
-            ),
-          ),
-          child: SafeArea(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                ListTile(
-                  leading: const Icon(Icons.ios_share_outlined),
-                  title: Text('friends_invite_share_via_apps'.tr()),
-                  onTap: () async {
-                    Navigator.of(context).pop();
-                    await _inviteViaShare();
-                  },
-                ),
-                ListTile(
-                  leading: const Icon(Icons.contacts_outlined),
-                  title: Text('friends_invite_share_with_contacts'.tr()),
-                  onTap: () async {
-                    Navigator.of(context).pop();
-                    await _importContacts();
-                  },
-                ),
-                const SizedBox(height: 8),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
   Future<void> _showSearchDialog() async {
-    final controller = TextEditingController();
     final currentUser = ref.read(currentUserProvider).valueOrNull;
     final myEmail = currentUser?.email?.trim().toLowerCase();
-    final myDisplayName = currentUser?.displayName?.trim().toLowerCase();
-    Timer? debounce;
 
     await showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
-      builder: (sheetContext) {
-        List<Map<String, String>> suggestions = [];
-        bool isLoading = false;
-        String? errorMessage;
-        bool showInviteOption = false;
-        int searchToken = 0;
-
-        return StatefulBuilder(
-          builder: (context, setState) {
-            Future<void> performSearch(String raw) async {
-              final query = raw.trim();
-              final queryLower = query.toLowerCase();
-              final isEmailQuery = query.contains('@') && query.contains('.');
-
-              if (query.isEmpty) {
-                setState(() {
-                  suggestions = [];
-                  errorMessage = null;
-                  showInviteOption = false;
-                  isLoading = false;
-                });
-                return;
-              }
-
-              if ((myEmail != null && queryLower == myEmail) ||
-                  (myDisplayName != null && queryLower == myDisplayName)) {
-                setState(() {
-                  suggestions = [];
-                  errorMessage = 'friends_cannot_invite_self'.tr();
-                  showInviteOption = false;
-                  isLoading = false;
-                });
-                return;
-              }
-
-              if (!isEmailQuery && query.length < 2) {
-                setState(() {
-                  suggestions = [];
-                  errorMessage = null;
-                  showInviteOption = false;
-                  isLoading = false;
-                });
-                return;
-              }
-
-              setState(() {
-                isLoading = true;
-                errorMessage = null;
-                showInviteOption = false;
-              });
-
-              final token = ++searchToken;
-              try {
-                final friendsActions = ref.read(friendsActionsProvider);
-                final rawResults = isEmailQuery
-                    ? await friendsActions.searchUsersByEmail(query)
-                    : await friendsActions.searchUsersByDisplayName(query);
-
-                if (!mounted || !sheetContext.mounted || token != searchToken) {
-                  return;
-                }
-
-                final currentUid = currentUser?.uid;
-                final filtered = rawResults
-                    .where(
-                      (user) =>
-                          user['uid'] != null && user['uid'] != currentUid,
-                    )
-                    .toList();
-
-                setState(() {
-                  suggestions = filtered;
-                  isLoading = false;
-                  showInviteOption = filtered.isEmpty && isEmailQuery;
-                  errorMessage = filtered.isEmpty && !isEmailQuery
-                      ? 'friends_search_no_results'.tr()
-                      : null;
-                });
-              } catch (_) {
-                if (!mounted || !sheetContext.mounted || token != searchToken) {
-                  return;
-                }
-                setState(() {
-                  suggestions = [];
-                  isLoading = false;
-                  showInviteOption = false;
-                  errorMessage = 'friends_search_error'.tr();
-                });
-              }
-            }
-
-            final bottomInset = MediaQuery.of(context).viewInsets.bottom;
-
-            return Container(
-              decoration: const BoxDecoration(
-                color: AppColors.white,
-                borderRadius: BorderRadius.only(
-                  topLeft: Radius.circular(20),
-                  topRight: Radius.circular(20),
-                ),
-              ),
-              child: SafeArea(
-                child: Padding(
-                  padding: EdgeInsets.fromLTRB(
-                    16,
-                    16,
-                    16,
-                    16 + bottomInset,
-                  ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Center(
-                        child: Container(
-                          width: 40,
-                          height: 4,
-                          margin: const EdgeInsets.only(bottom: 12),
-                          decoration: BoxDecoration(
-                            color: AppColors.grey.withValues(alpha: 0.3),
-                            borderRadius: BorderRadius.circular(2),
-                          ),
-                        ),
-                      ),
-                      Text('friends_search_title'.tr(),
-                          style: AppTextStyles.h3),
-                      const SizedBox(height: 12),
-                      TextField(
-                        controller: controller,
-                        autofocus: true,
-                        decoration: InputDecoration(
-                          hintText: 'friends_search_hint'.tr(),
-                          prefixIcon: const Icon(Icons.search),
-                          border: const OutlineInputBorder(),
-                          isDense: true,
-                        ),
-                        textInputAction: TextInputAction.search,
-                        onChanged: (value) {
-                          debounce?.cancel();
-                          debounce =
-                              Timer(const Duration(milliseconds: 350), () {
-                            performSearch(value);
-                          });
-                        },
-                        onSubmitted: (value) {
-                          debounce?.cancel();
-                          performSearch(value);
-                        },
-                      ),
-                      if (isLoading) ...[
-                        const SizedBox(height: 12),
-                        const LinearProgressIndicator(),
-                      ],
-                      if (errorMessage != null && !isLoading) ...[
-                        const SizedBox(height: 12),
-                        Text(
-                          errorMessage!,
-                          style: AppTextStyles.smallMuted,
-                        ),
-                      ],
-                      const SizedBox(height: 12),
-                      ConstrainedBox(
-                        constraints: const BoxConstraints(maxHeight: 320),
-                        child: suggestions.isEmpty &&
-                                !showInviteOption &&
-                                (errorMessage == null || isLoading)
-                            ? const SizedBox.shrink()
-                            : Material(
-                                color: Colors.transparent,
-                                child: ListView.separated(
-                                  shrinkWrap: true,
-                                  itemCount: showInviteOption
-                                      ? suggestions.length + 1
-                                      : suggestions.length,
-                                  separatorBuilder: (_, __) =>
-                                      const Divider(height: 1),
-                                  itemBuilder: (context, index) {
-                                    if (showInviteOption &&
-                                        index == suggestions.length) {
-                                      final email = controller.text.trim();
-                                      return ListTile(
-                                        leading: const Icon(Icons.mail_outline),
-                                        title: Text(
-                                          'friends_invite_email'.tr(),
-                                        ),
-                                        subtitle: Text(
-                                          'friends_invite_email_message'
-                                              .tr(args: [email]),
-                                          style: AppTextStyles.smallMuted,
-                                        ),
-                                        trailing:
-                                            const Icon(Icons.chevron_right),
-                                        onTap: () async {
-                                          Navigator.of(sheetContext).pop();
-                                          await _showEmailInviteDialog(
-                                            email,
-                                          );
-                                        },
-                                      );
-                                    }
-
-                                    final suggestion = suggestions[index];
-                                    final displayName =
-                                        suggestion['displayName'] ??
-                                            'Unknown User';
-                                    final email = suggestion['email'] ?? '';
-                                    final photoUrl = suggestion['photoURL'];
-
-                                    return ListTile(
-                                      leading: CircleAvatar(
-                                        backgroundImage: photoUrl != null &&
-                                                photoUrl.isNotEmpty
-                                            ? CachedNetworkImageProvider(
-                                                photoUrl,
-                                              )
-                                            : null,
-                                        child:
-                                            photoUrl == null || photoUrl.isEmpty
-                                                ? Text(
-                                                    displayName.isNotEmpty
-                                                        ? displayName[0]
-                                                            .toUpperCase()
-                                                        : '?',
-                                                  )
-                                                : null,
-                                      ),
-                                      title: Text(displayName),
-                                      subtitle:
-                                          email.isNotEmpty ? Text(email) : null,
-                                      trailing: TextButton(
-                                        onPressed: () async {
-                                          Navigator.of(sheetContext).pop();
-                                          await _sendFriendRequest(
-                                            suggestion['uid']!,
-                                          );
-                                        },
-                                        child:
-                                            Text('friends_send_request'.tr()),
-                                      ),
-                                    );
-                                  },
-                                ),
-                              ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            );
-          },
-        );
-      },
+      builder: (_) => _FriendSearchSheet(
+        myEmail: myEmail,
+        onSendFriendRequest: _sendFriendRequest,
+        onInviteByEmail: _showEmailInviteDialog,
+      ),
     );
-
-    debounce?.cancel();
-    controller.dispose();
   }
 
   Future<void> _showEmailInviteDialog(String email) async {
@@ -1078,20 +420,336 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen>
     }
   }
 
-  Future<void> _sendFriendRequest(String targetUid) async {
-    if (!mounted) return;
-    // Capture messenger before async operation to avoid BuildContext warning
+  Future<bool> _sendFriendRequest(String targetUid) async {
+    if (!mounted) return false;
     final messenger = ScaffoldMessenger.of(context);
+    final bool ok;
     try {
-      await ref.read(friendsActionsProvider).sendFriendRequest(targetUid);
-      if (!mounted) return;
-      messenger.showSnackBar(
-        SnackBar(content: Text('friends_request_sent'.tr())),
-      );
+      ok = await ref.read(friendsActionsProvider).sendFriendRequest(targetUid);
     } catch (e) {
-      if (!mounted) return;
-      messenger.showSnackBar(SnackBar(content: Text('Error: ${e.toString()}')));
+      if (!mounted) return false;
+      messenger.showSnackBar(
+        SnackBar(content: Text('friends_request_failed'.tr())),
+      );
+      return false;
     }
+
+    if (!mounted) return ok;
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          ok ? 'friends_request_sent'.tr() : 'friends_request_failed'.tr(),
+        ),
+      ),
+    );
+    return ok;
+  }
+}
+
+class _FriendSearchSheet extends ConsumerStatefulWidget {
+  final String? myEmail;
+  final Future<bool> Function(String uid) onSendFriendRequest;
+  final Future<void> Function(String email) onInviteByEmail;
+
+  const _FriendSearchSheet({
+    required this.myEmail,
+    required this.onSendFriendRequest,
+    required this.onInviteByEmail,
+  });
+
+  @override
+  ConsumerState<_FriendSearchSheet> createState() => _FriendSearchSheetState();
+}
+
+class _FriendSearchSheetState extends ConsumerState<_FriendSearchSheet> {
+  final TextEditingController _controller = TextEditingController();
+  Timer? _debounce;
+  List<Map<String, String>> _suggestions = [];
+  bool _isLoading = false;
+  String? _errorMessage;
+  bool _showInviteOption = false;
+  int _searchToken = 0;
+  String? _pendingInviteEmail;
+
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _onChanged(String value) {
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 300), () {
+      _performSearch(value);
+    });
+  }
+
+  Future<void> _performSearch(String raw) async {
+    final query = raw.trim();
+    final queryLower = query.toLowerCase();
+    final isEmailQuery = query.contains('@') && query.contains('.');
+
+    if (query.isEmpty) {
+      setState(() {
+        _suggestions = [];
+        _errorMessage = null;
+        _showInviteOption = false;
+        _isLoading = false;
+        _pendingInviteEmail = null;
+      });
+      return;
+    }
+
+    if (widget.myEmail != null && queryLower == widget.myEmail) {
+      setState(() {
+        _suggestions = [];
+        _errorMessage = 'friends_cannot_invite_self'.tr();
+        _showInviteOption = false;
+        _isLoading = false;
+        _pendingInviteEmail = null;
+      });
+      return;
+    }
+
+    if (!isEmailQuery) {
+      setState(() {
+        _suggestions = [];
+        _errorMessage = 'friends_search_email_only'.tr();
+        _showInviteOption = false;
+        _isLoading = false;
+        _pendingInviteEmail = null;
+      });
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+      _showInviteOption = false;
+      _pendingInviteEmail = null;
+    });
+
+    final token = ++_searchToken;
+    try {
+      final friendsActions = ref.read(friendsActionsProvider);
+      final normalizedEmail = _normalizeEmailForLookup(queryLower);
+      final rawResults =
+          await friendsActions.searchUsersByEmail(normalizedEmail);
+
+      if (!mounted || token != _searchToken) return;
+
+      final filteredResults =
+          rawResults.where((entry) => entry['isFallback'] != 'true').toList();
+      final fallbackEntry = rawResults.firstWhere(
+        (entry) => entry['isFallback'] == 'true',
+        orElse: () => <String, String>{},
+      );
+      final inviteEmail = filteredResults.isEmpty
+          ? (fallbackEntry['email'] ?? normalizedEmail)
+          : null;
+
+      setState(() {
+        _suggestions = filteredResults;
+        _isLoading = false;
+        _pendingInviteEmail = inviteEmail;
+        _showInviteOption = filteredResults.isEmpty && inviteEmail != null;
+        _errorMessage =
+            filteredResults.isEmpty ? 'friends_search_no_results'.tr() : null;
+      });
+    } catch (_) {
+      if (!mounted || token != _searchToken) return;
+      setState(() {
+        _suggestions = [];
+        _isLoading = false;
+        _showInviteOption = true;
+        _errorMessage = 'friends_search_error'.tr();
+        _pendingInviteEmail = _normalizeEmailForLookup(queryLower);
+      });
+    }
+  }
+
+  String _normalizeEmailForLookup(String email) {
+    String value = email.trim();
+    if (value.isEmpty) return value;
+
+    final atIndex = value.indexOf('@');
+    if (atIndex <= 0 || atIndex == value.length - 1) {
+      return value;
+    }
+
+    final localPart = value.substring(0, atIndex);
+    var domainPart = value.substring(atIndex + 1).trim();
+    if (domainPart.isEmpty) {
+      return value;
+    }
+
+    while (domainPart.endsWith('.')) {
+      domainPart = domainPart.substring(0, domainPart.length - 1);
+    }
+
+    domainPart = domainPart.toLowerCase();
+
+    if (!domainPart.contains('.')) {
+      const defaultDomains = {
+        'gmail': 'gmail.com',
+        'hotmail': 'hotmail.com',
+        'outlook': 'outlook.com',
+        'live': 'live.com',
+        'icloud': 'icloud.com',
+        'me': 'me.com',
+        'yahoo': 'yahoo.com',
+        'proton': 'proton.me',
+        'protonmail': 'protonmail.com',
+      };
+
+      domainPart = defaultDomains[domainPart] ?? '$domainPart.com';
+    }
+
+    return '$localPart@${domainPart.toLowerCase()}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+
+    return Container(
+      decoration: const BoxDecoration(
+        color: AppColors.white,
+        borderRadius: BorderRadius.only(
+          topLeft: Radius.circular(20),
+          topRight: Radius.circular(20),
+        ),
+      ),
+      child: SafeArea(
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(
+            16,
+            16,
+            16,
+            16 + bottomInset,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: 12),
+                  decoration: BoxDecoration(
+                    color: AppColors.grey.withValues(alpha: 0.3),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              Text('friends_search_title'.tr(), style: AppTextStyles.h3),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _controller,
+                autofocus: true,
+                decoration: InputDecoration(
+                  hintText: 'friends_search_email_hint'.tr(),
+                  prefixIcon: const Icon(Icons.search),
+                  border: const OutlineInputBorder(),
+                  isDense: true,
+                ),
+                keyboardType: TextInputType.emailAddress,
+                textInputAction: TextInputAction.search,
+                onChanged: _onChanged,
+                onSubmitted: _performSearch,
+              ),
+              if (_isLoading) ...[
+                const SizedBox(height: 12),
+                const LinearProgressIndicator(),
+              ],
+              if (_errorMessage != null && !_isLoading) ...[
+                const SizedBox(height: 12),
+                Text(
+                  _errorMessage!,
+                  style: AppTextStyles.smallMuted,
+                ),
+              ],
+              const SizedBox(height: 12),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 320),
+                child: _suggestions.isEmpty &&
+                        !_showInviteOption &&
+                        (_errorMessage == null || _isLoading)
+                    ? const SizedBox.shrink()
+                    : Material(
+                        color: Colors.transparent,
+                        child: ListView.separated(
+                          shrinkWrap: true,
+                          itemCount: _showInviteOption
+                              ? _suggestions.length + 1
+                              : _suggestions.length,
+                          separatorBuilder: (_, __) => const Divider(height: 1),
+                          itemBuilder: (context, index) {
+                            if (_showInviteOption &&
+                                index == _suggestions.length) {
+                              final email = _pendingInviteEmail ??
+                                  _controller.text.trim();
+                              return ListTile(
+                                leading: const Icon(Icons.mail_outline),
+                                title: Text('friends_invite_email'.tr()),
+                                subtitle: Text(
+                                  'friends_invite_email_message'.tr(args: [
+                                    email,
+                                  ]),
+                                  style: AppTextStyles.smallMuted,
+                                ),
+                                trailing: const Icon(Icons.chevron_right),
+                                onTap: () async {
+                                  Navigator.of(context).pop();
+                                  await widget.onInviteByEmail(email);
+                                },
+                              );
+                            }
+
+                            final suggestion = _suggestions[index];
+                            final displayName =
+                                suggestion['displayName']?.isNotEmpty == true
+                                    ? suggestion['displayName']!
+                                    : 'Unknown User';
+                            final email = suggestion['email'] ?? '';
+                            final photoUrl = suggestion['photoURL'];
+
+                            return ListTile(
+                              leading: CircleAvatar(
+                                backgroundImage:
+                                    photoUrl != null && photoUrl.isNotEmpty
+                                        ? CachedNetworkImageProvider(photoUrl)
+                                        : null,
+                                child: photoUrl == null || photoUrl.isEmpty
+                                    ? Text(
+                                        displayName.isNotEmpty
+                                            ? displayName[0].toUpperCase()
+                                            : '?',
+                                      )
+                                    : null,
+                              ),
+                              title: Text(displayName),
+                              subtitle: email.isNotEmpty ? Text(email) : null,
+                              trailing: TextButton(
+                                onPressed: () async {
+                                  Navigator.of(context).pop();
+                                  await widget
+                                      .onSendFriendRequest(suggestion['uid']!);
+                                },
+                                child: Text('friends_send_request'.tr()),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
 
@@ -1176,13 +834,8 @@ class _FriendsList extends ConsumerWidget {
                                   const {
                                     'displayName': 'User',
                                     'photoURL': null,
-                                    'visibility': null,
                                   };
-                              final isRestricted =
-                                  data['visibility'] == 'restricted';
-                              final name = isRestricted
-                                  ? 'friends_private_profile'.tr()
-                                  : (data['displayName'] ?? 'User');
+                              final name = data['displayName'] ?? 'User';
                               final photo = data['photoURL'];
 
                               return ListTile(
@@ -1190,23 +843,17 @@ class _FriendsList extends ConsumerWidget {
                                 leading: CircleAvatar(
                                   backgroundColor: AppColors.superlightgrey,
                                   foregroundColor: AppColors.primary,
-                                  backgroundImage: (!isRestricted &&
-                                          photo != null &&
-                                          photo.isNotEmpty)
-                                      ? CachedNetworkImageProvider(photo)
-                                      : null,
-                                  child: isRestricted
-                                      ? const Icon(
-                                          Icons.lock_outline,
-                                          color: AppColors.primary,
-                                        )
-                                      : (photo == null || photo.isEmpty)
-                                          ? Text(
-                                              name.isNotEmpty
-                                                  ? name[0].toUpperCase()
-                                                  : '?',
-                                            )
+                                  backgroundImage:
+                                      (photo != null && photo.isNotEmpty)
+                                          ? CachedNetworkImageProvider(photo)
                                           : null,
+                                  child: (photo == null || photo.isEmpty)
+                                      ? Text(
+                                          name.isNotEmpty
+                                              ? name[0].toUpperCase()
+                                              : '?',
+                                        )
+                                      : null,
                                 ),
                                 title: Text(name, style: AppTextStyles.body),
                                 trailing: IconButton(
@@ -1417,35 +1064,24 @@ class _SentRequests extends ConsumerWidget {
                               const {
                                 'displayName': 'User',
                                 'photoURL': null,
-                                'visibility': null,
                               };
-                          final isRestricted =
-                              data['visibility'] == 'restricted';
-                          final name = isRestricted
-                              ? 'friends_private_profile'.tr()
-                              : (data['displayName'] ?? 'User');
+                          final name = data['displayName'] ?? 'User';
                           final photo = data['photoURL'];
                           return ListTile(
                             contentPadding: EdgeInsets.zero,
                             leading: CircleAvatar(
                               backgroundColor: AppColors.superlightgrey,
                               foregroundColor: AppColors.primary,
-                              backgroundImage: (!isRestricted &&
-                                      photo != null &&
-                                      photo.isNotEmpty)
-                                  ? CachedNetworkImageProvider(photo)
-                                  : null,
-                              child: isRestricted
+                              backgroundImage:
+                                  (photo != null && photo.isNotEmpty)
+                                      ? CachedNetworkImageProvider(photo)
+                                      : null,
+                              child: (photo == null || photo.isEmpty)
                                   ? const Icon(
-                                      Icons.lock_outline,
+                                      Icons.outbox,
                                       color: AppColors.primary,
                                     )
-                                  : (photo == null || photo.isEmpty)
-                                      ? const Icon(
-                                          Icons.outbox,
-                                          color: AppColors.primary,
-                                        )
-                                      : null,
+                                  : null,
                             ),
                             title: Text(
                               name,
@@ -1461,9 +1097,19 @@ class _SentRequests extends ConsumerWidget {
                             ),
                             trailing: TextButton(
                               onPressed: () async {
-                                await ref
+                                final ok = await ref
                                     .read(friendsActionsProvider)
-                                    .declineFriendRequest(toUid);
+                                    .cancelFriendRequest(toUid);
+                                if (!context.mounted) return;
+                                showFloatingSnack(
+                                  context,
+                                  message: ok
+                                      ? 'friends_request_declined'.tr()
+                                      : 'friends_request_failed'.tr(),
+                                  backgroundColor:
+                                      ok ? AppColors.primary : Colors.red,
+                                  icon: ok ? Icons.cancel : Icons.error_outline,
+                                );
                               },
                               child: Text('cancel'.tr()),
                             ),
@@ -1599,24 +1245,27 @@ class _SuggestionsSectionState extends ConsumerState<_SuggestionsSection> {
 
   Future<void> _sendFriendRequest(String targetUid) async {
     if (!mounted) return;
-    // Capture messenger before async operation to avoid BuildContext warning
     final messenger = ScaffoldMessenger.of(context);
+    bool ok;
     try {
-      await ref.read(friendsActionsProvider).sendFriendRequest(targetUid);
-      if (mounted) {
-        messenger.showSnackBar(
-          SnackBar(content: Text('friends_request_sent'.tr())),
-        );
-        setState(() {
-          _suggestions.removeWhere((s) => s['uid'] == targetUid);
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        messenger.showSnackBar(
-          SnackBar(content: Text('Error: ${e.toString()}')),
-        );
-      }
+      ok = await ref.read(friendsActionsProvider).sendFriendRequest(targetUid);
+    } catch (_) {
+      ok = false;
+    }
+
+    if (!mounted) return;
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          ok ? 'friends_request_sent'.tr() : 'friends_request_failed'.tr(),
+        ),
+      ),
+    );
+
+    if (ok) {
+      setState(() {
+        _suggestions.removeWhere((s) => s['uid'] == targetUid);
+      });
     }
   }
 }
@@ -1797,55 +1446,6 @@ Color _avatarBgFromName(String name) {
   final code = name.codeUnits.fold<int>(0, (a, b) => (a + b) & 0xFF);
   final hue = (code % 360).toDouble();
   return HSLColor.fromAHSL(1, hue, 0.55, 0.55).toColor();
-}
-
-class _QrBottomSheetContent extends ConsumerWidget {
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return AlertDialog(
-      title: Text('friends_my_qr'.tr()),
-      content: FutureBuilder<String?>(
-        future: _generateFriendToken(ref),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const SizedBox(height: 120, child: _FriendsSkeleton());
-          }
-          if (snapshot.hasError || !snapshot.hasData || snapshot.data == null) {
-            return Text('loading_error'.tr());
-          }
-          final token = snapshot.data!;
-          return SizedBox(
-            width: 260,
-            height: 250,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                QrImageView(data: token, version: QrVersions.auto, size: 200.0),
-                const SizedBox(height: 8),
-                Text('friends_qr_hint'.tr(), style: AppTextStyles.small),
-              ],
-            ),
-          );
-        },
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: Text('ok'.tr()),
-        ),
-      ],
-    );
-  }
-
-  Future<String?> _generateFriendToken(WidgetRef ref) async {
-    try {
-      final uid = ref.read(currentUserIdProvider);
-      if (uid == null) return null;
-      return 'friend_${uid}_${DateTime.now().millisecondsSinceEpoch}';
-    } catch (e) {
-      return null;
-    }
-  }
 }
 
 class _RequestsList extends ConsumerStatefulWidget {
@@ -2035,44 +1635,33 @@ class _RequestsListState extends ConsumerState<_RequestsList> {
                                               const {
                                                 'displayName': 'User',
                                                 'photoURL': null,
-                                                'visibility': null,
                                               };
-                                          final isRestricted =
-                                              data['visibility'] ==
-                                                  'restricted';
-                                          final name = isRestricted
-                                              ? 'friends_private_profile'.tr()
-                                              : (data['displayName'] ?? 'User');
+                                          final name =
+                                              data['displayName'] ?? 'User';
                                           final photo = data['photoURL'];
                                           return ListTile(
                                             contentPadding: EdgeInsets.zero,
                                             leading: _AvatarRing(
                                               child: CircleAvatar(
-                                                backgroundColor: isRestricted
-                                                    ? AppColors.superlightgrey
-                                                    : _avatarBgFromName(name),
+                                                backgroundColor:
+                                                    _avatarBgFromName(name),
                                                 foregroundColor: Colors.white,
-                                                backgroundImage: (!isRestricted &&
-                                                        photo != null &&
+                                                backgroundImage: (photo !=
+                                                            null &&
                                                         photo.isNotEmpty)
                                                     ? CachedNetworkImageProvider(
                                                         photo,
                                                       )
                                                     : null,
-                                                child: isRestricted
-                                                    ? const Icon(
-                                                        Icons.lock_outline,
-                                                        color: Colors.white,
+                                                child: (photo == null ||
+                                                        photo.isEmpty)
+                                                    ? Text(
+                                                        name.isNotEmpty
+                                                            ? name[0]
+                                                                .toUpperCase()
+                                                            : '?',
                                                       )
-                                                    : (photo == null ||
-                                                            photo.isEmpty)
-                                                        ? Text(
-                                                            name.isNotEmpty
-                                                                ? name[0]
-                                                                    .toUpperCase()
-                                                                : '?',
-                                                          )
-                                                        : null,
+                                                    : null,
                                               ),
                                             ),
                                             title: Text(
@@ -2082,12 +1671,9 @@ class _RequestsListState extends ConsumerState<_RequestsList> {
                                               overflow: TextOverflow.ellipsis,
                                             ),
                                             subtitle: Text(
-                                              isRestricted
-                                                  ? 'friends_private_profile_request'
-                                                      .tr()
-                                                  : 'friends_request_from'.tr(
-                                                      args: [name],
-                                                    ),
+                                              'friends_request_from'.tr(
+                                                args: [name],
+                                              ),
                                               style: AppTextStyles.small,
                                               maxLines: 1,
                                               overflow: TextOverflow.ellipsis,

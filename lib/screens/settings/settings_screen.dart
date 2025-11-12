@@ -5,7 +5,6 @@ import 'package:move_young/theme/tokens.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:move_young/theme/app_back_button.dart';
 import 'package:move_young/services/system/haptics_provider.dart';
-import 'package:move_young/services/system/profile_settings_provider.dart';
 import 'package:move_young/screens/settings/notification_settings_screen.dart';
 import 'package:move_young/utils/service_error.dart';
 
@@ -19,7 +18,6 @@ class SettingsScreen extends ConsumerStatefulWidget {
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   bool _submitting = false;
   bool _haptics = true;
-  String _visibility = 'public';
 
   @override
   void dispose() {
@@ -260,33 +258,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     await _deleteAccount();
   }
 
-  Future<void> _saveSettings() async {
-    setState(() => _submitting = true);
-    try {
-      final hapticsActions = ref.read(hapticsActionsProvider);
-      if (hapticsActions != null) {
-        await hapticsActions.setEnabled(_haptics);
-      }
-      final uid = ref.read(currentUserIdProvider);
-      if (uid != null && uid.isNotEmpty) {
-        final profileSettingsActions = ref.read(profileSettingsActionsProvider);
-        await profileSettingsActions.setVisibility(_visibility);
-      }
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('settings_prefs_saved'.tr())),
-      );
-    } catch (_) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-            content: Text('loading_error'.tr()), backgroundColor: Colors.red),
-      );
-    } finally {
-      if (mounted) setState(() => _submitting = false);
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     // Watch haptics enabled state reactively
@@ -304,21 +275,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         title: Text('settings'.tr()),
         backgroundColor: AppColors.white,
         elevation: 0,
-        actions: [
-          TextButton(
-            onPressed: _submitting ? null : _saveSettings,
-            style: TextButton.styleFrom(
-              foregroundColor: AppColors.primary,
-              disabledForegroundColor: AppColors.grey,
-            ),
-            child: _submitting
-                ? const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2))
-                : const Text('Save'),
-          ),
-        ],
+        actions: const [],
       ),
       body: SafeArea(
         child: ListView(
@@ -327,143 +284,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             bottom: AppSpacing.lg,
           ),
           children: [
-            _buildSectionCard(
-              title: 'settings_profile'.tr(),
-              child: Builder(builder: (context) {
-                final uid = ref.read(currentUserIdProvider);
-                if (uid == null || uid.isEmpty) {
-                  return Text('guest_user'.tr(),
-                      style: AppTextStyles.smallMuted);
-                }
-                return StreamBuilder<String>(
-                  stream: ref
-                      .read(profileSettingsActionsProvider)
-                      .visibilityStream(uid),
-                  builder: (context, snapshot) {
-                    final value = snapshot.data ?? _visibility;
-                    _visibility = value;
-                    return Column(
-                      children: [
-                        ListTile(
-                          contentPadding: EdgeInsets.zero,
-                          title: Text('settings_profile_visibility'.tr()),
-                          subtitle: Text(
-                            value == 'friends'
-                                ? 'settings_profile_friends_desc'.tr()
-                                : value == 'private'
-                                    ? 'settings_profile_private_desc'.tr()
-                                    : 'settings_profile_public_desc'.tr(),
-                          ),
-                        ),
-                        // ignore: deprecated_member_use
-                        RadioListTile<String>(
-                          value: 'public',
-                          // ignore: deprecated_member_use
-                          groupValue: value,
-                          // ignore: deprecated_member_use
-                          onChanged: (v) => ref
-                              .read(profileSettingsActionsProvider)
-                              .setVisibility('public'),
-                          title: Text('settings_profile_public'.tr()),
-                          contentPadding: EdgeInsets.zero,
-                        ),
-                        // ignore: deprecated_member_use
-                        RadioListTile<String>(
-                          value: 'friends',
-                          // ignore: deprecated_member_use
-                          groupValue: value,
-                          // ignore: deprecated_member_use
-                          onChanged: (v) => ref
-                              .read(profileSettingsActionsProvider)
-                              .setVisibility('friends'),
-                          title: Text('settings_profile_friends'.tr()),
-                          contentPadding: EdgeInsets.zero,
-                        ),
-                        // ignore: deprecated_member_use
-                        RadioListTile<String>(
-                          value: 'private',
-                          // ignore: deprecated_member_use
-                          groupValue: value,
-                          // ignore: deprecated_member_use
-                          onChanged: (v) => ref
-                              .read(profileSettingsActionsProvider)
-                              .setVisibility('private'),
-                          title: Text('settings_profile_private'.tr()),
-                          contentPadding: EdgeInsets.zero,
-                        ),
-                        const Divider(height: 1, color: AppColors.lightgrey),
-                        Builder(builder: (context) {
-                          final uid = ref.read(currentUserIdProvider);
-                          if (uid == null || uid.isEmpty) {
-                            return const SizedBox.shrink();
-                          }
-                          return StreamBuilder<Map<String, dynamic>>(
-                            stream: ref
-                                .read(profileSettingsActionsProvider)
-                                .settingsStream(uid),
-                            builder: (context, snapshot) {
-                              final settings = snapshot.data ?? {};
-                              final showOnline = settings['showOnline'] ?? true;
-                              final visibility =
-                                  settings['visibility'] ?? 'public';
-
-                              final shareEmail = settings['shareEmail'] ?? true;
-
-                              return Column(
-                                children: [
-                                  SwitchListTile(
-                                    value:
-                                        showOnline && visibility != 'private',
-                                    onChanged: visibility == 'private'
-                                        ? null
-                                        : (value) async {
-                                            await ref
-                                                .read(
-                                                    profileSettingsActionsProvider)
-                                                .setShowOnline(value);
-                                          },
-                                    title: Text('settings_show_online'.tr()),
-                                    subtitle: Text(
-                                      visibility == 'private'
-                                          ? 'settings_show_online_disabled_private'
-                                              .tr()
-                                          : 'settings_show_online_desc'.tr(),
-                                    ),
-                                    contentPadding: EdgeInsets.zero,
-                                  ),
-                                  const Divider(
-                                      height: 1, color: AppColors.lightgrey),
-                                  SwitchListTile(
-                                    value:
-                                        shareEmail && visibility != 'private',
-                                    onChanged: visibility == 'private'
-                                        ? null
-                                        : (value) async {
-                                            await ref
-                                                .read(
-                                                    profileSettingsActionsProvider)
-                                                .setShareEmail(value);
-                                          },
-                                    title: Text('settings_share_email'.tr()),
-                                    subtitle: Text(
-                                      visibility == 'private'
-                                          ? 'settings_show_online_disabled_private'
-                                              .tr()
-                                          : 'settings_share_email_desc'.tr(),
-                                    ),
-                                    contentPadding: EdgeInsets.zero,
-                                  ),
-                                ],
-                              );
-                            },
-                          );
-                        }),
-                      ],
-                    );
-                  },
-                );
-              }),
-            ),
             const SizedBox(height: AppSpacing.lg),
             _buildSectionCard(
               title: 'settings_notifications'.tr(),
