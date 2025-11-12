@@ -232,7 +232,10 @@ class FriendsServiceInstance implements IFriendsService {
       });
 
       // Send notification
-      await _notificationService.sendFriendRequestNotification(fromUid, toUid);
+      await _notificationService.sendFriendAcceptedNotification(
+        fromUid,
+        toUid,
+      );
 
       // Clear cache
       _friendsCache.remove('friends_$fromUid');

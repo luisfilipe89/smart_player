@@ -35,6 +35,27 @@
                 }
             }
         },
+        "pendingInviteIndex": {
+            "$uid": {
+                ".read": "auth != null && auth.uid == $uid",
+                "$gameId": {
+                    ".write": "auth != null && ((auth.uid == $uid && (!data.exists() || newData.val() == null || newData.val() == 'pending')) || root.child('games/'+$gameId+'/organizerId').val() === auth.uid)",
+                    ".validate": "newData.val() == 'pending' || newData.val() == null"
+                }
+            }
+        },
+        "emailInvites": {
+            ".read": "auth != null",
+            ".indexOn": [
+                "fromUid",
+                "toEmail",
+                "createdAt"
+            ],
+            "$inviteId": {
+                ".write": "auth != null && ((newData.val() == null && data.child('fromUid').val() === auth.uid) || (newData.val() != null && newData.child('fromUid').val() === auth.uid && (!data.exists() || data.child('fromUid').val() === auth.uid)))",
+                ".validate": "newData.hasChildren(['fromUid','toEmail','createdAt']) && newData.child('fromUid').isString() && newData.child('fromUid').val() === auth.uid && newData.child('toEmail').isString() && (newData.child('createdAt').isNumber() || (newData.child('createdAt').hasChildren(['.sv']) && newData.child('createdAt').child('.sv').val() === 'timestamp'))"
+            }
+        },
         "slots": {
             "$date": {
                 "$field": {
@@ -57,12 +78,12 @@
                 "friendRequests": {
                     "received": {
                         "$fromUid": {
-                            ".write": "auth != null && auth.uid == $fromUid"
+                            ".write": "auth != null && ((auth.uid == $fromUid && newData.val() === true) || (auth.uid == $uid && newData.val() == null))"
                         }
                     },
                     "sent": {
                         "$toUid": {
-                            ".write": "auth != null && auth.uid == $uid"
+                            ".write": "auth != null && ((auth.uid == $uid && (newData.val() === true || newData.val() == null)) || (auth.uid == $toUid && newData.val() == null))"
                         }
                     }
                 },
@@ -128,9 +149,14 @@
             "notifications": {
                 "$id": {
                     ".read": "false",
-                    ".write": "auth != null && ((newData.child('type').val() === 'friend_request' && newData.child('toUid').isString() && newData.child('fromUid').val() === auth.uid) || (newData.child('type').val() === 'game_invite' && newData.child('toUid').isString() && newData.child('gameId').isString() && newData.child('fromUid').val() === auth.uid) || (newData.child('type').val() === 'game_reminder' && newData.child('gameId').isString()))",
+                    ".write": "auth != null && ((newData.child('type').val() === 'friend_request' && newData.child('toUid').isString() && newData.child('fromUid').val() === auth.uid) || (newData.child('type').val() === 'friend_accept' && newData.child('toUid').isString() && newData.child('fromUid').val() === auth.uid) || (newData.child('type').val() === 'game_invite' && newData.child('toUid').isString() && newData.child('gameId').isString() && newData.child('fromUid').val() === auth.uid) || (newData.child('type').val() === 'game_reminder' && newData.child('gameId').isString()))",
                     ".validate": "newData.hasChild('type') && newData.child('type').isString()"
                 }
+            },
+            "$emailId": {
+                ".read": "false",
+                ".write": "auth != null && $emailId != 'notifications'",
+                ".validate": "newData.hasChild('to') && newData.child('to').isString() && newData.child('message').hasChildren(['subject','html','text'])"
             }
         }
     }

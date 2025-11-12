@@ -258,13 +258,32 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
       }
 
       // Normalize Overpass keys for UI consistency
+      String? shortenAddress(dynamic value) {
+        if (value == null) return null;
+        final text = value.toString().trim();
+        if (text.isEmpty) return null;
+        final commaIndex = text.indexOf(',');
+        if (commaIndex == -1) return text;
+        final shortened = text.substring(0, commaIndex).trim();
+        return shortened.isNotEmpty ? shortened : text;
+      }
+
       final fields = rawFields
           .map<Map<String, dynamic>>((f) {
-            final name = f['name'] ?? 'Unnamed Field';
-            final addressSuperShort =
-                f['address_super_short'] ?? f['addressSuperShort'];
             final address =
                 f['address_short'] ?? f['addr:street'] ?? f['address'];
+            final rawAddressSuperShort =
+                f['address_super_short'] ?? f['addressSuperShort'];
+            final condensedAddressSuperShort =
+                shortenAddress(rawAddressSuperShort) ??
+                    shortenAddress(address);
+            final candidateName =
+                (f['name'] ?? condensedAddressSuperShort ?? rawAddressSuperShort)
+                    ?.toString();
+            final name =
+                (candidateName != null && candidateName.trim().isNotEmpty)
+                ? candidateName.trim()
+                : 'Unnamed Field';
             final lat = f['lat'] ?? f['latitude'];
             final lon = f['lon'] ?? f['longitude'];
             final lit = f['lit'] ?? f['lighting'];
@@ -293,7 +312,8 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
               'id': f['id'],
               'name': name,
               'address': address,
-              'addressSuperShort': addressSuperShort ?? address,
+              if (condensedAddressSuperShort != null)
+                'addressSuperShort': condensedAddressSuperShort,
               'latitude': latDouble ?? lat,
               'longitude': lonDouble ?? lon,
               'surface': f['surface'],
@@ -1342,12 +1362,31 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
     );
   }
 
+  IconData? _surfaceIconForSport(String? sport) {
+    switch (sport) {
+      case 'soccer':
+        return Icons.grass;
+      case 'basketball':
+        return Icons.texture;
+      case 'volleyball':
+        return Icons.beach_access;
+      case 'skateboard':
+        return Icons.texture;
+      case 'boules':
+        return Icons.scatter_plot;
+      default:
+        return Icons.landscape;
+    }
+  }
+
   Widget _buildFieldCard({
     required Map<String, dynamic> field,
     required bool isSelected,
     required VoidCallback onTap,
   }) {
-    final surface = field['surface'] ?? 'Unknown';
+    final dynamic rawSurface = field['surface'];
+    final String? surface =
+        rawSurface == null ? null : rawSurface.toString().trim();
     final lighting = field['lighting'] ?? false;
     final addressSuperShort = field['addressSuperShort'] ?? '';
     final distanceMeters = (field['distance'] as num?)?.toDouble();
@@ -1411,14 +1450,49 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
               ),
             if (distanceKm != null && distanceKm.isFinite)
               const SizedBox(height: 4),
-            Text(
-              surface,
-              style: AppTextStyles.superSmall.copyWith(
-                color: AppColors.grey,
-                fontSize: 10,
+            if (_selectedSport != 'table_tennis')
+              Builder(
+                builder: (context) {
+                  final icon = _surfaceIconForSport(_selectedSport);
+                  final surfaceText = surface;
+                  final hasSurfaceText =
+                      surfaceText != null && surfaceText.isNotEmpty;
+                  final displaySurfaceText =
+                      hasSurfaceText ? surfaceText : 'Unknown';
+                  final shouldShowText =
+                      hasSurfaceText || icon != null;
+                  if (!shouldShowText) {
+                    return const SizedBox.shrink();
+                  }
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 2),
+                    child: Row(
+                      children: [
+                        if (icon != null)
+                          Icon(
+                            icon,
+                            size: 12,
+                            color: AppColors.grey,
+                          ),
+                        if (icon != null && shouldShowText)
+                          const SizedBox(width: 4),
+                        if (shouldShowText)
+                          Expanded(
+                            child: Text(
+                              displaySurfaceText,
+                              style: AppTextStyles.superSmall.copyWith(
+                                color: AppColors.grey,
+                                fontSize: 10,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                      ],
+                    ),
+                  );
+                },
               ),
-            ),
-            const SizedBox(height: 2),
             Row(
               children: [
                 Icon(
@@ -1684,8 +1758,35 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                                                     }
                                                     return {
                                                       'name':
-                                                          field['name'] ??
-                                                          'Unnamed Field',
+                                                        (field['name']
+                                                                    ?.toString()
+                                                                    .trim()
+                                                                    .isNotEmpty ==
+                                                                true)
+                                                            ? field['name']
+                                                                .toString()
+                                                                .trim()
+                                                            : (field[
+                                                                        'address_super_short']
+                                                                    ?.toString()
+                                                                    .trim()
+                                                                    .isNotEmpty ==
+                                                                true)
+                                                                ? field[
+                                                                        'address_super_short']
+                                                                    .toString()
+                                                                    .trim()
+                                                                : (field[
+                                                                            'addressSuperShort']
+                                                                        ?.toString()
+                                                                        .trim()
+                                                                        .isNotEmpty ==
+                                                                    true)
+                                                                    ? field[
+                                                                            'addressSuperShort']
+                                                                        .toString()
+                                                                        .trim()
+                                                                    : 'Unnamed Field',
                                                       'lat': latDouble,
                                                       'lon': lonDouble,
                                                       'lit':

@@ -945,78 +945,172 @@ class CloudGamesServiceInstance {
   }
 
   // Watch invited games for the current user in real-time
-  // Uses Firebase Query to automatically watch all games with pending invites
-  // This matches the old fast behavior where the query automatically emits on any game change
+  // Uses a dedicated pendingInviteIndex to avoid slow unindexed queries
   Stream<List<Game>> watchInvitedGames() {
     final userId = _currentUserId;
     if (userId == null) return Stream.value([]);
 
-    // Use Firebase Query to watch all games with pending invites for this user
-    // This automatically emits when ANY matching game changes (including cancellations)
-    // This is the same approach as the old version and is more efficient and reliable
-    final Query query =
-        _gamesRef.orderByChild('invites/$userId/status').equalTo('pending');
+    final DatabaseReference pendingIndexRef =
+        _database.ref('${DbPaths.pendingInviteIndex}/$userId');
 
-    NumberedLogger.d('🔍 Starting watchInvitedGames query for user: $userId');
-    NumberedLogger.d('🔍 Query path: invites/$userId/status = pending');
+    StreamSubscription<DatabaseEvent>? indexSubscription;
+    final Map<String, StreamSubscription<DatabaseEvent>> gameSubscriptions = {};
+    final Map<String, Game> gamesCache = {};
 
-    return query.onValue
-        .map((event) {
-          NumberedLogger.d(
-              '🔔 Query event received: exists=${event.snapshot.exists}');
-          if (!event.snapshot.exists) {
-            NumberedLogger.d('📭 Query returned no results');
-            return <Game>[];
+    late StreamController<List<Game>> controller;
+
+    void emitGames() {
+      final games = gamesCache.values
+          .where((game) => game.isUpcoming && game.isActive)
+          .toList()
+        ..sort((a, b) => a.dateTime.compareTo(b.dateTime));
+      if (!controller.isClosed && controller.hasListener) {
+        controller.add(games);
+      }
+    }
+
+    Future<void> handleIndexEvent(DatabaseEvent event) async {
+      final Set<String> pendingGameIds = {};
+      if (event.snapshot.exists) {
+        final data = Map<dynamic, dynamic>.from(event.snapshot.value as Map);
+        data.forEach((key, value) {
+          final status = value?.toString() ?? '';
+          if (status == 'pending') {
+            pendingGameIds.add(key.toString());
           }
+        });
+      }
 
-          final List<Game> invited = [];
-          NumberedLogger.d(
-              '🔍 Parsing ${event.snapshot.children.length} games from query');
+      await _ensurePendingInviteIndexForUser(userId, pendingGameIds);
 
-          // Parse all games from the query result
-          // Firebase query automatically emits when ANY matching game changes
-          for (final child in event.snapshot.children) {
+      final List<String> toRemove = gameSubscriptions.keys
+          .where((id) => !pendingGameIds.contains(id))
+          .toList();
+      for (final gameId in toRemove) {
+        await gameSubscriptions[gameId]?.cancel();
+        gameSubscriptions.remove(gameId);
+        gamesCache.remove(gameId);
+      }
+
+      for (final gameId in pendingGameIds) {
+        if (gameSubscriptions.containsKey(gameId)) {
+          continue;
+        }
+
+        final sub = _gamesRef.child(gameId).onValue.listen(
+          (gameEvent) {
+            if (!gameEvent.snapshot.exists) {
+              gamesCache.remove(gameId);
+              emitGames();
+              return;
+            }
+
             try {
-              final Map<dynamic, dynamic> gameData =
-                  child.value as Map<dynamic, dynamic>;
+              final gameMap = Map<String, dynamic>.from(
+                  gameEvent.snapshot.value as Map<dynamic, dynamic>);
+              final game = Game.fromJson(gameMap);
 
-              // Check if user has pending invite
-              final invites = gameData['invites'];
-              if (invites is Map && invites.containsKey(userId)) {
-                final entry = invites[userId];
-                if (entry is Map &&
-                    (entry['status']?.toString() ?? 'pending') == 'pending') {
-                  final game =
-                      Game.fromJson(Map<String, dynamic>.from(gameData));
-                  // Only include active upcoming games - cancelled games should disappear
-                  if (game.isUpcoming && game.isActive) {
-                    invited.add(game);
-                  }
+              final invites = gameMap['invites'];
+              bool isPending = false;
+              if (invites is Map) {
+                final userInvite = invites[userId];
+                if (userInvite is Map) {
+                  isPending =
+                      (userInvite['status']?.toString() ?? 'pending') ==
+                          'pending';
+                } else if (userInvite != null) {
+                  isPending = userInvite.toString() == 'pending';
                 }
               }
+
+              if (isPending && game.isUpcoming && game.isActive) {
+                gamesCache[gameId] = game;
+              } else {
+                gamesCache.remove(gameId);
+              }
             } catch (e) {
-              NumberedLogger.w('Error parsing invited game from query: $e');
+              NumberedLogger.w('Error parsing invited game $gameId: $e');
+              gamesCache.remove(gameId);
             }
+
+            emitGames();
+          },
+          onError: (error) {
+            NumberedLogger.e('Error watching invited game $gameId: $error');
+          },
+        );
+
+        gameSubscriptions[gameId] = sub;
+      }
+
+      emitGames();
+    }
+
+    controller = StreamController<List<Game>>.broadcast(
+      onListen: () {
+        NumberedLogger.d(
+            '🔍 Watching pendingInviteIndex for user: $userId');
+        controller.add(<Game>[]);
+        indexSubscription = pendingIndexRef.onValue.listen(
+          (event) {
+            unawaited(handleIndexEvent(event));
+          },
+          onError: (error) {
+            NumberedLogger.e('Error watching pending invite index: $error');
+          },
+        );
+      },
+      onCancel: () async {
+        await indexSubscription?.cancel();
+        indexSubscription = null;
+        for (final sub in gameSubscriptions.values) {
+          await sub.cancel();
+        }
+        gameSubscriptions.clear();
+        gamesCache.clear();
+      },
+    );
+
+    return controller.stream.transform(_distinctGamesTransformer());
+  }
+
+  Future<void> _ensurePendingInviteIndexForUser(
+      String userId, Set<String> pendingGameIds) async {
+    try {
+      final invitesSnapshot = await _usersRef
+          .child(DbPaths.userGameInvites(userId))
+          .get();
+      if (!invitesSnapshot.exists) {
+        return;
+      }
+
+      final invitesData =
+          Map<dynamic, dynamic>.from(invitesSnapshot.value as Map);
+      final Map<String, Object?> updates = {};
+
+      invitesData.forEach((gameId, inviteValue) {
+        final id = gameId.toString();
+        if (pendingGameIds.contains(id)) {
+          return;
+        }
+
+        if (inviteValue is Map) {
+          final inviteMap = Map<dynamic, dynamic>.from(inviteValue);
+          final status = inviteMap['status']?.toString() ?? 'pending';
+          if (status == 'pending') {
+            updates['${DbPaths.pendingInviteIndex}/$userId/$id'] = 'pending';
+            pendingGameIds.add(id);
           }
+        }
+      });
 
-          // Sort by date (earliest first) - matches old behavior
-          invited.sort((a, b) => a.dateTime.compareTo(b.dateTime));
-
-          NumberedLogger.d(
-              '📤 Query emitted ${invited.length} active upcoming invited games');
-
-          return invited;
-        })
-        .transform(StreamTransformer<List<Game>, List<Game>>.fromHandlers(
-          handleData: (data, sink) {
-            sink.add(data);
-          },
-          handleError: (error, stackTrace, sink) {
-            NumberedLogger.e('Error in watchInvitedGames: $error');
-            sink.add(<Game>[]);
-          },
-        ))
-        .transform(_distinctGamesTransformer());
+      if (updates.isNotEmpty) {
+        await _database.ref().update(updates);
+      }
+    } catch (e) {
+      NumberedLogger.w(
+          'Unable to backfill pending invite index for user $userId: $e');
+    }
   }
 
   // Watch games organized by current user for real-time updates
@@ -1421,6 +1515,7 @@ class CloudGamesServiceInstance {
           await _gamesRef.child(gameId).child('invites').child(userId).get();
       if (inviteCheckSnapshot.exists) {
         updates['${DbPaths.games}/$gameId/invites/$userId/status'] = 'accepted';
+        updates['${DbPaths.pendingInviteIndex}/$userId/$gameId'] = null;
       }
 
       // Remove from user's invite list (this will trigger badge update)
@@ -1484,6 +1579,7 @@ class CloudGamesServiceInstance {
           await _gamesRef.child(gameId).child('invites').child(userId).get();
       if (inviteCheckSnapshot.exists) {
         updates['${DbPaths.games}/$gameId/invites/$userId/status'] = 'left';
+        updates['${DbPaths.pendingInviteIndex}/$userId/$gameId'] = null;
       }
 
       // Commit updates atomically
@@ -1550,6 +1646,7 @@ class CloudGamesServiceInstance {
           await _gamesRef.child(gameId).child('invites').child(userId).get();
       if (inviteCheckSnapshot.exists) {
         updates['${DbPaths.games}/$gameId/invites/$userId/status'] = 'declined';
+        updates['${DbPaths.pendingInviteIndex}/$userId/$gameId'] = null;
       }
 
       // Remove from user's invite list (this will trigger badge update)
@@ -1644,6 +1741,11 @@ class CloudGamesServiceInstance {
           'sport': game.sport,
           'date': inviteDateString,
         };
+
+        // Maintain pending invite index for efficient queries
+        final pendingIndexPath =
+            '${DbPaths.pendingInviteIndex}/$friendUid/$gameId';
+        updates[pendingIndexPath] = 'pending';
 
         NumberedLogger.d(
             'Prepared invite paths: game=$gameInvitePath, user=$userInvitePath');

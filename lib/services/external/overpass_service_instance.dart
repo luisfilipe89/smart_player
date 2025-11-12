@@ -273,11 +273,30 @@ out center tags qt;
             return {}; // skip items without coords
           }
 
+          final rawName = tags['name'];
+          final resolvedName = (rawName is String && rawName.trim().isNotEmpty)
+              ? rawName.trim()
+              : (rawName is! String &&
+                      rawName != null &&
+                      rawName.toString().trim().isNotEmpty)
+                  ? rawName.toString().trim()
+                  : (tags['address_super_short'] is String &&
+                          (tags['address_super_short'] as String)
+                              .trim()
+                              .isNotEmpty)
+                      ? (tags['address_super_short'] as String).trim()
+                      : (tags['addr:street'] is String &&
+                              (tags['addr:street'] as String)
+                                  .trim()
+                                  .isNotEmpty)
+                          ? (tags['addr:street'] as String).trim()
+                          : 'Unnamed Field';
+
           return {
             'id': elementId.isNotEmpty
                 ? '${elementType.isNotEmpty ? '$elementType:' : ''}$elementId'
                 : null,
-            'name': tags['name'] ?? 'Unnamed Field',
+            'name': resolvedName,
             'lat': lat,
             'lon': lon,
             'surface': tags['surface'],

@@ -4,6 +4,9 @@ abstract class INotificationService {
   /// Send a friend request notification
   Future<void> sendFriendRequestNotification(String toUid, String fromUid);
 
+  /// Notify that a friend request was accepted
+  Future<void> sendFriendAcceptedNotification(String toUid, String fromUid);
+
   /// Send a game invite notification
   Future<void> sendGameInviteNotification(String toUid, String gameId);
 

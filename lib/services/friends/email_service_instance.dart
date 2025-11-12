@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:move_young/db/db_paths.dart';
@@ -28,21 +29,24 @@ class EmailServiceInstance {
       // Generate unique email ID
       final String emailId = const Uuid().v4();
 
-      // Create email document for Firebase Trigger Email extension
-      final Map<String, dynamic> emailData = {
+      final htmlBody = _generateInviteEmailHtml(
+        inviterName: inviterName,
+        inviterEmail: inviterEmail,
+        recipientName: recipientName,
+      );
+      final textBody = _generateInviteEmailText(
+        inviterName: inviterName,
+        inviterEmail: inviterEmail,
+        recipientName: recipientName,
+      );
+
+      // Payload stored in Realtime Database (legacy pipeline / audit)
+      final Map<String, dynamic> realtimeEmailData = {
         'to': recipientEmail,
         'message': {
           'subject': 'friends_invite_email_title'.tr(),
-          'html': _generateInviteEmailHtml(
-            inviterName: inviterName,
-            inviterEmail: inviterEmail,
-            recipientName: recipientName,
-          ),
-          'text': _generateInviteEmailText(
-            inviterName: inviterName,
-            inviterEmail: inviterEmail,
-            recipientName: recipientName,
-          ),
+          'html': htmlBody,
+          'text': textBody,
         },
         'template': {
           'name': 'friend_invite',
@@ -59,8 +63,45 @@ class EmailServiceInstance {
         'status': 'pending',
       };
 
+      if (inviterEmail.isNotEmpty) {
+        realtimeEmailData['replyTo'] = inviterEmail;
+      }
+
       // Write to mail collection to trigger email extension
-      await _db.ref('${DbPaths.mail}/$emailId').set(emailData);
+      await _db.ref('${DbPaths.mail}/$emailId').set(realtimeEmailData);
+
+      // Mirror into Firestore for the Trigger Email extension
+      final firestoreEmailData = {
+        'to': [recipientEmail],
+        'message': {
+          'subject': 'friends_invite_email_title'.tr(),
+          'html': htmlBody,
+          'text': textBody,
+        },
+        'template': {
+          'name': 'friend_invite',
+          'data': {
+            'inviterName': inviterName,
+            'inviterEmail': inviterEmail,
+            'recipientName': recipientName,
+            'appName': 'SMARTPLAYER',
+            'inviteLink':
+                'https://smartplayer.app/invite?email=${Uri.encodeComponent(recipientEmail)}',
+          },
+        },
+        'createdAt': Timestamp.now(),
+        'status': 'pending',
+        'fromUid': user.uid,
+      };
+
+      if (inviterEmail.isNotEmpty) {
+        firestoreEmailData['replyTo'] = inviterEmail;
+      }
+
+      await FirebaseFirestore.instance
+          .collection(DbPaths.mail)
+          .doc(emailId)
+          .set(firestoreEmailData);
 
       // Store a lightweight rate-limit record
       await _db.ref('${DbPaths.emailInvites}/$emailId').set({
@@ -75,36 +116,12 @@ class EmailServiceInstance {
     }
   }
 
-  /// Check if an invite to [email] can be sent now (simple rate limiting).
-  /// Allows one invite per hour per recipient from the same sender.
+  /// Check if an invite to [email] can be sent now.
+  /// Rate limiting has been disabled, so this always returns true when the user is authenticated.
   Future<bool> canSendInviteToEmail(String email) async {
     try {
       final user = _auth.currentUser;
       if (user == null) return false;
-
-      final now = DateTime.now().millisecondsSinceEpoch;
-      final oneHourAgo = now - (60 * 60 * 1000);
-
-      // Simplified query to avoid requiring an index on `fromUid`.
-      // Fetch all invites and filter client-side by `fromUid`, `toEmail`, and time window.
-      final invitesRef = _db.ref(DbPaths.emailInvites);
-      final snapshot = await invitesRef.get();
-
-      if (snapshot.exists) {
-        final Map data = snapshot.value as Map;
-        for (final invite in data.values) {
-          if (invite is Map) {
-            final fromUid = invite['fromUid']?.toString() ?? '';
-            final inviteEmail = invite['toEmail']?.toString() ?? '';
-            final inviteTime = invite['createdAt'] as int? ?? 0;
-            if (fromUid == user.uid &&
-                inviteEmail.toLowerCase() == email.toLowerCase() &&
-                inviteTime > oneHourAgo) {
-              return false;
-            }
-          }
-        }
-      }
 
       return true;
     } catch (e) {

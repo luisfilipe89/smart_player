@@ -430,6 +430,22 @@ class NotificationServiceInstance implements INotificationService {
   }
 
   @override
+  Future<void> sendFriendAcceptedNotification(
+      String toUid, String fromUid) async {
+    try {
+      await _db.ref('mail/notifications').push().set({
+        'type': 'friend_accept',
+        'toUid': toUid,
+        'fromUid': fromUid,
+        'ts': DateTime.now().toIso8601String(),
+      });
+      NumberedLogger.i('Queued friend accepted notification to $toUid');
+    } catch (e) {
+      NumberedLogger.e('Error sending friend accepted notification: $e');
+    }
+  }
+
+  @override
   Future<void> sendGameInviteNotification(String toUid, String gameId) async {
     try {
       await _db.ref('mail/notifications').push().set({

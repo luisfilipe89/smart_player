@@ -154,6 +154,8 @@ class NotificationActions {
       );
   Future<void> sendFriendRequestNotification(String toUid, String fromUid) =>
       _notificationService.sendFriendRequestNotification(toUid, fromUid);
+  Future<void> sendFriendAcceptedNotification(String toUid, String fromUid) =>
+      _notificationService.sendFriendAcceptedNotification(toUid, fromUid);
   Future<void> sendGameInviteNotification(String toUid, String gameId) =>
       _notificationService.sendGameInviteNotification(toUid, gameId);
   Future<void> sendGameReminderNotification(String gameId, DateTime gameTime) =>

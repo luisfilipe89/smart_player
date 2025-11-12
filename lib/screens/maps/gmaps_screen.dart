@@ -30,6 +30,7 @@ class _GenericMapScreenState extends State<GenericMapScreen> {
   String? _locationError;
   String? _selectedMarkerId;
   final Set<Marker> _markers = {};
+  LatLng? _fallbackCameraTarget;
 
   //Local helper for capitalization
   String _titleCase(String s) {
@@ -42,6 +43,14 @@ class _GenericMapScreenState extends State<GenericMapScreen> {
   @override
   void initState() {
     super.initState();
+    if (widget.locations.isNotEmpty) {
+      // Ensure we render any provided locations even if GPS lookup is slow.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _setLocationMarkers();
+        }
+      });
+    }
     _initializeMap();
   }
 
@@ -63,8 +72,31 @@ class _GenericMapScreenState extends State<GenericMapScreen> {
     }
   }
 
+  LatLng? _parseLatLng(Map<String, dynamic> loc) {
+    double? toDouble(dynamic value) {
+      if (value is num) return value.toDouble();
+      return double.tryParse(value?.toString() ?? '');
+    }
+
+    final latValue = loc['lat'] ?? loc['latitude'];
+    final lonValue = loc['lon'] ?? loc['longitude'];
+    final parsedLat = toDouble(latValue);
+    final parsedLon = toDouble(lonValue);
+
+    if (parsedLat == null || parsedLon == null) return null;
+    return LatLng(parsedLat, parsedLon);
+  }
+
   void _fitMapToBounds(List<LatLng> positions) {
-    if (_mapController == null || positions.length < 2) return;
+    if (_mapController == null || positions.isEmpty) return;
+
+    if (positions.length == 1) {
+      _mapController!.animateCamera(
+        CameraUpdate.newLatLngZoom(positions.first, _defaultZoom),
+      );
+      return;
+    }
+
     final bounds = LatLngBounds(
       southwest: LatLng(
         positions.map((p) => p.latitude).reduce((a, b) => a < b ? a : b),
@@ -83,15 +115,15 @@ class _GenericMapScreenState extends State<GenericMapScreen> {
     final positions = <LatLng>[];
 
     for (var loc in widget.locations) {
-      final parsedLat = double.tryParse(loc['lat'].toString());
-      final parsedLon = double.tryParse(loc['lon'].toString());
-      if (parsedLat == null || parsedLon == null) continue;
+      final position = _parseLatLng(loc);
+      if (position == null) continue;
 
-      final position = LatLng(parsedLat, parsedLon);
+      _fallbackCameraTarget ??= position;
       positions.add(position);
 
-      final lit = loc['lit'] == 'yes' || loc['lit'] == true;
-      final markerId = '$parsedLat-$parsedLon';
+      final rawLit = loc['lit'] ?? loc['lighting'];
+      final lit = rawLit == 'yes' || rawLit == true;
+      final markerId = '${position.latitude}-${position.longitude}';
       final isSelected = markerId == _selectedMarkerId;
 
       final markerColor = BitmapDescriptor.defaultMarkerWithHue(
@@ -151,46 +183,99 @@ class _GenericMapScreenState extends State<GenericMapScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final initialTarget = _userPosition != null
+        ? LatLng(_userPosition!.latitude, _userPosition!.longitude)
+        : _fallbackCameraTarget ??
+            (widget.locations.isNotEmpty
+                ? (_parseLatLng(widget.locations.first) ??
+                    const LatLng(52.0907, 5.1214))
+                : const LatLng(52.0907, 5.1214));
+
+    final canRenderMap =
+        _userPosition != null || _fallbackCameraTarget != null;
+
     return Scaffold(
       appBar: AppBar(title: Text(widget.title)),
       body: _locationError != null
-          ? _LocationErrorView(
+          ? (!canRenderMap
+              ? _LocationErrorView(
               message: _locationError!,
               onOpenSettings: () async {
                 await LocationServiceInstance().openSettings();
               },
               onRetry: _initializeMap,
             )
-          : _userPosition == null
-              ? const Center(child: CircularProgressIndicator())
               : Stack(
                   children: [
                     GoogleMap(
                       initialCameraPosition: CameraPosition(
-                        target: LatLng(
-                          _userPosition!.latitude,
-                          _userPosition!.longitude,
-                        ),
+                        target: initialTarget,
                         zoom: _defaultZoom,
                       ),
-                      myLocationEnabled: true,
-                      myLocationButtonEnabled: true,
+                      myLocationEnabled: _userPosition != null,
+                      myLocationButtonEnabled: _userPosition != null,
                       markers: _markers,
-                      onMapCreated: (controller) => _mapController = controller,
+                      onMapCreated: (controller) {
+                        _mapController = controller;
+                        if (_markers.isEmpty) {
+                          _setLocationMarkers();
+                        } else {
+                          _fitMapToBounds(
+                            _markers
+                                .map((m) => m.position)
+                                .toList(growable: false),
+                          );
+                        }
+                      },
                       onTap: (_) {
                         setState(() {
                           _selectedLocation = null;
+                          _selectedMarkerId = null;
                         });
                       },
                     ),
-                    // Place OSM attribution at top-left to avoid clashing
-                    // with Google's logo/attribution on the bottom-left.
                     Positioned(
                       left: 8,
                       top: 8,
+                      right: 8,
+                      child: Material(
+                        color: _locationError == null
+                            ? Colors.transparent
+                            : AppColors.white.withOpacity(0.9),
+                        borderRadius: BorderRadius.circular(6),
+                        child: _locationError == null
+                            ? const SizedBox.shrink()
+                            : Padding(
+                                padding: AppPaddings.allSmall,
+                                child: Row(
+                                  children: [
+                                    const Icon(
+                                      Icons.info_outline,
+                                      size: 18,
+                                      color: AppColors.red,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        _locationError!,
+                                        style: AppTextStyles.small,
+                                      ),
+                                    ),
+                                    TextButton(
+                                      onPressed: _initializeMap,
+                                      child: Text('retry'.tr()),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                      ),
+                    ),
+                    Positioned(
+                      left: 8,
+                      bottom: 8,
                       child: Container(
                         decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.8),
+                          color: Colors.white.withOpacity(0.8),
                           borderRadius: BorderRadius.circular(4),
                         ),
                         padding: AppPaddings.symmSuperSmall,
@@ -201,7 +286,55 @@ class _GenericMapScreenState extends State<GenericMapScreen> {
                       ),
                     ),
                   ],
-                ),
+                ))
+          : (!canRenderMap
+              ? const Center(child: CircularProgressIndicator())
+              : Stack(
+                  children: [
+                    GoogleMap(
+                      initialCameraPosition: CameraPosition(
+                        target: initialTarget,
+                        zoom: _defaultZoom,
+                      ),
+                      myLocationEnabled: _userPosition != null,
+                      myLocationButtonEnabled: _userPosition != null,
+                      markers: _markers,
+                      onMapCreated: (controller) {
+                        _mapController = controller;
+                        if (_markers.isEmpty) {
+                          _setLocationMarkers();
+                        } else {
+                          _fitMapToBounds(
+                            _markers
+                                .map((m) => m.position)
+                                .toList(growable: false),
+                          );
+                        }
+                      },
+                      onTap: (_) {
+                        setState(() {
+                          _selectedLocation = null;
+                          _selectedMarkerId = null;
+                        });
+                      },
+                    ),
+                    Positioned(
+                      left: 8,
+                      top: 8,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.8),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        padding: AppPaddings.symmSuperSmall,
+                        child: const Text(
+                          '© OpenStreetMap contributors (ODbL)',
+                          style: AppTextStyles.superSmall,
+                        ),
+                      ),
+                    ),
+                  ],
+                )),
       bottomSheet: _selectedLocation == null
           ? null
           : SafeArea(

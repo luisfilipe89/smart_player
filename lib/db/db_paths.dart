@@ -6,6 +6,7 @@ class DbPaths {
   static const String games = 'games';
   static const String mail = 'mail';
   static const String emailInvites = 'emailInvites';
+  static const String pendingInviteIndex = 'pendingInviteIndex';
   static const String friendTokens = 'friendTokens';
   static const String reports = 'reports';
 

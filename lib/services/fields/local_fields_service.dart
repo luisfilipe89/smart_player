@@ -43,9 +43,19 @@ class LocalFieldsService {
             return const <String, dynamic>{};
           }
 
+          final rawName =
+              properties['name'] ?? properties['address_super_short'];
+          final resolvedName = (rawName is String && rawName.trim().isNotEmpty)
+              ? rawName.trim()
+              : (rawName is! String &&
+                      rawName != null &&
+                      rawName.toString().trim().isNotEmpty)
+                  ? rawName.toString().trim()
+                  : 'Unnamed Field';
+
           return {
             'id': id,
-            'name': properties['name'] ?? 'Unnamed Field',
+            'name': resolvedName,
             'lat': coords.$1,
             'lon': coords.$2,
             'surface': properties['surface'],
