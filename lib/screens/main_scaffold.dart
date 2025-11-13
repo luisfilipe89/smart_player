@@ -14,6 +14,7 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:move_young/routes/route_registry.dart';
 import 'package:move_young/services/system/haptics_provider.dart';
 import 'package:move_young/widgets/navigation/navigation_utils.dart';
+import 'package:move_young/services/friends/friends_provider.dart';
 
 // ---------------------------- Navigation Controller Scope ----------------------------
 class MainScaffoldController {
@@ -475,13 +476,13 @@ class MyGamesArgs {
 
 // ---------------------------- Bottom Bar Wrapper ----------------------------
 
-class _BottomBar extends StatelessWidget {
+class _BottomBar extends ConsumerWidget {
   const _BottomBar({required this.currentIndex, required this.onTap});
   final int currentIndex;
   final ValueChanged<int> onTap;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return BottomNavigationBar(
       key: ValueKey(context.locale.languageCode),
       currentIndex: currentIndex,
@@ -489,11 +490,78 @@ class _BottomBar extends StatelessWidget {
       type: BottomNavigationBarType.fixed,
       items: [
         BottomNavigationBarItem(icon: Icon(Icons.home), label: 'home'.tr()),
-        BottomNavigationBarItem(icon: Icon(Icons.group), label: 'friends'.tr()),
+        BottomNavigationBarItem(
+          icon: const _FriendsIconWithBadge(),
+          label: 'friends'.tr(),
+        ),
         BottomNavigationBarItem(
             icon: Icon(Icons.sports_soccer), label: 'my_games'.tr()),
         BottomNavigationBarItem(icon: Icon(Icons.event), label: 'agenda'.tr()),
       ],
+    );
+  }
+}
+
+class _FriendsIconWithBadge extends ConsumerWidget {
+  const _FriendsIconWithBadge();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final requestsAsync = ref.watch(watchFriendRequestsReceivedProvider);
+    
+    return requestsAsync.when(
+      data: (requests) {
+        final count = requests.length;
+        if (count == 0) {
+          return const Icon(Icons.group);
+        }
+        
+        return Stack(
+          clipBehavior: Clip.none,
+          children: [
+            const Icon(Icons.group),
+            Positioned(
+              right: -6,
+              top: -6,
+              child: _FriendRequestsBadge(count: count),
+            ),
+          ],
+        );
+      },
+      loading: () => const Icon(Icons.group),
+      error: (_, __) => const Icon(Icons.group),
+    );
+  }
+}
+
+class _FriendRequestsBadge extends StatelessWidget {
+  final int count;
+  const _FriendRequestsBadge({required this.count});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 18,
+      padding: EdgeInsets.symmetric(horizontal: count < 10 ? 4 : 5),
+      constraints: const BoxConstraints(minWidth: 18),
+      decoration: BoxDecoration(
+        color: Colors.red,
+        borderRadius: BorderRadius.circular(9),
+        border: Border.all(color: Colors.white, width: 1.5),
+        boxShadow: const [
+          BoxShadow(color: Colors.black26, blurRadius: 3, offset: Offset(0, 1)),
+        ],
+      ),
+      alignment: Alignment.center,
+      child: Text(
+        count > 99 ? '99+' : count.toString(),
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+        ),
+        textAlign: TextAlign.center,
+      ),
     );
   }
 }

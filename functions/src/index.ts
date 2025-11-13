@@ -1,6 +1,7 @@
 import * as admin from "firebase-admin";
 import { setGlobalOptions } from "firebase-functions/v2";
 import { onUserDeleted } from "firebase-functions/v2/auth";
+import { onDocumentCreated } from "firebase-functions/v2/firestore";
 import { onValueCreated, onValueDeleted, onValueWritten } from "firebase-functions/v2/database";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { onRequest } from "firebase-functions/v2/https";
@@ -9,6 +10,207 @@ import { createHash } from "crypto";
 
 admin.initializeApp();
 setGlobalOptions({ region: "europe-west1" });
+
+const FALLBACK_FIELD_REPORT_EMAIL =
+  process.env.FIELD_REPORTS_EMAIL ||
+  process.env.MUNICIPALITY_REPORT_EMAIL ||
+  "luisfccfigueiredo@gmail.com";
+
+function formatDateForEmail(date: Date): string {
+  return date.toLocaleString("nl-NL", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function renderFieldReportHtml(report: any, createdAt: Date) {
+  const contactBlock =
+    report.allowContact && report.contactEmail
+      ? `<p><strong>Contact:</strong> ${report.contactName || report.contactEmail
+        } (${report.contactEmail})</p>`
+      : "";
+
+  const locationBlock = [
+    report.fieldName ? `<p><strong>Field:</strong> ${report.fieldName}</p>` : "",
+    report.fieldAddress ? `<p><strong>Address:</strong> ${report.fieldAddress}</p>` : "",
+    report.fieldId ? `<p><strong>Field ID:</strong> ${report.fieldId}</p>` : "",
+  ]
+    .filter(Boolean)
+    .join("");
+
+  return `
+    <div style="font-family: Arial, sans-serif; line-height:1.6;">
+      <h2 style="margin-bottom: 8px;">New field issue report</h2>
+      ${locationBlock}
+      <p><strong>Category:</strong> ${report.category || "-"}</p>
+      <p><strong>Submitted:</strong> ${formatDateForEmail(createdAt)}</p>
+      <p><strong>Description:</strong></p>
+      <p style="white-space:pre-wrap;background:#f7f7f7;padding:12px;border-radius:6px;border:1px solid #eee;">
+        ${report.description || "-"}
+      </p>
+      ${contactBlock}
+      <hr style="margin:24px 0;border:none;border-top:1px solid #e0e0e0;" />
+      <p style="font-size:12px;color:#888;">
+        Reported via SMARTPLAYER. Document ID: ${report._id}
+      </p>
+    </div>
+  `;
+}
+
+function renderFieldReportText(report: any, createdAt: Date) {
+  const lines: string[] = [
+    "New field issue report",
+    `Field: ${report.fieldName || "-"}`,
+    `Address: ${report.fieldAddress || "-"}`,
+    `Field ID: ${report.fieldId || "-"}`,
+    `Category: ${report.category || "-"}`,
+    `Submitted: ${formatDateForEmail(createdAt)}`,
+    "",
+    "Description:",
+    report.description || "-",
+  ];
+
+  if (report.allowContact && report.contactEmail) {
+    lines.push(
+      "",
+      `Contact: ${report.contactName || report.contactEmail} (${report.contactEmail})`
+    );
+  }
+
+  lines.push(
+    "",
+    `Reported via SMARTPLAYER. Document ID: ${report._id}`
+  );
+
+  return lines.join("\n");
+}
+
+// Helper function to process a field report (used by both trigger and manual call)
+async function processFieldReport(report: any, reportId: string) {
+  const createdAt =
+    report.createdAt?.toDate?.() ??
+    (report.createdAt?._seconds
+      ? new Date(report.createdAt._seconds * 1000)
+      : new Date());
+
+  const payload = {
+    _id: reportId,
+    ...report,
+  };
+
+  const targetEmail =
+    (report.targetEmail && String(report.targetEmail).trim()) ||
+    FALLBACK_FIELD_REPORT_EMAIL;
+
+  const htmlBody = renderFieldReportHtml(payload, createdAt);
+  const textBody = renderFieldReportText(payload, createdAt);
+
+  const mailRef = admin.firestore().collection("mail").doc(reportId);
+  const mailData: Record<string, any> = {
+    to: [targetEmail],
+    message: {
+      subject: `Field report: ${report.fieldName || report.fieldId || "New issue"}`,
+      html: htmlBody,
+      text: textBody,
+    },
+    reportId,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    status: "pending",
+    meta: {
+      fieldId: report.fieldId || null,
+      category: report.category || null,
+    },
+  };
+
+  if (report.allowContact && report.contactEmail) {
+    mailData.replyTo = report.contactEmail;
+  }
+
+  await mailRef.set(mailData);
+  console.log(`Queued field report email for ${reportId} to ${targetEmail}`);
+  
+  // Update the fieldReports document to mark it as queued
+  await admin.firestore()
+    .collection("fieldReports")
+    .doc(reportId)
+    .update({
+      status: "queued",
+      emailQueuedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+}
+
+export const onFieldReportCreated = onDocumentCreated(
+  "fieldReports/{reportId}",
+  async (event) => {
+    const report = event.data?.data();
+    const reportId = event.params.reportId as string;
+    if (!report) {
+      console.log("Field report created without data, skipping.");
+      return;
+    }
+
+    try {
+      await processFieldReport(report, reportId);
+    } catch (error) {
+      console.error("Failed to queue field report email:", error);
+      // Mark as failed in the fieldReports document
+      try {
+        await admin.firestore()
+          .collection("fieldReports")
+          .doc(reportId)
+          .update({
+            status: "failed",
+            emailError: String(error),
+          });
+      } catch (updateError) {
+        console.error("Failed to update fieldReports status:", updateError);
+      }
+      throw error;
+    }
+  }
+);
+
+// Manual HTTP endpoint to process stuck pending reports
+export const processPendingFieldReport = onRequest(
+  {
+    region: "europe-west1",
+    cors: true,
+  },
+  async (req, res) => {
+    const reportId = req.query.reportId as string;
+    if (!reportId) {
+      res.status(400).json({ error: "reportId query parameter required" });
+      return;
+    }
+
+    try {
+      const reportDoc = await admin.firestore()
+        .collection("fieldReports")
+        .doc(reportId)
+        .get();
+
+      if (!reportDoc.exists) {
+        res.status(404).json({ error: "Report not found" });
+        return;
+      }
+
+      const report = reportDoc.data();
+      if (!report) {
+        res.status(404).json({ error: "Report data not found" });
+        return;
+      }
+
+      await processFieldReport(report, reportId);
+      res.json({ success: true, message: `Report ${reportId} queued for email` });
+    } catch (error: any) {
+      console.error("Error processing pending report:", error);
+      res.status(500).json({ error: error?.message || "Unknown error" });
+    }
+  }
+);
 
 // Consume client-queued notifications at /mail/notifications and fan-out
 // to per-user notifications that are then pushed via sendNotification above.
@@ -46,6 +248,22 @@ export const onMailNotificationCreate = onValueCreated(
 
         await db.ref(`/users/${toUid}/notifications/${notificationId}`).set({
           type: "friend_request",
+          data: { fromUid, fromName },
+          timestamp: now,
+          read: false,
+        });
+      } else if (type === "friend_accept" && toUid) {
+        // Resolve fromName best-effort
+        let fromName = "Someone";
+        if (fromUid) {
+          try {
+            const user = await admin.auth().getUser(fromUid);
+            if (user.displayName) fromName = user.displayName;
+          } catch (_) { }
+        }
+
+        await db.ref(`/users/${toUid}/notifications/${notificationId}`).set({
+          type: "friend_request_accepted",
           data: { fromUid, fromName },
           timestamp: now,
           read: false,

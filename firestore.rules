@@ -1,0 +1,25 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    match /fieldReports/{reportId} {
+      allow create: if request.auth != null
+        && request.resource.data.fieldId is string
+        && request.resource.data.fieldName is string
+        && (!request.resource.data.keys().hasAny(['fieldAddress'])
+            || request.resource.data.fieldAddress is string)
+        && request.resource.data.category is string
+        && request.resource.data.description is string
+        && request.resource.data.description.size() >= 10
+        && request.resource.data.allowContact is bool;
+
+      allow read, update, delete: if false;
+    }
+
+    // Deny all other access by default.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
+

@@ -10,6 +10,7 @@ import 'package:move_young/services/games/cloud_games_provider.dart';
 import 'package:move_young/services/system/haptics_provider.dart';
 import 'package:move_young/widgets/navigation/navigation_utils.dart';
 import 'package:move_young/screens/games/game_detail_screen.dart';
+import 'package:move_young/screens/maps/gmaps_screen.dart';
 import 'dart:async';
 import 'package:move_young/screens/main_scaffold.dart';
 
@@ -573,6 +574,29 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
                   ],
                 ),
                 const SizedBox(height: AppHeights.reg),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton.icon(
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 6),
+                      minimumSize: const Size(0, 32),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    onPressed: () {
+                      ref.read(hapticsActionsProvider)?.selectionClick();
+                      _openReportForGame(currentGame);
+                    },
+                    icon: const Icon(Icons.report_problem_outlined, size: 14),
+                    label: Text(
+                      'field_report_button'.tr(),
+                      style: AppTextStyles.small.copyWith(
+                        color: AppColors.blue,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: AppHeights.small),
                 SizedBox(
                   width: double.infinity,
                   child: _buildGameActions(currentGame),
@@ -582,6 +606,40 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
           ),
         ),
       ),
+    );
+  }
+
+  Future<void> _openReportForGame(Game game) async {
+    final fieldIdRaw = (game.fieldId ?? '').trim();
+    final latStr = game.latitude?.toString();
+    final lonStr = game.longitude?.toString();
+    final fieldId = fieldIdRaw.isNotEmpty
+        ? fieldIdRaw
+        : (latStr != null && lonStr != null
+            ? 'loc:$latStr:$lonStr'
+            : 'game:${game.id}');
+
+    final locationName = game.location.trim().isNotEmpty
+        ? game.location.trim()
+        : 'unnamed_field'.tr();
+    final rawAddress = game.address?.trim() ?? '';
+    final fieldAddress =
+        rawAddress.isNotEmpty ? rawAddress : (game.location.trim().isNotEmpty ? game.location.trim() : null);
+
+    final result = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => FieldReportSheet(
+        fieldId: fieldId,
+        fieldName: locationName,
+        fieldAddress: fieldAddress,
+      ),
+    );
+
+    if (!mounted || result != true) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('field_report_submitted'.tr())),
     );
   }
 

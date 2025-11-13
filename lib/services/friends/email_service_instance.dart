@@ -25,6 +25,8 @@ class EmailServiceInstance {
           user.displayName ?? _deriveNameFromEmail(user.email) ?? 'User';
       final String inviterEmail = user.email ?? '';
       final String recipientName = _deriveNameFromEmail(recipientEmail) ?? '';
+      final String inviteLink =
+          'https://smartplayer.app/invite?email=${Uri.encodeComponent(recipientEmail)}';
 
       // Generate unique email ID
       final String emailId = const Uuid().v4();
@@ -33,11 +35,13 @@ class EmailServiceInstance {
         inviterName: inviterName,
         inviterEmail: inviterEmail,
         recipientName: recipientName,
+        inviteLink: inviteLink,
       );
       final textBody = _generateInviteEmailText(
         inviterName: inviterName,
         inviterEmail: inviterEmail,
         recipientName: recipientName,
+        inviteLink: inviteLink,
       );
 
       // Payload stored in Realtime Database (legacy pipeline / audit)
@@ -55,8 +59,7 @@ class EmailServiceInstance {
             'inviterEmail': inviterEmail,
             'recipientName': recipientName,
             'appName': 'SMARTPLAYER',
-            'inviteLink':
-                'https://smartplayer.app/invite?email=${Uri.encodeComponent(recipientEmail)}',
+            'inviteLink': inviteLink,
           },
         },
         'createdAt': DateTime.now().toIso8601String(),
@@ -85,8 +88,7 @@ class EmailServiceInstance {
             'inviterEmail': inviterEmail,
             'recipientName': recipientName,
             'appName': 'SMARTPLAYER',
-            'inviteLink':
-                'https://smartplayer.app/invite?email=${Uri.encodeComponent(recipientEmail)}',
+            'inviteLink': inviteLink,
           },
         },
         'createdAt': Timestamp.now(),
@@ -141,17 +143,27 @@ class EmailServiceInstance {
     required String inviterName,
     required String inviterEmail,
     required String recipientName,
+    required String inviteLink,
   }) {
-    return 'friends_invite_email_html'
-        .tr(args: [recipientName, inviterName, inviterEmail]);
+    return 'friends_invite_email_html'.tr(namedArgs: {
+      'recipientName': recipientName,
+      'inviterName': inviterName,
+      'inviterEmail': inviterEmail,
+      'inviteLink': inviteLink,
+    });
   }
 
   String _generateInviteEmailText({
     required String inviterName,
     required String inviterEmail,
     required String recipientName,
+    required String inviteLink,
   }) {
-    return 'friends_invite_email_text'
-        .tr(args: [recipientName, inviterName, inviterEmail]);
+    return 'friends_invite_email_text'.tr(namedArgs: {
+      'recipientName': recipientName,
+      'inviterName': inviterName,
+      'inviterEmail': inviterEmail,
+      'inviteLink': inviteLink,
+    });
   }
 }

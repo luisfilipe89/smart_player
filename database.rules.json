@@ -78,7 +78,7 @@
                 "friendRequests": {
                     "received": {
                         "$fromUid": {
-                            ".write": "auth != null && ((auth.uid == $fromUid && newData.val() === true) || (auth.uid == $uid && newData.val() == null))"
+                            ".write": "auth != null && ((auth.uid == $fromUid && newData.val() === true) || (auth.uid == $uid && newData.val() == null) || (auth.uid == $fromUid && newData.val() == null))"
                         }
                     },
                     "sent": {

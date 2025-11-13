@@ -4,10 +4,14 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:move_young/models/core/field_report.dart';
+import 'package:move_young/services/firebase_error_handler.dart';
+import 'package:move_young/services/reports/field_report_provider.dart';
 import 'package:move_young/theme/tokens.dart';
 import 'package:move_young/services/system/location_service_instance.dart';
 
-class GenericMapScreen extends StatefulWidget {
+class GenericMapScreen extends ConsumerStatefulWidget {
   final String title;
   final List<Map<String, dynamic>> locations;
 
@@ -18,10 +22,10 @@ class GenericMapScreen extends StatefulWidget {
   });
 
   @override
-  State<GenericMapScreen> createState() => _GenericMapScreenState();
+  ConsumerState<GenericMapScreen> createState() => _GenericMapScreenState();
 }
 
-class _GenericMapScreenState extends State<GenericMapScreen> {
+class _GenericMapScreenState extends ConsumerState<GenericMapScreen> {
   static const double _defaultZoom = 13;
 
   Map<String, dynamic>? _selectedLocation;
@@ -181,6 +185,49 @@ class _GenericMapScreenState extends State<GenericMapScreen> {
     }
   }
 
+  Future<void> _openReportSheet() async {
+    final location = _selectedLocation;
+    if (location == null) return;
+
+    final rawId = location['id']?.toString() ?? '';
+    final lat = location['lat']?.toString() ?? location['latitude']?.toString();
+    final lon =
+        location['lon']?.toString() ?? location['longitude']?.toString();
+    final fallbackId = rawId.isNotEmpty
+        ? rawId
+        : 'loc:${lat ?? 'unknown'}:${lon ?? 'unknown'}';
+    final rawName = location['name']?.toString() ?? '';
+    final fieldName =
+        rawName.trim().isNotEmpty ? rawName.trim() : 'unnamed_location'.tr();
+    final addressDisplay =
+        location['address_display_name']?.toString().trim() ?? '';
+    final addressShort =
+        location['address_super_short']?.toString().trim() ?? '';
+    final addressAlt = location['addressSuperShort']?.toString().trim() ?? '';
+    final fieldAddress = () {
+      if (addressDisplay.isNotEmpty) return addressDisplay;
+      if (addressAlt.isNotEmpty) return addressAlt;
+      if (addressShort.isNotEmpty) return addressShort;
+      return null;
+    }();
+
+    final result = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      builder: (ctx) => FieldReportSheet(
+        fieldId: fallbackId,
+        fieldName: fieldName,
+        fieldAddress: fieldAddress,
+      ),
+    );
+
+    if (!mounted || result != true) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('field_report_submitted'.tr())),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final initialTarget = _userPosition != null
@@ -191,20 +238,19 @@ class _GenericMapScreenState extends State<GenericMapScreen> {
                     const LatLng(52.0907, 5.1214))
                 : const LatLng(52.0907, 5.1214));
 
-    final canRenderMap =
-        _userPosition != null || _fallbackCameraTarget != null;
+    final canRenderMap = _userPosition != null || _fallbackCameraTarget != null;
 
     return Scaffold(
       appBar: AppBar(title: Text(widget.title)),
       body: _locationError != null
           ? (!canRenderMap
               ? _LocationErrorView(
-              message: _locationError!,
-              onOpenSettings: () async {
-                await LocationServiceInstance().openSettings();
-              },
-              onRetry: _initializeMap,
-            )
+                  message: _locationError!,
+                  onOpenSettings: () async {
+                    await LocationServiceInstance().openSettings();
+                  },
+                  onRetry: _initializeMap,
+                )
               : Stack(
                   children: [
                     GoogleMap(
@@ -374,36 +420,46 @@ class _GenericMapScreenState extends State<GenericMapScreen> {
                       ),
                       const SizedBox(height: AppHeights.big),
                       const Divider(height: 24),
+                      ElevatedButton.icon(
+                        onPressed: _openReportSheet,
+                        icon: const Icon(Icons.report_problem_outlined),
+                        label: Text('field_report_button'.tr()),
+                      ),
+                      const SizedBox(height: AppHeights.reg),
                       Row(
-                        mainAxisAlignment: MainAxisAlignment.end,
                         children: [
-                          ElevatedButton.icon(
-                            onPressed: () {
-                              final lat = _selectedLocation!['lat'];
-                              final lon = _selectedLocation!['lon'];
-                              final uri = Uri.parse(
-                                'https://www.google.com/maps/dir/?api=1&destination=$lat,$lon',
-                              );
-                              launchUrl(
-                                uri,
-                                mode: LaunchMode.externalApplication,
-                              );
-                            },
-                            icon: const Icon(Icons.directions),
-                            label: Text("directions".tr()),
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: () {
+                                final lat = _selectedLocation!['lat'];
+                                final lon = _selectedLocation!['lon'];
+                                final uri = Uri.parse(
+                                  'https://www.google.com/maps/dir/?api=1&destination=$lat,$lon',
+                                );
+                                launchUrl(
+                                  uri,
+                                  mode: LaunchMode.externalApplication,
+                                );
+                              },
+                              icon: const Icon(Icons.directions),
+                              label: Text("directions".tr()),
+                            ),
                           ),
-                          const SizedBox(width: AppWidths.big),
-                          ElevatedButton.icon(
-                            onPressed: () {
-                              final lat = _selectedLocation!['lat'];
-                              final lon = _selectedLocation!['lon'];
-                              final gmapsLink =
-                                  'https://maps.google.com/?q=$lat,$lon';
-                              Share.share(
-                                  'check_location'.tr(args: [gmapsLink]));
-                            },
-                            icon: const Icon(Icons.share),
-                            label: Text("share_location".tr()),
+                          const SizedBox(width: AppWidths.small),
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: () {
+                                final lat = _selectedLocation!['lat'];
+                                final lon = _selectedLocation!['lon'];
+                                final gmapsLink =
+                                    'https://maps.google.com/?q=$lat,$lon';
+                                Share.share(
+                                  'check_location'.tr(args: [gmapsLink]),
+                                );
+                              },
+                              icon: const Icon(Icons.share),
+                              label: Text("share_location".tr()),
+                            ),
                           ),
                         ],
                       ),
@@ -420,6 +476,218 @@ class _GenericMapScreenState extends State<GenericMapScreen> {
     _mapController?.dispose();
     super.dispose();
   }
+}
+
+class FieldReportSheet extends ConsumerStatefulWidget {
+  final String fieldId;
+  final String fieldName;
+  final String? fieldAddress;
+
+  const FieldReportSheet({
+    super.key,
+    required this.fieldId,
+    required this.fieldName,
+    this.fieldAddress,
+  });
+
+  @override
+  ConsumerState<FieldReportSheet> createState() => _FieldReportSheetState();
+}
+
+class _FieldReportSheetState extends ConsumerState<FieldReportSheet> {
+  static const List<_ReportCategoryOption> _categoryOptions = [
+    _ReportCategoryOption('surface_damage', 'field_report_category_surface'),
+    _ReportCategoryOption('lighting', 'field_report_category_lighting'),
+    _ReportCategoryOption('booking', 'field_report_category_booking'),
+    _ReportCategoryOption('other', 'field_report_category_other'),
+  ];
+
+  late final TextEditingController _descriptionController;
+  String _selectedCategory = _categoryOptions.first.value;
+  bool _allowContact = false;
+  bool _submitting = false;
+  String? _errorMessage;
+
+  @override
+  void initState() {
+    super.initState();
+    _descriptionController = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _descriptionController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    FocusScope.of(context).unfocus();
+    final description = _descriptionController.text.trim();
+
+    if (description.length < 10) {
+      setState(() {
+        _errorMessage = 'field_report_error_description'.tr();
+      });
+      return;
+    }
+
+    setState(() {
+      _errorMessage = null;
+      _submitting = true;
+    });
+
+    try {
+      await ref.read(fieldReportActionsProvider).submit(
+            FieldReportSubmission(
+              fieldId: widget.fieldId,
+              fieldName: widget.fieldName,
+              fieldAddress: widget.fieldAddress,
+              category: _selectedCategory,
+              description: description,
+              allowContact: _allowContact,
+            ),
+          );
+
+      if (!mounted) return;
+      Navigator.of(context).pop(true);
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _submitting = false;
+        _errorMessage = FirebaseErrorHandler.getUserMessage(error);
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+
+    return Padding(
+      padding: EdgeInsets.only(
+        bottom: bottomInset,
+      ),
+      child: SafeArea(
+        child: SingleChildScrollView(
+          padding: AppPaddings.allReg,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: AppHeights.reg),
+                  decoration: BoxDecoration(
+                    color: AppColors.lightgrey,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              Text(
+                'field_report_title'.tr(),
+                style: AppTextStyles.cardTitle,
+              ),
+              const SizedBox(height: AppHeights.superSmall),
+              Text(
+                widget.fieldName,
+                style: AppTextStyles.body.copyWith(
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.blackText,
+                ),
+              ),
+              if (widget.fieldAddress != null &&
+                  widget.fieldAddress!.trim().isNotEmpty) ...[
+                const SizedBox(height: AppHeights.superSmall),
+                Text(
+                  widget.fieldAddress!,
+                  style: AppTextStyles.small.copyWith(
+                    color: AppColors.grey,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+              const SizedBox(height: AppHeights.small),
+              Text(
+                'field_report_intro'.tr(),
+                style: AppTextStyles.body,
+              ),
+              const SizedBox(height: AppHeights.big),
+              Text(
+                'field_report_category_label'.tr(),
+                style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: AppHeights.small),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: _categoryOptions
+                    .map(
+                      (option) => ChoiceChip(
+                        label: Text(option.labelKey.tr()),
+                        selected: _selectedCategory == option.value,
+                        onSelected: (selected) {
+                          if (!selected) return;
+                          setState(() => _selectedCategory = option.value);
+                        },
+                      ),
+                    )
+                    .toList(growable: false),
+              ),
+              const SizedBox(height: AppHeights.big),
+              TextField(
+                controller: _descriptionController,
+                maxLines: 5,
+                decoration: InputDecoration(
+                  labelText: 'field_report_description_label'.tr(),
+                  hintText: 'field_report_description_hint'.tr(),
+                  border: const OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: AppHeights.reg),
+              SwitchListTile.adaptive(
+                contentPadding: EdgeInsets.zero,
+                title: Text('field_report_allow_contact'.tr()),
+                subtitle: Text('field_report_allow_contact_hint'.tr()),
+                value: _allowContact,
+                onChanged: (value) => setState(() => _allowContact = value),
+              ),
+              if (_errorMessage != null) ...[
+                const SizedBox(height: AppHeights.small),
+                Text(
+                  _errorMessage!,
+                  style: AppTextStyles.small.copyWith(color: AppColors.red),
+                ),
+              ],
+              const SizedBox(height: AppHeights.big),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: _submitting ? null : _submit,
+                  child: _submitting
+                      ? const SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : Text('field_report_submit_button'.tr()),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ReportCategoryOption {
+  final String value;
+  final String labelKey;
+
+  const _ReportCategoryOption(this.value, this.labelKey);
 }
 
 class _LocationErrorView extends StatelessWidget {

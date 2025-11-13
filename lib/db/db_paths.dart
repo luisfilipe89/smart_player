@@ -9,6 +9,7 @@ class DbPaths {
   static const String pendingInviteIndex = 'pendingInviteIndex';
   static const String friendTokens = 'friendTokens';
   static const String reports = 'reports';
+  static const String fieldReports = 'fieldReports';
 
   // Users subpaths
   static String user(String uid) => uid; // For use with _usersRef.child()

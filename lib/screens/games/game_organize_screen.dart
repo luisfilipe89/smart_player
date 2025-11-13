@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:easy_localization/easy_localization.dart';
@@ -41,9 +42,15 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
 
   // Fields data
   List<Map<String, dynamic>> _availableFields = [];
+  List<Map<String, dynamic>> _filteredFields = [];
   Map<String, dynamic>? _selectedField;
   bool _isLoadingFields = false;
   bool _isPublic = true;
+  
+  // Search for fields
+  final TextEditingController _fieldSearchController = TextEditingController();
+  Timer? _searchDebounce;
+  String _fieldSearchQuery = '';
 
   // Weather data
   Map<String, String> _weatherData = {};
@@ -76,6 +83,8 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
   @override
   void dispose() {
     _scrollController.dispose();
+    _fieldSearchController.dispose();
+    _searchDebounce?.cancel();
     super.dispose();
   }
 
@@ -214,6 +223,41 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
   }
 
   // Load fields for the selected sport
+  void _applyFieldSearchFilter() {
+    final query = _fieldSearchQuery.toLowerCase().trim();
+    if (query.isEmpty) {
+      _filteredFields = List.from(_availableFields);
+    } else {
+      _filteredFields = _availableFields.where((field) {
+        final name = (field['name'] as String?)?.toLowerCase().trim() ?? '';
+        final addressSuperShort = (field['addressSuperShort'] as String?)
+                ?.toLowerCase()
+                .trim() ??
+            '';
+        final addressSuperShortFull = (field['addressSuperShortFull'] as String?)
+                ?.toLowerCase()
+                .trim() ??
+            '';
+        return name.contains(query) ||
+            addressSuperShort.contains(query) ||
+            addressSuperShortFull.contains(query);
+      }).toList();
+    }
+  }
+
+  void _onFieldSearchChanged(String query) {
+    setState(() {
+      _fieldSearchQuery = query;
+    });
+    if (_searchDebounce?.isActive ?? false) _searchDebounce!.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 300), () {
+      if (!mounted) return;
+      setState(() {
+        _applyFieldSearchFilter();
+      });
+    });
+  }
+
   Future<void> _loadFields() async {
     if (_selectedSport == null) return;
 
@@ -314,6 +358,9 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
               'address': address,
               if (condensedAddressSuperShort != null)
                 'addressSuperShort': condensedAddressSuperShort,
+              if (rawAddressSuperShort != null &&
+                  rawAddressSuperShort.toString().trim().isNotEmpty)
+                'addressSuperShortFull': rawAddressSuperShort.toString().trim(),
               'latitude': latDouble ?? lat,
               'longitude': lonDouble ?? lon,
               'surface': f['surface'],
@@ -341,6 +388,7 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
         setState(() {
           _availableFields = fields;
           _isLoadingFields = false;
+          _applyFieldSearchFilter();
 
           // If a field was preselected (e.g., editing a game), map it to the
           // corresponding instance from the freshly loaded list so identity
@@ -363,6 +411,7 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
       if (mounted) {
         setState(() {
           _availableFields = [];
+          _filteredFields = [];
           _isLoadingFields = false;
         });
       }
@@ -1388,11 +1437,33 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
     final String? surface =
         rawSurface == null ? null : rawSurface.toString().trim();
     final lighting = field['lighting'] ?? false;
-    final addressSuperShort = field['addressSuperShort'] ?? '';
+    final rawName = (field['name'] as String?)?.trim() ?? '';
+    final addressSuperShort =
+        (field['addressSuperShort'] as String?)?.trim() ?? '';
+    final addressSuperShortFull =
+        (field['addressSuperShortFull'] as String?)?.trim() ?? '';
     final distanceMeters = (field['distance'] as num?)?.toDouble();
     final distanceKm = distanceMeters != null
         ? (distanceMeters / 1000).clamp(0, double.infinity)
         : null;
+    final normalizedName = rawName.toLowerCase();
+    final isNameMissing = rawName.isEmpty ||
+        normalizedName == 'unnamed field' ||
+        normalizedName == 'unknown field';
+    final titleText = isNameMissing
+        ? (addressSuperShort.isNotEmpty
+            ? addressSuperShort
+            : (addressSuperShortFull.isNotEmpty
+                ? addressSuperShortFull.split(',').first.trim()
+                : 'Unknown Field'))
+        : rawName;
+    final subtitleText = isNameMissing
+        ? (addressSuperShortFull.isNotEmpty
+            ? addressSuperShortFull
+            : (addressSuperShort.isNotEmpty ? addressSuperShort : null))
+        : (addressSuperShortFull.isNotEmpty
+            ? addressSuperShortFull
+            : (addressSuperShort.isNotEmpty ? addressSuperShort : null));
 
     return InkWell(
       onTap: onTap,
@@ -1415,7 +1486,7 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              field['name'] ?? 'Unknown Field',
+              titleText,
               style: AppTextStyles.smallCardTitle.copyWith(
                 color: isSelected ? AppColors.blue : AppColors.blackText,
                 fontSize: 14,
@@ -1425,9 +1496,9 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
               overflow: TextOverflow.ellipsis,
             ),
             const SizedBox(height: 2),
-            if (addressSuperShort.isNotEmpty)
+            if (subtitleText != null && subtitleText.isNotEmpty)
               Text(
-                addressSuperShort,
+                subtitleText,
                 style: AppTextStyles.superSmall.copyWith(
                   color: AppColors.grey,
                   fontSize: 10,
@@ -1436,7 +1507,8 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
-            if (addressSuperShort.isNotEmpty) const SizedBox(height: 4),
+            if (subtitleText != null && subtitleText.isNotEmpty)
+              const SizedBox(height: 4),
             if (distanceKm != null && distanceKm.isFinite)
               Text(
                 '${distanceKm.toStringAsFixed(distanceKm < 10 ? 1 : 0)} km away',
@@ -1690,7 +1762,10 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                                                       _selectedDate = null;
                                                       _selectedTime = null;
                                                       _availableFields = [];
+                                                      _filteredFields = [];
                                                       _weatherData = {};
+                                                      _fieldSearchController.clear();
+                                                      _fieldSearchQuery = '';
                                                     });
                                                     _loadFields();
                                                   },
@@ -1757,6 +1832,11 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                                                       >{};
                                                     }
                                                     return {
+                                                      'id': field['id'] ??
+                                                          field['fieldId'] ??
+                                                          field['@id'] ??
+                                                          field['osm_id'] ??
+                                                          field['osmId'],
                                                       'name':
                                                         (field['name']
                                                                     ?.toString()
@@ -1839,6 +1919,65 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                                 ),
                               ),
                               const SizedBox(height: AppHeights.small),
+                              // Search field
+                              Padding(
+                                padding: AppPaddings.symmHorizontalReg,
+                                child: SizedBox(
+                                  height: 40,
+                                  child: TextField(
+                                    controller: _fieldSearchController,
+                                    textInputAction: TextInputAction.search,
+                                    style: AppTextStyles.body,
+                                    onSubmitted: (_) {
+                                      setState(() {
+                                        _applyFieldSearchFilter();
+                                      });
+                                    },
+                                    decoration: InputDecoration(
+                                      hintText: 'search_by_name_address'.tr(),
+                                      filled: true,
+                                      fillColor: AppColors.lightgrey,
+                                      isDense: true,
+                                      contentPadding: const EdgeInsets.symmetric(
+                                        horizontal: 12,
+                                        vertical: 10,
+                                      ),
+                                      prefixIcon: const Icon(
+                                        Icons.search,
+                                        size: 20,
+                                      ),
+                                      suffixIcon: _fieldSearchQuery.isEmpty
+                                          ? null
+                                          : IconButton(
+                                              icon: const Icon(
+                                                Icons.clear,
+                                                size: 20,
+                                              ),
+                                              padding: EdgeInsets.zero,
+                                              constraints: const BoxConstraints(
+                                                minWidth: 32,
+                                                minHeight: 32,
+                                              ),
+                                              onPressed: () {
+                                                _fieldSearchController.clear();
+                                                setState(() {
+                                                  _fieldSearchQuery = '';
+                                                  _applyFieldSearchFilter();
+                                                });
+                                              },
+                                            ),
+                                      border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(
+                                          AppRadius.image,
+                                        ),
+                                        borderSide: BorderSide.none,
+                                      ),
+                                    ),
+                                    onChanged: _onFieldSearchChanged,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: AppHeights.small),
                               Padding(
                                 padding: AppPaddings.symmHorizontalReg,
                                 child: Column(
@@ -1877,6 +2016,32 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                                           ),
                                         ),
                                       )
+                                    else if (_filteredFields.isEmpty)
+                                      Container(
+                                        height: 100,
+                                        decoration: BoxDecoration(
+                                          color: AppColors.grey.withValues(
+                                            alpha: 0.1,
+                                          ),
+                                          borderRadius: BorderRadius.circular(
+                                            AppRadius.card,
+                                          ),
+                                          border: Border.all(
+                                            color: AppColors.grey.withValues(
+                                              alpha: 0.3,
+                                            ),
+                                            width: 1,
+                                          ),
+                                        ),
+                                        child: Center(
+                                          child: Text(
+                                            'no_fields_match_search'.tr(),
+                                            style: AppTextStyles.body.copyWith(
+                                              color: AppColors.grey,
+                                            ),
+                                          ),
+                                        ),
+                                      )
                                     else
                                       Transform.translate(
                                         offset: const Offset(0, -6),
@@ -1884,10 +2049,10 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                                           height: 120,
                                           child: ListView.builder(
                                             scrollDirection: Axis.horizontal,
-                                            itemCount: _availableFields.length,
+                                            itemCount: _filteredFields.length,
                                             itemBuilder: (context, index) {
                                               final field =
-                                                  _availableFields[index];
+                                                  _filteredFields[index];
                                               final isSelected =
                                                   _selectedField == field;
 
@@ -1895,7 +2060,7 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                                                 padding: EdgeInsets.only(
                                                   right:
                                                       index <
-                                                          _availableFields
+                                                          _filteredFields
                                                                   .length -
                                                               1
                                                       ? AppWidths.regular
