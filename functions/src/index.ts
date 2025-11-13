@@ -297,6 +297,92 @@ export const onMailNotificationCreate = onValueCreated(
             await db.ref().update(updates);
           }
         }
+      } else if ((type === "game_edited" || type === "game_cancelled") && gameId) {
+        // Fan-out game edited/cancelled notifications to all players and invited users (excluding organizer)
+        console.log(`[${type}] Processing notification for game ${gameId}`);
+        const gameSnap = await db.ref(`/games/${gameId}`).once("value");
+        if (!gameSnap.exists()) {
+          console.error(`[${type}] Game ${gameId} does not exist`);
+          return;
+        }
+        
+        const game = gameSnap.val() || {};
+        const organizerId = (game.organizerId || "").toString();
+        console.log(`[${type}] Game ${gameId} found, organizer: ${organizerId}`);
+        
+        // Get all players who have joined the game
+        let players: string[] = [];
+        if (Array.isArray(game.players)) {
+          players = game.players.map((v: any) => String(v));
+        } else if (game.players && typeof game.players === "object") {
+          players = Object.values(game.players).map((v: any) => String(v));
+        }
+        console.log(`[${type}] Found ${players.length} players: ${players.join(", ")}`);
+        
+        // Get all users who have been invited (pending or accepted)
+        const invitesSnap = await db.ref(`/games/${gameId}/invites`).once("value");
+        const invitedUsers = new Set<string>();
+        if (invitesSnap.exists()) {
+          const invites = invitesSnap.val() || {};
+          for (const uid in invites) {
+            const invite = invites[uid];
+            // Handle both Map and String formats
+            let status = "pending";
+            if (typeof invite === "object" && invite !== null) {
+              status = invite.status || "pending";
+            } else if (typeof invite === "string") {
+              status = invite;
+            }
+            // Include pending and accepted invites (not declined)
+            if (status === "pending" || status === "accepted") {
+              invitedUsers.add(uid);
+            }
+          }
+        }
+        console.log(`[${type}] Found ${invitedUsers.size} invited users: ${Array.from(invitedUsers).join(", ")}`);
+        
+        // Combine players and invited users, filter out organizer
+        const allUsersToNotify = new Set<string>([...players, ...invitedUsers]);
+        allUsersToNotify.delete(organizerId);
+        
+        console.log(`[${type}] Total users to notify: ${allUsersToNotify.size} (after excluding organizer)`);
+        
+        if (allUsersToNotify.size === 0) {
+          console.log(`[${type}] No users to notify for game ${gameId} (organizer: ${organizerId}, players: ${players.length}, invites: ${invitedUsers.size})`);
+          return;
+        }
+        
+        // Get game details for notification
+        const sport = (game.sport || "game").toString();
+        const location = (game.location || "your location").toString();
+        const organizerName = (game.organizerName || "Organizer").toString();
+        
+        const updates: { [path: string]: any } = {};
+        for (const uid of allUsersToNotify) {
+          const path = `/users/${uid}/notifications/${notificationId}`;
+          if (type === "game_edited") {
+            updates[path] = {
+              type: "game_edited",
+              data: { gameId, sport, location, fromName: organizerName, changes: "details" },
+              timestamp: now,
+              read: false,
+            };
+          } else if (type === "game_cancelled") {
+            updates[path] = {
+              type: "game_cancelled",
+              data: { gameId, sport, location },
+              timestamp: now,
+              read: false,
+            };
+          }
+        }
+        
+        if (Object.keys(updates).length > 0) {
+          await db.ref().update(updates);
+          console.log(`[${type}] Successfully sent ${Object.keys(updates).length} notifications for game ${gameId}`);
+        } else {
+          console.error(`[${type}] Failed to create notification updates for game ${gameId}`);
+        }
       } else {
         // Unknown notification type - log for debugging
         console.log(`[DEBUG] onMailNotificationCreate: Unknown notification type "${type}" for notificationId ${notificationId}, payload:`, JSON.stringify(payload));

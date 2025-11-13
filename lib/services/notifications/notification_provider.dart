@@ -168,6 +168,10 @@ class NotificationActions {
         removedUserUid: removedUserUid,
         removerUid: removerUid,
       );
+  Future<void> sendGameEditedNotification(String gameId) =>
+      _notificationService.sendGameEditedNotification(gameId);
+  Future<void> sendGameCancelledNotification(String gameId) =>
+      _notificationService.sendGameCancelledNotification(gameId);
   Future<void> cancelNotification(int id) =>
       _notificationService.cancelNotification(id);
   Future<void> cancelAllNotifications() =>

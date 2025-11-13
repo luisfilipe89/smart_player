@@ -16,9 +16,7 @@ import 'package:move_young/utils/crashlytics_helper.dart';
 class CloudGamesServiceInstance {
   final FirebaseDatabase _database;
   final FirebaseAuth _auth;
-  // Notifications are now handled automatically by Cloud Function onGameInviteCreate
-  // Keep this for backward compatibility with provider setup
-  // ignore: unused_field
+  // Notification service for sending game edited/cancelled notifications
   final INotificationService _notificationService;
 
   // Query limits to prevent memory issues
@@ -389,6 +387,19 @@ class CloudGamesServiceInstance {
 
       await _database.ref().update(updates);
       // Streams will update automatically - no cache clearing needed
+
+      // Send notifications to all players (excluding organizer)
+      try {
+        NumberedLogger.i(
+            'Sending game edited notification for game ${game.id}');
+        await _notificationService.sendGameEditedNotification(game.id);
+        NumberedLogger.i(
+            'Successfully queued game edited notification for game ${game.id}');
+      } catch (e, st) {
+        NumberedLogger.e('Error sending game edited notification: $e');
+        NumberedLogger.d('Stack trace: $st');
+        // Don't fail the update if notification fails
+      }
     } catch (e, st) {
       NumberedLogger.e('Error updating game: $e');
       CrashlyticsHelper.recordError(e, st, reason: 'game_update_fail');
@@ -474,6 +485,19 @@ class CloudGamesServiceInstance {
 
       await _database.ref().update(updates);
       // Streams will update automatically - no cache clearing needed
+
+      // Send notifications to all players (excluding organizer)
+      try {
+        NumberedLogger.i(
+            'Sending game cancelled notification for game $gameId');
+        await _notificationService.sendGameCancelledNotification(gameId);
+        NumberedLogger.i(
+            'Successfully queued game cancelled notification for game $gameId');
+      } catch (e, st) {
+        NumberedLogger.e('Error sending game cancelled notification: $e');
+        NumberedLogger.d('Stack trace: $st');
+        // Don't fail the cancellation if notification fails
+      }
     } catch (e, st) {
       NumberedLogger.e('Error deleting game: $e');
       CrashlyticsHelper.recordError(e, st, reason: 'game_delete_fail');
@@ -1538,10 +1562,8 @@ class CloudGamesServiceInstance {
         throw AlreadyExistsException('Already joined this game');
       }
 
-      // Check if game is full
-      if (game.players.length >= game.maxPlayers) {
-        throw ValidationException('Game is full');
-      }
+      // Allow joining even if game is full - players beyond maxPlayers will be on the bench
+      // No restriction - users can join and will be marked as benched if beyond maxPlayers
 
       // Add user to the game
       final updatedPlayers = List<String>.from(game.players)..add(userId);

@@ -11,7 +11,6 @@ import 'package:move_young/screens/games/games_join_screen.dart';
 import 'package:move_young/screens/games/game_organize_screen.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:move_young/services/friends/friends_provider.dart';
 import 'package:move_young/services/external/weather_provider.dart';
 import 'package:move_young/utils/error_extensions.dart';
@@ -30,7 +29,6 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
     with SingleTickerProviderStateMixin {
   final Map<String, GlobalKey> _itemKeys = {};
   late final TabController _tab;
-  final Set<String> _expanded = <String>{};
   // Weather forecast cache per gameId: time("HH:00") -> condition
   final Map<String, Map<String, String>> _weatherByGameId = {};
   final Set<String> _weatherLoading = <String>{};
@@ -459,29 +457,31 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
   }
 
   Future<void> _shareGameLink(Game game) async {
-    final String when = '${game.formattedDate} • ${game.formattedTime}';
-    final String players = '${game.currentPlayers}/${game.maxPlayers}';
-    final String location =
-        (game.address?.isNotEmpty ?? false) ? game.address! : game.location;
-    final String message =
-        'Join my ${game.sport} game!\nWhen: $when\nWhere: $location\nPlayers: $players\nGame ID: ${game.id}';
-    await Share.share(message, subject: 'Game invite');
-  }
-
-  void _toggleExpanded(String gameId) {
-    setState(() {
-      if (_expanded.contains(gameId)) {
-        _expanded.remove(gameId);
-      } else {
-        _expanded.add(gameId);
+    try {
+      final String when = '${game.formattedDate} • ${game.formattedTime}';
+      final String players = '${game.currentPlayers}/${game.maxPlayers}';
+      final String location =
+          (game.address?.isNotEmpty ?? false) ? game.address! : game.location;
+      final String message =
+          'Join my ${game.sport} game!\nWhen: $when\nWhere: $location\nPlayers: $players\nGame ID: ${game.id}';
+      await Share.share(message, subject: 'Game invite');
+    } catch (e) {
+      debugPrint('Error sharing game link: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('error_generic'.tr()),
+            backgroundColor: AppColors.red,
+          ),
+        );
       }
-    });
+    }
   }
 
   Future<void> _openDirections(Game game) async {
     try {
       Uri uri;
-      
+
       // Prefer coordinates if available for accurate directions
       if (game.latitude != null && game.longitude != null) {
         uri = Uri.parse(
@@ -490,15 +490,15 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
       } else {
         // Fallback: Use address or location name
         String searchQuery = '';
-        
+
         // Strategy 1: Use address if available
         if (game.address != null && game.address!.isNotEmpty) {
           searchQuery = game.address!;
-        } 
+        }
         // Strategy 2: Use location name
         else if (game.location.isNotEmpty) {
           searchQuery = game.location;
-          
+
           // Strategy 3: Enhance with area name if we know it's in 's-Hertogenbosch
           // This helps Google Maps find the location better
           if (!searchQuery.toLowerCase().contains("'s-hertogenbosch") &&
@@ -510,22 +510,25 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Text('No location information available for directions'),
+                content:
+                    Text('No location information available for directions'),
                 backgroundColor: AppColors.orange,
               ),
             );
           }
           return;
         }
-        
+
         // Build search URL
         final query = Uri.encodeComponent(searchQuery);
-        uri = Uri.parse('https://www.google.com/maps/search/?api=1&query=$query');
+        uri =
+            Uri.parse('https://www.google.com/maps/search/?api=1&query=$query');
       }
-      
+
       // Try launching URL - if platform channel fails, use direct Android intent as fallback
       try {
-        final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+        final launched =
+            await launchUrl(uri, mode: LaunchMode.externalApplication);
         if (!launched && mounted) {
           debugPrint('launchUrl returned false for: $uri');
           _openUrlViaAndroidIntent(uri.toString());
@@ -684,7 +687,6 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
     final key = _itemKeys.putIfAbsent(game.id, () => GlobalKey());
     final currentUserId = ref.watch(currentUserIdProvider);
     final isMine = currentUserId == game.organizerId;
-    final expanded = _expanded.contains(game.id);
 
     return KeyedSubtree(
       key: key,
@@ -901,135 +903,63 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
                       ),
                     ),
                     const SizedBox(width: 6),
-                    IconButton(
-                      padding: const EdgeInsets.all(4),
-                      constraints:
-                          const BoxConstraints(minWidth: 32, minHeight: 32),
-                      tooltip: expanded ? 'collapse' : 'expand',
-                      onPressed: () => _toggleExpanded(game.id),
-                      icon: AnimatedRotation(
-                        turns: expanded ? 0 : -0.25,
-                        duration: const Duration(milliseconds: 200),
-                        child: const Icon(Icons.expand_more),
+                    if (isMine)
+                      IconButton(
+                        padding: const EdgeInsets.all(4),
+                        constraints:
+                            const BoxConstraints(minWidth: 32, minHeight: 32),
+                        tooltip: 'edit',
+                        onPressed: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) =>
+                                  GameOrganizeScreen(initialGame: game),
+                            ),
+                          );
+                        },
+                        icon: const Icon(Icons.edit, size: 20),
                       ),
-                    ),
                   ],
                 ),
-                onTap: isMine ? null : () => _toggleExpanded(game.id),
               ),
               Padding(
                 padding: AppPaddings.allMedium,
-                child: AnimatedSize(
-                  duration: const Duration(milliseconds: 300),
-                  curve: Curves.easeOutCubic,
-                  child: expanded
-                      ? Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 2, bottom: 0),
+                  child: Row(
+                    children: [
+                      // Weather icon with a subtle divider to separate from avatars
+                      Builder(builder: (context) {
+                        _ensureWeatherForGame(game);
+                        String time = game.formattedTime.padLeft(5, '0');
+                        if (!time.endsWith(':00')) {
+                          time = '${time.substring(0, 2)}:00';
+                        }
+                        final forecasts = _weatherByGameId[game.id];
+                        final weatherActions = ref.read(weatherActionsProvider);
+                        final String cond = forecasts?[time] ??
+                            weatherActions.getWeatherCondition(time);
+                        final IconData icon =
+                            weatherActions.getWeatherIcon(time, cond);
+                        final Color color =
+                            weatherActions.getWeatherColor(cond);
+                        return Row(
+                          mainAxisSize: MainAxisSize.min,
                           children: [
-                            ClipRRect(
-                              borderRadius:
-                                  BorderRadius.circular(AppRadius.image),
-                              child: SizedBox(
-                                height: 140,
-                                width: double.infinity,
-                                child: Stack(
-                                  fit: StackFit.expand,
-                                  children: [
-                                    if (game.imageUrl != null &&
-                                        game.imageUrl!.isNotEmpty)
-                                      CachedNetworkImage(
-                                        imageUrl: game.imageUrl!,
-                                        fit: BoxFit.cover,
-                                        fadeInDuration:
-                                            const Duration(milliseconds: 250),
-                                        placeholder: (context, url) =>
-                                            Container(
-                                                color:
-                                                    AppColors.superlightgrey),
-                                        errorWidget: (context, url, error) =>
-                                            Image.asset(
-                                                'assets/images/general_public.jpg',
-                                                fit: BoxFit.cover),
-                                      )
-                                    else
-                                      Image.asset(
-                                          'assets/images/general_public.jpg',
-                                          fit: BoxFit.cover),
-                                    Container(
-                                        color: Colors.black
-                                            .withValues(alpha: 0.08)),
-                                  ],
-                                ),
-                              ),
+                            Icon(icon, size: 16, color: color),
+                            const SizedBox(width: 8),
+                            Container(
+                              width: 1,
+                              height: 16,
+                              color: AppColors.blue.withValues(alpha: 0.3),
                             ),
-                            const SizedBox(height: 2),
-                            Padding(
-                              padding: const EdgeInsets.only(top: 2, bottom: 0),
-                              child: Row(
-                                children: [
-                                  // Weather icon with a subtle divider to separate from avatars
-                                  Builder(builder: (context) {
-                                    _ensureWeatherForGame(game);
-                                    String time =
-                                        game.formattedTime.padLeft(5, '0');
-                                    if (!time.endsWith(':00')) {
-                                      time = '${time.substring(0, 2)}:00';
-                                    }
-                                    final forecasts = _weatherByGameId[game.id];
-                                    final weatherActions =
-                                        ref.read(weatherActionsProvider);
-                                    final String cond = forecasts?[time] ??
-                                        weatherActions
-                                            .getWeatherCondition(time);
-                                    final IconData icon = weatherActions
-                                        .getWeatherIcon(time, cond);
-                                    final Color color =
-                                        weatherActions.getWeatherColor(cond);
-                                    return Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Icon(icon, size: 16, color: color),
-                                        const SizedBox(width: 8),
-                                        Container(
-                                          width: 1,
-                                          height: 16,
-                                          color: AppColors.blue
-                                              .withValues(alpha: 0.3),
-                                        ),
-                                        const SizedBox(width: 8),
-                                      ],
-                                    );
-                                  }),
-                                  Expanded(
-                                      child: _buildParticipantsStrip(game)),
-                                  const SizedBox(width: 8),
-                                  if (isMine)
-                                    OutlinedButton(
-                                      onPressed: () {
-                                        Navigator.of(context).push(
-                                          MaterialPageRoute(
-                                            builder: (_) => GameOrganizeScreen(
-                                                initialGame: game),
-                                          ),
-                                        );
-                                      },
-                                      style: OutlinedButton.styleFrom(
-                                        minimumSize: const Size(0, 32),
-                                        padding: const EdgeInsets.symmetric(
-                                            horizontal: 8, vertical: 6),
-                                        textStyle: AppTextStyles.small,
-                                        foregroundColor: AppColors.primary,
-                                        side: const BorderSide(
-                                            color: AppColors.primary),
-                                      ),
-                                      child: const Icon(Icons.edit, size: 16),
-                                    ),
-                                ],
-                              ),
-                            ),
+                            const SizedBox(width: 8),
                           ],
-                        )
-                      : const SizedBox.shrink(),
+                        );
+                      }),
+                      Expanded(child: _buildParticipantsStrip(game)),
+                    ],
+                  ),
                 ),
               ),
               Padding(

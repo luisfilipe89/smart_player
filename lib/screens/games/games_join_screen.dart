@@ -358,6 +358,13 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
     final String? cachedInviteStatus = _gameInviteStatuses[currentGame.id];
     final bool hasCachedPendingInvite = cachedInviteStatus == 'pending';
     
+    // Merge cached status into inviteStatuses map for immediate UI updates
+    // (e.g., when user declines, we update cache immediately before stream updates)
+    if (myUid != null && cachedInviteStatus != null) {
+      inviteStatuses = Map<String, String>.from(inviteStatuses);
+      inviteStatuses[myUid] = cachedInviteStatus;
+    }
+    
     // Check if game is in invitedGames list (this is often faster/more reliable)
     final bool isInInvitedGames = filteredInvited.any((g) => g.id == currentGame.id);
     
@@ -578,7 +585,9 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
                           ),
                           const SizedBox(width: 4),
                           Text(
-                            '${currentGame.currentPlayers}/${currentGame.maxPlayers}',
+                            currentGame.benchCount > 0
+                                ? '${currentGame.maxPlayers}/${currentGame.maxPlayers} + ${currentGame.benchCount} bench'
+                                : '${currentGame.currentPlayers}/${currentGame.maxPlayers}',
                             style: AppTextStyles.small.copyWith(
                               color: currentGame.hasSpace
                                   ? AppColors.green
@@ -660,10 +669,17 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
                             // Use isInInvitedGames as initial state to avoid showing "Join game"
                             // when user is actually invited but stream hasn't updated yet
                             if (!snapshot.hasData) {
-                              // Still loading - use isInInvitedGames to show correct state immediately
+                              // Still loading - merge cached status if available for immediate UI updates
+                              // myUid is guaranteed to be non-null here due to needsSyncFetch check
+                              final cachedStatus = _gameInviteStatuses[currentGame.id];
+                              final loadingInviteStatuses = Map<String, String>.from(inviteStatuses);
+                              if (cachedStatus != null) {
+                                // myUid is non-null because needsSyncFetch requires it
+                                loadingInviteStatuses[myUid] = cachedStatus;
+                              }
                               return _buildGameActions(
                                 currentGame,
-                                inviteStatuses: inviteStatuses,
+                                inviteStatuses: loadingInviteStatuses,
                                 isInvitedPending: isInInvitedGames,
                                 streamHasData: false,
                               );
@@ -864,6 +880,13 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
                       .read(cloudGamesActionsProvider)
                       .declineGameInvite(game.id);
                   if (mounted) {
+                    // Update cached invite status immediately for instant UI update
+                    final String? myUid = ref.read(currentUserIdProvider);
+                    if (myUid != null) {
+                      setState(() {
+                        _gameInviteStatuses[game.id] = 'declined';
+                      });
+                    }
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
                         content: Text('declined'.tr()),

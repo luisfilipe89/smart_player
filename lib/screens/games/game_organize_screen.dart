@@ -54,6 +54,7 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
 
   // Weather data
   Map<String, String> _weatherData = {};
+  bool _isLoadingWeather = false;
   // Booked times for selected field/date
   final Set<String> _bookedTimes = {};
 
@@ -425,6 +426,12 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
       return;
     }
 
+    if (mounted) {
+      setState(() {
+        _isLoadingWeather = true;
+      });
+    }
+
     try {
       final weatherActions = ref.read(weatherActionsProvider);
       final selectedFieldLat =
@@ -453,14 +460,16 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
       if (mounted) {
         setState(() {
           _weatherData = weatherData;
+          _isLoadingWeather = false;
         });
       }
     } catch (e) {
       debugPrint('🌤️ Weather: Error - $e');
-      // Set default weather data on error
+      // Set empty weather data on error - don't show misleading default
       if (mounted) {
         setState(() {
           _weatherData = {};
+          _isLoadingWeather = false;
         });
       }
     }
@@ -1327,6 +1336,7 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
     required String? weatherCondition,
     required IconData? weatherIcon,
     required Color? weatherColor,
+    bool isLoadingWeather = false,
     required VoidCallback onTap,
   }) {
     return Container(
@@ -1362,33 +1372,46 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                // Weather Icon Section
-                Container(
-                  width: 24,
-                  height: 24,
-                  decoration: BoxDecoration(
-                    color: isDisabled
-                        ? AppColors.lightgrey.withValues(alpha: 0.25)
-                        : (hasWeatherData && weatherIcon != null
-                              ? (weatherColor?.withValues(alpha: 0.15) ??
-                                    AppColors.lightgrey.withValues(alpha: 0.15))
-                              : AppColors.lightgrey.withValues(alpha: 0.15)),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Center(
-                    child: hasWeatherData && weatherIcon != null && !isDisabled
-                        ? Icon(
-                            weatherIcon,
-                            color: weatherColor ?? AppColors.grey,
-                            size: 16,
-                          )
-                        : Icon(
-                            Icons.wb_sunny_outlined,
-                            color: AppColors.grey,
-                            size: 16,
-                          ),
-                  ),
-                ),
+                // Weather Icon Section - only show actual forecast data
+                // This ensures we only display location-based weather predictions
+                if (hasWeatherData && weatherIcon != null && !isDisabled)
+                  // Show actual weather icon when forecast data is available
+                  Container(
+                    width: 24,
+                    height: 24,
+                    decoration: BoxDecoration(
+                      color: weatherColor?.withValues(alpha: 0.15) ??
+                          AppColors.lightgrey.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Center(
+                      child: Icon(
+                        weatherIcon,
+                        color: weatherColor ?? AppColors.grey,
+                        size: 16,
+                      ),
+                    ),
+                  )
+                else if (isLoadingWeather && !isDisabled)
+                  // Show loading indicator while fetching weather data
+                  SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: Center(
+                      child: SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: AppColors.grey.withValues(alpha: 0.5),
+                        ),
+                      ),
+                    ),
+                  )
+                else if (!isDisabled)
+                  // No weather data available - show empty space to maintain layout
+                  // This prevents showing misleading default icons
+                  const SizedBox(width: 24, height: 24),
 
                 const SizedBox(height: 4),
 
@@ -2080,6 +2103,10 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                                                       _bookedTimes.clear();
                                                       _selectedTime = null;
                                                     });
+                                                    // Reload weather with new field coordinates if date is already selected
+                                                    if (_selectedDate != null) {
+                                                      _loadWeather();
+                                                    }
                                                     _loadBookedSlots();
                                                   },
                                                 ),
@@ -2308,7 +2335,8 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                                                 '🔍 UI: First time slot check - time=$time, isBooked=$isBooked, _bookedTimes=${_bookedTimes.toList()}',
                                               );
                                             }
-                                            // Only show weather if data is available
+                                            // Only show weather if actual forecast data is available
+                                            // This ensures we only display location-based weather predictions
                                             final hasWeatherData =
                                                 _weatherData.isNotEmpty;
                                             final weatherCondition =
@@ -2361,6 +2389,7 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                                                       weatherCondition,
                                                   weatherIcon: weatherIcon,
                                                   weatherColor: weatherColor,
+                                                  isLoadingWeather: _isLoadingWeather,
                                                   onTap: () {
                                                     if (isBooked) {
                                                       ScaffoldMessenger.of(

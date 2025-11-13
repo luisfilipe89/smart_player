@@ -494,6 +494,34 @@ class NotificationServiceInstance implements INotificationService {
     }
   }
 
+  @override
+  Future<void> sendGameEditedNotification(String gameId) async {
+    try {
+      await _db.ref('mail/notifications').push().set({
+        'type': 'game_edited',
+        'gameId': gameId,
+        'ts': DateTime.now().toIso8601String(),
+      });
+      NumberedLogger.i('Queued game edited notification for game $gameId');
+    } catch (e) {
+      NumberedLogger.e('Error sending game edited notification: $e');
+    }
+  }
+
+  @override
+  Future<void> sendGameCancelledNotification(String gameId) async {
+    try {
+      await _db.ref('mail/notifications').push().set({
+        'type': 'game_cancelled',
+        'gameId': gameId,
+        'ts': DateTime.now().toIso8601String(),
+      });
+      NumberedLogger.i('Queued game cancelled notification for game $gameId');
+    } catch (e) {
+      NumberedLogger.e('Error sending game cancelled notification: $e');
+    }
+  }
+
   Future<void> cancelNotification(int id) async {
     await _local.cancel(id);
   }

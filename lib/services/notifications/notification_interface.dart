@@ -18,4 +18,10 @@ abstract class INotificationService {
     required String removedUserUid,
     required String removerUid,
   });
+
+  /// Send a game edited notification to all players
+  Future<void> sendGameEditedNotification(String gameId);
+
+  /// Send a game cancelled notification to all players
+  Future<void> sendGameCancelledNotification(String gameId);
 }
