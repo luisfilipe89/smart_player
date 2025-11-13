@@ -337,4 +337,11 @@ class Game {
   Duration get timeUntilGame {
     return dateTime.difference(DateTime.now());
   }
+
+  // Check if game has been modified (edited after creation)
+  bool get isModified {
+    if (updatedAt == null) return false;
+    // Compare at millisecond precision to detect any edits
+    return updatedAt!.difference(createdAt).inMilliseconds.abs() > 1000;
+  }
 }

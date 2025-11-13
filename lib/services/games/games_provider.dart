@@ -85,6 +85,8 @@ class GamesActions {
       _cloudGamesService.getInvitedGamesForCurrentUser();
   Future<Map<String, String>> getGameInviteStatuses(String gameId) =>
       _cloudGamesService.getGameInviteStatuses(gameId);
+  Future<String?> getUserInviteStatusForGame(String gameId) =>
+      _cloudGamesService.getUserInviteStatusForGame(gameId);
 }
 
 // Games actions provider (for game operations)

@@ -541,5 +541,6 @@
     "field_report_allow_contact_hint": "Mijn contactgegevens delen zodat de gemeente mij kan bereiken indien nodig.",
     "field_report_submit_button": "Verstuur melding",
     "field_report_error_description": "Beschrijf het probleem in minimaal 10 tekens.",
-    "field_report_submitted": "Bedankt! Je melding is verzonden."
+    "field_report_submitted": "Bedankt! Je melding is verzonden.",
+    "modified": "Gewijzigd"
 }

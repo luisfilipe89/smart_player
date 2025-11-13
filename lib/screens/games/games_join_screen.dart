@@ -10,7 +10,6 @@ import 'package:move_young/services/games/cloud_games_provider.dart';
 import 'package:move_young/services/system/haptics_provider.dart';
 import 'package:move_young/widgets/navigation/navigation_utils.dart';
 import 'package:move_young/screens/games/game_detail_screen.dart';
-import 'package:move_young/screens/maps/gmaps_screen.dart';
 import 'dart:async';
 import 'package:move_young/screens/main_scaffold.dart';
 
@@ -32,6 +31,8 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
   final ScrollController _listController = ScrollController();
   final Map<String, GlobalKey> _itemKeys = {};
   String? _highlightId;
+  // Cache of invite statuses for games - populated when loading games
+  final Map<String, String> _gameInviteStatuses = {};
 
   final List<String> _sports = [
     'all',
@@ -114,6 +115,26 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
         games = games.where((g) => !g.players.contains(myUid)).toList();
       }
 
+      // Fetch invite statuses for all games in parallel to avoid delay when building cards
+      if (myUid != null && myUid.isNotEmpty && games.isNotEmpty) {
+        final cloudGamesActions = ref.read(cloudGamesActionsProvider);
+        final inviteStatusFutures = games.map((game) async {
+          final status = await cloudGamesActions.getUserInviteStatusForGame(game.id);
+          return MapEntry(game.id, status);
+        });
+        final inviteStatuses = await Future.wait(inviteStatusFutures);
+        
+        if (!mounted) return;
+        setState(() {
+          _gameInviteStatuses.clear();
+          for (final entry in inviteStatuses) {
+            if (entry.value != null) {
+              _gameInviteStatuses[entry.key] = entry.value!;
+            }
+          }
+        });
+      }
+
       if (!mounted) return;
       setState(() {
         _games = games;
@@ -141,26 +162,6 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
     }
   }
 
-  void _showJoinedSnack() {
-    if (!mounted) return;
-    final messenger =
-        ScaffoldMessenger.maybeOf(context) ?? ScaffoldMessenger.of(context);
-    messenger.clearSnackBars();
-    messenger.showSnackBar(
-      SnackBar(
-        content: const Text('Joined! Find it under My Games > Joining'),
-        backgroundColor: AppColors.green,
-        action: SnackBarAction(
-          label: 'view_in_my_games'.tr(),
-          onPressed: () {
-            MainScaffoldScope.maybeOf(context)
-                ?.switchToTab(0, popToRoot: true); // kTabJoin
-          },
-        ),
-      ),
-    );
-  }
-
   // Invited games now come from stream provider - no manual loading needed
 
   Future<void> _joinGame(Game game) async {
@@ -176,20 +177,26 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
         return;
       }
 
-      // Check if this is a rejoin (user previously left)
+      // Check if this is a rejoin (user previously left) or previously declined
       final inviteStatuses = await ref
           .read(cloudGamesActionsProvider)
           .getGameInviteStatuses(game.id);
-      final bool isRejoin = inviteStatuses[currentUserId] == 'left';
+      final String? previousStatus = inviteStatuses[currentUserId];
+      final bool isRejoin = previousStatus == 'left';
+      final bool wasDeclined = previousStatus == 'declined';
+      final bool isPublicUninvited = !isRejoin && !wasDeclined;
 
-      // If rejoining, navigate immediately BEFORE joining to avoid transient state
-      if (isRejoin && mounted) {
+      // Navigate immediately BEFORE joining to avoid transient state
+      // This ensures smooth transition for all join types
+      if (mounted) {
         final ctrl = MainScaffoldController.maybeOf(context);
-        ctrl?.openMyGames(
-          initialTab: 0, // Joining tab (index 0)
-          highlightGameId: game.id,
-          popToRoot: true,
-        );
+        if (isRejoin || isPublicUninvited) {
+          ctrl?.openMyGames(
+            initialTab: 0, // Joining tab (index 0)
+            highlightGameId: game.id,
+            popToRoot: true,
+          );
+        }
       }
 
       await ref.read(cloudGamesActionsProvider).joinGame(game.id);
@@ -210,8 +217,24 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
               duration: const Duration(seconds: 2),
             ),
           );
+        } else if (wasDeclined) {
+          // User previously declined, show simple message without link
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Joined ${game.sport} game!'),
+              backgroundColor: AppColors.green,
+              duration: const Duration(seconds: 2),
+            ),
+          );
         } else {
-          _showJoinedSnack();
+          // For public uninvited games, show simple message since we already navigated
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Joined ${game.sport} game!'),
+              backgroundColor: AppColors.green,
+              duration: const Duration(seconds: 2),
+            ),
+          );
         }
       }
       if (mounted) {
@@ -300,6 +323,8 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
     final gameStream = ref.watch(gameByIdProvider(game.id));
     // Watch invited games stream for real-time updates
     final invitedGamesAsync = ref.watch(invitedGamesProvider);
+    // Watch invite statuses for this game in real-time (for immediate updates)
+    final inviteStatusesAsync = ref.watch(gameInviteStatusesProvider(game.id));
 
     final invitedGames = invitedGamesAsync.valueOrNull ?? [];
     final String? myUid = ref.read(currentUserIdProvider);
@@ -323,7 +348,29 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
     }
 
     final bool isHighlighted = currentGame.id == _highlightId;
-    final bool isInvited = filteredInvited.any((g) => g.id == currentGame.id);
+    
+    // Check invite status from multiple sources for immediate detection
+    Map<String, String> inviteStatuses = inviteStatusesAsync.valueOrNull ?? {};
+    final bool streamHasData = inviteStatusesAsync.hasValue;
+    final bool invitedGamesHasData = invitedGamesAsync.hasValue;
+    
+    // Check cached invite status (populated when loading games - fastest)
+    final String? cachedInviteStatus = _gameInviteStatuses[currentGame.id];
+    final bool hasCachedPendingInvite = cachedInviteStatus == 'pending';
+    
+    // Check if game is in invitedGames list (this is often faster/more reliable)
+    final bool isInInvitedGames = filteredInvited.any((g) => g.id == currentGame.id);
+    
+    // Determine if user is invited - prioritize cached status, then invitedGames list, then stream
+    final String? myInviteStatus = myUid != null ? inviteStatuses[myUid] : null;
+    final bool hasPendingInviteFromStatus = myInviteStatus == 'pending';
+    
+    // If we have cached status or invitedGames has data, user is definitely invited
+    // Otherwise, check invite status from stream
+    final bool isInvited = hasCachedPendingInvite || isInInvitedGames || hasPendingInviteFromStatus;
+    
+    // Only fetch if stream hasn't emitted AND we don't have cached status
+    final bool needsSyncFetch = !streamHasData && cachedInviteStatus == null && myUid != null;
 
     return Card(
       margin: const EdgeInsets.only(bottom: AppHeights.reg),
@@ -464,6 +511,34 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
                                     ],
                                   ),
                                 ),
+                              // Show "Modified" badge for active games that have been edited
+                              if (currentGame.isActive && currentGame.isModified)
+                                Container(
+                                  margin: const EdgeInsets.only(left: 4),
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.blue.withValues(alpha: 0.1),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Container(
+                                          width: 6,
+                                          height: 6,
+                                          decoration: const BoxDecoration(
+                                              color: AppColors.blue,
+                                              shape: BoxShape.circle)),
+                                      const SizedBox(width: 4),
+                                      Text('modified'.tr(),
+                                          style: AppTextStyles.superSmall
+                                              .copyWith(
+                                                  color: AppColors.blue,
+                                                  fontWeight: FontWeight.bold)),
+                                    ],
+                                  ),
+                                ),
                             ],
                           ),
                           Text(
@@ -573,33 +648,58 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
                       ),
                   ],
                 ),
-                const SizedBox(height: AppHeights.reg),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton.icon(
-                    style: TextButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 6),
-                      minimumSize: const Size(0, 32),
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    ),
-                    onPressed: () {
-                      ref.read(hapticsActionsProvider)?.selectionClick();
-                      _openReportForGame(currentGame);
-                    },
-                    icon: const Icon(Icons.report_problem_outlined, size: 14),
-                    label: Text(
-                      'field_report_button'.tr(),
-                      style: AppTextStyles.small.copyWith(
-                        color: AppColors.blue,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ),
                 const SizedBox(height: AppHeights.small),
                 SizedBox(
                   width: double.infinity,
-                  child: _buildGameActions(currentGame),
+                  child: needsSyncFetch
+                      ? FutureBuilder<String?>(
+                          future: ref
+                              .read(cloudGamesActionsProvider)
+                              .getUserInviteStatusForGame(currentGame.id),
+                          builder: (context, snapshot) {
+                            // Use isInInvitedGames as initial state to avoid showing "Join game"
+                            // when user is actually invited but stream hasn't updated yet
+                            if (!snapshot.hasData) {
+                              // Still loading - use isInInvitedGames to show correct state immediately
+                              return _buildGameActions(
+                                currentGame,
+                                inviteStatuses: inviteStatuses,
+                                isInvitedPending: isInInvitedGames,
+                                streamHasData: false,
+                              );
+                            }
+                            // Check user's invite status directly from their gameInvites path
+                            final userInviteStatus = snapshot.data;
+                            final cachedStatus = _gameInviteStatuses[currentGame.id];
+                            final syncIsInvited = (userInviteStatus == 'pending') ||
+                                isInInvitedGames ||
+                                (cachedStatus == 'pending');
+                            
+                            // Update cached status and inviteStatuses map with the fetched status
+                            if (userInviteStatus != null) {
+                              _gameInviteStatuses[currentGame.id] = userInviteStatus;
+                            }
+                            
+                            // myUid is guaranteed to be non-null here due to needsSyncFetch check
+                            final updatedInviteStatuses = Map<String, String>.from(inviteStatuses);
+                            if (userInviteStatus != null) {
+                              updatedInviteStatuses[myUid] = userInviteStatus;
+                            }
+                            
+                            return _buildGameActions(
+                              currentGame,
+                              inviteStatuses: updatedInviteStatuses,
+                              isInvitedPending: syncIsInvited,
+                              streamHasData: true,
+                            );
+                          },
+                        )
+                      : _buildGameActions(
+                          currentGame,
+                          inviteStatuses: inviteStatuses,
+                          isInvitedPending: isInvited,
+                          streamHasData: streamHasData || invitedGamesHasData,
+                        ),
                 ),
               ],
             ),
@@ -609,41 +709,12 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
     );
   }
 
-  Future<void> _openReportForGame(Game game) async {
-    final fieldIdRaw = (game.fieldId ?? '').trim();
-    final latStr = game.latitude?.toString();
-    final lonStr = game.longitude?.toString();
-    final fieldId = fieldIdRaw.isNotEmpty
-        ? fieldIdRaw
-        : (latStr != null && lonStr != null
-            ? 'loc:$latStr:$lonStr'
-            : 'game:${game.id}');
-
-    final locationName = game.location.trim().isNotEmpty
-        ? game.location.trim()
-        : 'unnamed_field'.tr();
-    final rawAddress = game.address?.trim() ?? '';
-    final fieldAddress =
-        rawAddress.isNotEmpty ? rawAddress : (game.location.trim().isNotEmpty ? game.location.trim() : null);
-
-    final result = await showModalBottomSheet<bool>(
-      context: context,
-      isScrollControlled: true,
-      builder: (_) => FieldReportSheet(
-        fieldId: fieldId,
-        fieldName: locationName,
-        fieldAddress: fieldAddress,
-      ),
-    );
-
-    if (!mounted || result != true) return;
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('field_report_submitted'.tr())),
-    );
-  }
-
-  Widget _buildGameActions(Game game) {
+  Widget _buildGameActions(
+    Game game, {
+    Map<String, String>? inviteStatuses,
+    bool? isInvitedPending,
+    bool streamHasData = false,
+  }) {
     final currentUserId = ref.read(currentUserIdProvider);
     final isOwnerOrAdmin = currentUserId != null &&
         (currentUserId == game.organizerId ||
@@ -688,28 +759,49 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
 
     final String? myUid = ref.read(currentUserIdProvider);
     final bool isJoined = myUid != null && game.players.contains(myUid);
-    final invitedGamesAsync = ref.watch(invitedGamesProvider);
-    final invitedGames = invitedGamesAsync.valueOrNull ?? [];
-    final filteredInvited = myUid == null
-        ? invitedGames
-        : invitedGames.where((g) => !g.players.contains(myUid)).toList();
-    final bool isInvitedPending = filteredInvited.any((g) => g.id == game.id);
+    
+    // Use passed invite statuses if available, otherwise watch the provider
+    // If stream hasn't emitted yet and we don't have passed data, fetch synchronously
+    Map<String, String> finalInviteStatuses;
+    if (inviteStatuses != null && inviteStatuses.isNotEmpty) {
+      finalInviteStatuses = inviteStatuses;
+    } else if (streamHasData) {
+      // Stream has data, use it
+      finalInviteStatuses = ref.watch(gameInviteStatusesProvider(game.id)).valueOrNull ?? {};
+    } else {
+      // Stream hasn't emitted yet, use empty map and rely on isInvitedPending flag
+      finalInviteStatuses = {};
+    }
+    
+    // Use passed isInvitedPending if available, otherwise check from streams
+    bool finalIsInvitedPending;
+    if (isInvitedPending != null) {
+      finalIsInvitedPending = isInvitedPending;
+    } else {
+      // Fallback: check from streams
+      final String? myInviteStatus = myUid != null ? finalInviteStatuses[myUid] : null;
+      final bool hasPendingInvite = myInviteStatus == 'pending';
+      
+      final invitedGamesAsync = ref.watch(invitedGamesProvider);
+      final invitedGames = invitedGamesAsync.valueOrNull ?? [];
+      final filteredInvited = myUid == null
+          ? invitedGames
+          : invitedGames.where((g) => !g.players.contains(myUid)).toList();
+      final bool isInInvitedGames = filteredInvited.any((g) => g.id == game.id);
+      
+      finalIsInvitedPending = hasPendingInvite || isInInvitedGames;
+    }
 
     // Check if user previously left this game (for rejoin option)
-    final inviteStatusesAsync = ref.watch(gameInviteStatusesProvider(game.id));
-    final bool hasLeftGame = inviteStatusesAsync.valueOrNull != null &&
-        myUid != null &&
-        inviteStatusesAsync.valueOrNull![myUid] == 'left';
+    final bool hasLeftGame = myUid != null && finalInviteStatuses[myUid] == 'left';
     
     // Check if user previously declined this invite (for join option)
-    final bool hasDeclinedInvite = inviteStatusesAsync.valueOrNull != null &&
-        myUid != null &&
-        inviteStatusesAsync.valueOrNull![myUid] == 'declined';
+    final bool hasDeclinedInvite = myUid != null && finalInviteStatuses[myUid] == 'declined';
 
     debugPrint(
-        '🎮 Game ${game.id}: isInvitedPending=$isInvitedPending, isJoined=$isJoined, hasLeftGame=$hasLeftGame, hasDeclinedInvite=$hasDeclinedInvite, invitedGames.length=${filteredInvited.length}');
+        '🎮 Game ${game.id}: isInvitedPending=$finalIsInvitedPending, isJoined=$isJoined, hasLeftGame=$hasLeftGame, hasDeclinedInvite=$hasDeclinedInvite');
 
-    if (isInvitedPending && !isJoined) {
+    if (finalIsInvitedPending && !isJoined) {
       return Row(
         children: [
           Expanded(
@@ -905,6 +997,35 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
             ),
           ),
         ],
+      );
+    }
+
+    // Only show "Join game" button if the game is public and user is not invited
+    // Private games require an invitation
+    if (!game.isPublic && !finalIsInvitedPending) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        decoration: BoxDecoration(
+          color: AppColors.lightgrey.withValues(alpha: 0.3),
+          borderRadius: BorderRadius.circular(AppRadius.card),
+          border: Border.all(
+            color: AppColors.grey.withValues(alpha: 0.3),
+          ),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.lock, size: 16, color: AppColors.grey),
+            const SizedBox(width: 8),
+            Text(
+              'Private game - invitation only',
+              style: AppTextStyles.small.copyWith(
+                color: AppColors.grey,
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+          ],
+        ),
       );
     }
 

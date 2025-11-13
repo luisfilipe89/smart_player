@@ -57,6 +57,8 @@ class CloudGamesActions {
       _cloudGamesService.getInvitedGamesForCurrentUser();
   Future<Map<String, String>> getGameInviteStatuses(String gameId) =>
       _cloudGamesService.getGameInviteStatuses(gameId);
+  Future<String?> getUserInviteStatusForGame(String gameId) =>
+      _cloudGamesService.getUserInviteStatusForGame(gameId);
   Future<void> sendGameInvitesToFriends(
           String gameId, List<String> friendUids) =>
       _cloudGamesService.sendGameInvitesToFriends(gameId, friendUids);

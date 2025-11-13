@@ -288,7 +288,7 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
 
       Position? userPosition;
       try {
-        userPosition = await ref.read(currentPositionProvider.future);
+        userPosition = await ref.read(locationActionsProvider).getCurrentPosition();
       } catch (e) {
         debugPrint('📍 Could not obtain user position: $e');
       }
@@ -2418,6 +2418,8 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                                                     setState(() {
                                                       _selectedTime = time;
                                                     });
+                                                    // Auto-scroll to show next options after selecting time
+                                                    _scrollToCreateGameButton();
                                                   },
                                                 ),
                                               ),

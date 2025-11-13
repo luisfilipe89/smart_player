@@ -1,6 +1,6 @@
 import * as admin from "firebase-admin";
 import { setGlobalOptions } from "firebase-functions/v2";
-import { onUserDeleted } from "firebase-functions/v2/auth";
+// import { onUserDeleted } from "firebase-functions/v2/auth"; // Temporarily disabled - v2/auth not available in current firebase-functions version
 import { onDocumentCreated } from "firebase-functions/v2/firestore";
 import { onValueCreated, onValueDeleted, onValueWritten } from "firebase-functions/v2/database";
 import { onSchedule } from "firebase-functions/v2/scheduler";
@@ -353,6 +353,8 @@ function deriveNameLowerFromEmail(email?: string | null): string | null {
   return base.toLowerCase();
 }
 
+// Temporarily disabled - onUserDeleted import not available
+/*
 export const cleanupAuthUserDelete = onUserDeleted(async (event) => {
   const uid = event.data?.uid;
   if (!uid) return;
@@ -418,6 +420,7 @@ export const cleanupAuthUserDelete = onUserDeleted(async (event) => {
     }
   }
 });
+*/
 
 // Cleanup when a user is deleted: remove invites and player entries
 export const onUserDelete = onValueDeleted("/users/{uid}", async (event) => {

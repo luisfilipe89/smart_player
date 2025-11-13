@@ -788,6 +788,34 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
                                 ],
                               ),
                             ),
+                          if (game.isModified)
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: AppColors.blue.withValues(alpha: 0.1),
+                                border: const Border.fromBorderSide(BorderSide(
+                                    color: AppColors.lightgrey, width: 1)),
+                                borderRadius:
+                                    BorderRadius.circular(AppRadius.smallCard),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Container(
+                                      width: 6,
+                                      height: 6,
+                                      decoration: const BoxDecoration(
+                                          color: AppColors.blue,
+                                          shape: BoxShape.circle)),
+                                  const SizedBox(width: 6),
+                                  Text('modified'.tr(),
+                                      style: AppTextStyles.small.copyWith(
+                                          color: AppColors.blue,
+                                          fontWeight: FontWeight.bold)),
+                                ],
+                              ),
+                            ),
                           StreamBuilder<int>(
                             stream: Stream.periodic(
                                 const Duration(minutes: 1), (i) => i),

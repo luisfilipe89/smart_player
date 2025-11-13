@@ -541,5 +541,6 @@
     "field_report_allow_contact_hint": "Share my contact details so the municipality can reach me if needed.",
     "field_report_submit_button": "Send report",
     "field_report_error_description": "Please describe the issue in at least 10 characters.",
-    "field_report_submitted": "Thanks! Your report was sent."
+    "field_report_submitted": "Thanks! Your report was sent.",
+    "modified": "Modified"
 }

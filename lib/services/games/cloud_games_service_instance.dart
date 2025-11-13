@@ -56,7 +56,8 @@ class CloudGamesServiceInstance {
   // Compute a stable field key. Prefer explicit fieldId; else lat,lon; else sanitized name
   String _fieldKeyForGame(Game game) {
     if ((game.fieldId ?? '').toString().trim().isNotEmpty) {
-      return game.fieldId!.trim();
+      // Sanitize fieldId to remove slashes and other problematic characters for Firebase paths
+      return game.fieldId!.trim().replaceAll('/', '_').replaceAll('\\', '_');
     }
     if (game.latitude != null && game.longitude != null) {
       final lat = game.latitude!.toStringAsFixed(5).replaceAll('.', '_');
@@ -71,9 +72,10 @@ class CloudGamesServiceInstance {
     return sanitized.isEmpty ? 'unknown_field' : sanitized;
   }
 
-  // Check if a slot is occupied by an active game
+  // Check if a slot is occupied by an active game (excluding the specified gameId if provided)
   Future<bool> _isSlotOccupiedByActiveGame(
-      String dateKey, String fieldKey, String timeKey) async {
+      String dateKey, String fieldKey, String timeKey,
+      {String? excludeGameId}) async {
     try {
       // Query all active games
       final snapshot =
@@ -96,6 +98,11 @@ class CloudGamesServiceInstance {
               gameData['slotField']?.toString() ?? _fieldKeyForGame(game);
           final gameTimeKey =
               gameData['slotTime']?.toString() ?? _timeKey(game.dateTime);
+
+          // Skip the excluded game (useful when checking after creation)
+          if (excludeGameId != null && game.id == excludeGameId) {
+            continue;
+          }
 
           if (gameDateKey == dateKey &&
               gameFieldKey == fieldKey &&
@@ -188,8 +195,48 @@ class CloudGamesServiceInstance {
         'slots/$dateKey/$fieldKey/$timeKey': true,
       };
 
-      // Atomic commit; should succeed now that we've cleaned up stale slots
-      await _database.ref().update(updates);
+      // Write each path individually (update() has issues with nested validation rules)
+      // Track what was written for rollback if any write fails
+      bool gameWritten = false;
+      bool indexWritten = false;
+      bool slotWritten = false;
+
+      try {
+        await _database.ref('${DbPaths.games}/$gameId').set(gameData);
+        gameWritten = true;
+
+        await _database.ref('users/$userId/createdGames/$gameId').set({
+          'sport': gameWithId.sport,
+          'dateTime': gameWithId.dateTime.toIso8601String(),
+          'location': gameWithId.location,
+          'maxPlayers': gameWithId.maxPlayers,
+        });
+        indexWritten = true;
+
+        await _database.ref('slots/$dateKey/$fieldKey/$timeKey').set(true);
+        slotWritten = true;
+      } catch (e) {
+        // Rollback any writes that succeeded
+        if (slotWritten) {
+          try {
+            await _database.ref('slots/$dateKey/$fieldKey/$timeKey').remove();
+          } catch (_) {}
+        }
+
+        if (indexWritten) {
+          try {
+            await _database.ref('users/$userId/createdGames/$gameId').remove();
+          } catch (_) {}
+        }
+
+        if (gameWritten) {
+          try {
+            await _database.ref('${DbPaths.games}/$gameId').remove();
+          } catch (_) {}
+        }
+
+        rethrow;
+      }
 
       // Send notifications to invited friends
       // This will be implemented when we add friend invites functionality
@@ -1015,9 +1062,8 @@ class CloudGamesServiceInstance {
               if (invites is Map) {
                 final userInvite = invites[userId];
                 if (userInvite is Map) {
-                  isPending =
-                      (userInvite['status']?.toString() ?? 'pending') ==
-                          'pending';
+                  isPending = (userInvite['status']?.toString() ?? 'pending') ==
+                      'pending';
                 } else if (userInvite != null) {
                   isPending = userInvite.toString() == 'pending';
                 }
@@ -1048,8 +1094,7 @@ class CloudGamesServiceInstance {
 
     controller = StreamController<List<Game>>.broadcast(
       onListen: () {
-        NumberedLogger.d(
-            '🔍 Watching pendingInviteIndex for user: $userId');
+        NumberedLogger.d('🔍 Watching pendingInviteIndex for user: $userId');
         controller.add(<Game>[]);
         indexSubscription = pendingIndexRef.onValue.listen(
           (event) {
@@ -1077,9 +1122,8 @@ class CloudGamesServiceInstance {
   Future<void> _ensurePendingInviteIndexForUser(
       String userId, Set<String> pendingGameIds) async {
     try {
-      final invitesSnapshot = await _usersRef
-          .child(DbPaths.userGameInvites(userId))
-          .get();
+      final invitesSnapshot =
+          await _usersRef.child(DbPaths.userGameInvites(userId)).get();
       if (!invitesSnapshot.exists) {
         return;
       }
@@ -1695,6 +1739,41 @@ class CloudGamesServiceInstance {
     } catch (e) {
       NumberedLogger.e('Error getting invite statuses for game $gameId: $e');
       return {};
+    }
+  }
+
+  // Check if current user has a pending invite for a specific game
+  // This checks the user's gameInvites path directly for faster detection
+  Future<String?> getUserInviteStatusForGame(String gameId) async {
+    try {
+      final userId = _currentUserId;
+      if (userId == null) {
+        return null;
+      }
+
+      final snapshot = await _usersRef
+          .child(DbPaths.userGameInvites(userId))
+          .child(gameId)
+          .get();
+
+      if (!snapshot.exists) {
+        return null;
+      }
+
+      final inviteData = snapshot.value;
+      if (inviteData is Map) {
+        final inviteMap = Map<dynamic, dynamic>.from(inviteData);
+        return inviteMap['status']?.toString();
+      } else if (inviteData != null) {
+        // Legacy format - just a string
+        return inviteData.toString();
+      }
+
+      return null;
+    } catch (e) {
+      NumberedLogger.e(
+          'Error checking user invite status for game $gameId: $e');
+      return null;
     }
   }
 
