@@ -26,6 +26,16 @@ final myGamesProvider = StreamProvider.autoDispose<List<Game>>((ref) {
   return cloudGamesService.watchMyGames();
 });
 
+// Historic games provider (reactive) - past games where user participated
+final historicGamesProvider = StreamProvider.autoDispose<List<Game>>((ref) {
+  final cloudGamesService = ref.watch(cloudGamesServiceProvider);
+  final userId = ref.watch(currentUserIdProvider);
+
+  if (userId == null) return Stream.value([]);
+
+  return cloudGamesService.watchHistoricGames();
+});
+
 // Joinable games provider (reactive stream)
 final joinableGamesProvider = StreamProvider<List<Game>>((ref) {
   final cloudGamesService = ref.watch(cloudGamesServiceProvider);

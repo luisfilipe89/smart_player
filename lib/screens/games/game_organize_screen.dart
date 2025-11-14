@@ -151,17 +151,29 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
     final now = DateTime.now();
     final allTimes = [
       '09:00',
+      '09:30',
       '10:00',
+      '10:30',
       '11:00',
+      '11:30',
       '12:00',
+      '12:30',
       '13:00',
+      '13:30',
       '14:00',
+      '14:30',
       '15:00',
+      '15:30',
       '16:00',
+      '16:30',
       '17:00',
+      '17:30',
       '18:00',
+      '18:30',
       '19:00',
+      '19:30',
       '20:00',
+      '20:30',
       '21:00',
     ];
 
@@ -197,6 +209,40 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
 
     // For future dates, return all times
     return allTimes;
+  }
+
+  // Helper function to convert time string (HH:mm) to minutes since midnight
+  int _timeStringToMinutes(String timeStr) {
+    final parts = timeStr.split(':');
+    final hour = int.parse(parts[0]);
+    final minute = int.parse(parts[1]);
+    return hour * 60 + minute;
+  }
+
+  // Helper function to check if two 1-hour time slots overlap
+  // Games always last 1 hour, so we need to check if the 1-hour windows overlap
+  bool _slotsOverlap(String time1, String time2) {
+    final minutes1 = _timeStringToMinutes(time1);
+    final minutes2 = _timeStringToMinutes(time2);
+    
+    // Each slot is a 1-hour window: [start, start+60)
+    final start1 = minutes1;
+    final end1 = minutes1 + 60;
+    final start2 = minutes2;
+    final end2 = minutes2 + 60;
+    
+    // Two intervals overlap if: start1 < end2 && start2 < end1
+    return start1 < end2 && start2 < end1;
+  }
+
+  // Check if a time slot conflicts with any booked time (considering 1-hour duration)
+  bool _isTimeSlotBooked(String time, Set<String> bookedTimes) {
+    for (final bookedTime in bookedTimes) {
+      if (_slotsOverlap(time, bookedTime)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   bool get _isFormComplete {
@@ -419,10 +465,33 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
     }
   }
 
-  // Load weather data for the selected date
+  // Load weather data for the selected date and field
+  // Only loads weather when both date and field are selected to ensure we use the field's actual coordinates
   Future<void> _loadWeather() async {
     if (_selectedDate == null) {
       debugPrint('🌤️ Weather: No selected date');
+      return;
+    }
+
+    // Don't load weather until a field is selected - this ensures we use the field's actual coordinates
+    // instead of falling back to default coordinates
+    final selectedFieldLat =
+        (_selectedField?['latitude'] as num?)?.toDouble() ??
+        double.tryParse(_selectedField?['latitude']?.toString() ?? '') ??
+        (_selectedField?['lat'] as num?)?.toDouble();
+    final selectedFieldLon =
+        (_selectedField?['longitude'] as num?)?.toDouble() ??
+        double.tryParse(_selectedField?['longitude']?.toString() ?? '') ??
+        (_selectedField?['lon'] as num?)?.toDouble();
+    
+    if (selectedFieldLat == null || selectedFieldLon == null) {
+      debugPrint('🌤️ Weather: No field selected - skipping weather load to ensure field-specific coordinates are used');
+      if (mounted) {
+        setState(() {
+          _weatherData = {};
+          _isLoadingWeather = false;
+        });
+      }
       return;
     }
 
@@ -434,19 +503,11 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
 
     try {
       final weatherActions = ref.read(weatherActionsProvider);
-      final selectedFieldLat =
-          (_selectedField?['latitude'] as num?)?.toDouble() ??
-          double.tryParse(_selectedField?['latitude']?.toString() ?? '') ??
-          (_selectedField?['lat'] as num?)?.toDouble();
-      final selectedFieldLon =
-          (_selectedField?['longitude'] as num?)?.toDouble() ??
-          double.tryParse(_selectedField?['longitude']?.toString() ?? '') ??
-          (_selectedField?['lon'] as num?)?.toDouble();
-      final latitude = selectedFieldLat ?? 51.6978; // 's-Hertogenbosch fallback
-      final longitude = selectedFieldLon ?? 5.3037;
+      final latitude = selectedFieldLat;
+      final longitude = selectedFieldLon;
 
       debugPrint(
-        "🌤️ Weather: Fetching for date ${_selectedDate!}, lat $latitude, lon $longitude",
+        "🌤️ Weather: Fetching for date ${_selectedDate!}, field ${_selectedField?['name']}, lat $latitude, lon $longitude",
       );
 
       final weatherData = await weatherActions.fetchWeatherForDate(
@@ -455,7 +516,7 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
         longitude: longitude,
       );
 
-      debugPrint('🌤️ Weather: Received ${weatherData.length} hours of data');
+      debugPrint('🌤️ Weather: Received ${weatherData.length} hours of data for field at ($latitude, $longitude)');
 
       if (mounted) {
         setState(() {
@@ -2290,9 +2351,15 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                                                       _selectedDate = date;
                                                     }
                                                   });
-                                                  // Load weather + booked slots
+                                                  // Load weather + booked slots only if both date and field are selected
+                                                  // Weather requires field coordinates, so it will load when field is selected
                                                   if (_selectedDate != null) {
-                                                    _loadWeather();
+                                                    // Only load weather if field is already selected (has coordinates)
+                                                    if (_selectedField != null &&
+                                                        _selectedField?['latitude'] != null &&
+                                                        _selectedField?['longitude'] != null) {
+                                                      _loadWeather();
+                                                    }
                                                     _loadBookedSlots();
                                                     // Auto-scroll to Create Game button after selecting date
                                                     _scrollToCreateGameButton();
@@ -2328,8 +2395,8 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                                             final time = _availableTimes[index];
                                             final isSelected =
                                                 _selectedTime == time;
-                                            final isBooked = _bookedTimes
-                                                .contains(time);
+                                            final isBooked = _isTimeSlotBooked(
+                                                time, _bookedTimes);
                                             if (index == 0) {
                                               debugPrint(
                                                 '🔍 UI: First time slot check - time=$time, isBooked=$isBooked, _bookedTimes=${_bookedTimes.toList()}',
@@ -2339,9 +2406,18 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                                             // This ensures we only display location-based weather predictions
                                             final hasWeatherData =
                                                 _weatherData.isNotEmpty;
+                                            // Weather API returns hourly data (e.g., "10:00"), so map 30-minute slots
+                                            // to their hour's weather data (e.g., "10:30" -> "10:00")
+                                            String weatherKey = time;
+                                            if (hasWeatherData && !_weatherData.containsKey(time)) {
+                                              // For 30-minute slots, use the hour's weather data
+                                              final timeParts = time.split(':');
+                                              final hour = timeParts[0];
+                                              weatherKey = '$hour:00';
+                                            }
                                             final weatherCondition =
                                                 hasWeatherData
-                                                ? _weatherData[time]
+                                                ? _weatherData[weatherKey]
                                                 : null;
 
                                             final weatherIcon =

@@ -12,6 +12,7 @@ import 'package:move_young/services/system/haptics_provider.dart';
 import 'package:move_young/theme/tokens.dart';
 import 'package:move_young/utils/service_helpers.dart' show showFloatingSnack;
 import 'package:move_young/theme/app_back_button.dart';
+import 'package:move_young/widgets/common/tab_with_count.dart';
 import 'package:shimmer/shimmer.dart';
 
 // Helper moved to utils/service_helpers.dart and imported above
@@ -161,6 +162,8 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen>
           labelColor: AppColors.primary,
           unselectedLabelColor: AppColors.grey,
           indicatorColor: AppColors.primary,
+          isScrollable: false,
+          tabAlignment: TabAlignment.fill,
           tabs: [
             if (uid == null)
               Tab(text: 'friends_tab_friends'.tr())
@@ -171,8 +174,10 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen>
                   return friendsAsync.when(
                     data: (friends) {
                       final count = friends.length;
-                      final base = 'friends_tab_friends'.tr();
-                      return Tab(text: count > 0 ? '$base ($count)' : base);
+                      return TabWithCount(
+                        label: 'friends_tab_friends'.tr(),
+                        count: count,
+                      );
                     },
                     loading: () => Tab(text: 'friends_tab_friends'.tr()),
                     error: (_, __) => Tab(text: 'friends_tab_friends'.tr()),
@@ -190,8 +195,10 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen>
                   return requestsAsync.when(
                     data: (requests) {
                       final count = requests.length;
-                      final base = 'friends_tab_requests'.tr();
-                      return Tab(text: count > 0 ? '$base ($count)' : base);
+                      return TabWithCount(
+                        label: 'friends_tab_requests'.tr(),
+                        count: count,
+                      );
                     },
                     loading: () => Tab(text: 'friends_tab_requests'.tr()),
                     error: (_, __) => Tab(text: 'friends_tab_requests'.tr()),

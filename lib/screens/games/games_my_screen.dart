@@ -15,6 +15,8 @@ import 'package:move_young/services/friends/friends_provider.dart';
 import 'package:move_young/services/external/weather_provider.dart';
 import 'package:move_young/utils/error_extensions.dart';
 import 'package:move_young/widgets/common/error_retry_widget.dart';
+import 'package:move_young/widgets/common/tab_with_count.dart';
+import 'package:move_young/screens/maps/gmaps_screen.dart';
 
 class GamesMyScreen extends ConsumerStatefulWidget {
   final String? highlightGameId;
@@ -38,7 +40,7 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
   void initState() {
     super.initState();
     _tab =
-        TabController(length: 2, vsync: this, initialIndex: widget.initialTab);
+        TabController(length: 3, vsync: this, initialIndex: widget.initialTab);
     _highlightId = widget.highlightGameId;
 
     // Auto-refresh when user switches to the Joining tab (index 0)
@@ -478,6 +480,41 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
     }
   }
 
+  Future<void> _openReportSheet(Game game) async {
+    // Extract field information from game
+    final fieldId = game.fieldId?.trim() ?? '';
+    final fallbackId = fieldId.isNotEmpty
+        ? fieldId
+        : (game.latitude != null && game.longitude != null
+            ? 'loc:${game.latitude!.toStringAsFixed(5)}:${game.longitude!.toStringAsFixed(5)}'
+            : 'game:${game.id}');
+
+    final fieldName = game.location.trim().isNotEmpty
+        ? game.location.trim()
+        : 'unnamed_location'.tr();
+
+    final fieldAddress = game.address?.trim();
+
+    final result = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      builder: (ctx) => FieldReportSheet(
+        fieldId: fallbackId,
+        fieldName: fieldName,
+        fieldAddress: fieldAddress,
+      ),
+    );
+
+    if (!mounted || result != true) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('field_report_submitted'.tr()),
+        backgroundColor: AppColors.green,
+      ),
+    );
+  }
+
   Future<void> _openDirections(Game game) async {
     try {
       Uri uri;
@@ -582,6 +619,7 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
   Widget build(BuildContext context) {
     // Watch providers for reactive data
     final myGamesAsync = ref.watch(myGamesProvider);
+    final historicGamesAsync = ref.watch(historicGamesProvider);
 
     // Calculate joined/created games from provider data
     final joinedGames = myGamesAsync.valueOrNull
@@ -595,6 +633,9 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
     // Sort organized games by upcoming time (earliest first)
     createdGames.sort((a, b) => a.dateTime.compareTo(b.dateTime));
 
+    // Historic games (already sorted by date descending in the provider)
+    final historicGames = historicGamesAsync.valueOrNull ?? [];
+
     return Scaffold(
       appBar: AppBar(
         leading: const AppBackButton(goHome: true),
@@ -606,9 +647,21 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
           labelColor: AppColors.primary,
           unselectedLabelColor: AppColors.grey,
           indicatorColor: AppColors.primary,
+          isScrollable: false,
+          tabAlignment: TabAlignment.fill,
           tabs: [
-            Tab(text: '${'registered_games'.tr()} (${joinedGames.length})'),
-            Tab(text: '${'organized_games'.tr()} (${createdGames.length})'),
+            TabWithCount(
+              label: 'registered_games'.tr(),
+              count: joinedGames.length,
+            ),
+            TabWithCount(
+              label: 'organized_games'.tr(),
+              count: createdGames.length,
+            ),
+            TabWithCount(
+              label: 'historic_games'.tr(),
+              count: historicGames.length,
+            ),
           ],
         ),
       ),
@@ -672,6 +725,34 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
                               itemBuilder: (_, i) =>
                                   _buildGameTile(createdGames[i]),
                             ),
+                    ),
+                    // Historic Games (past games where user participated)
+                    RefreshIndicator(
+                      onRefresh: () async => _refreshData(),
+                      child: historicGamesAsync.when(
+                        loading: () =>
+                            const Center(child: CircularProgressIndicator()),
+                        error: (error, stack) => ErrorRetryWidget(
+                          message: historicGamesAsync.errorMessage ??
+                              'Failed to load historic games',
+                          onRetry: _refreshData,
+                        ),
+                        data: (games) => (games.isEmpty)
+                            ? ListView(
+                                physics: const AlwaysScrollableScrollPhysics(),
+                                padding: const EdgeInsets.only(
+                                    bottom: AppHeights.reg),
+                                children: [_emptyStateHistoric(context)],
+                              )
+                            : ListView.builder(
+                                physics: const AlwaysScrollableScrollPhysics(),
+                                padding: AppPaddings.allMedium.add(
+                                  const EdgeInsets.only(bottom: AppHeights.reg),
+                                ),
+                                itemCount: games.length,
+                                itemBuilder: (_, i) => _buildGameTile(games[i]),
+                              ),
+                      ),
                     ),
                   ],
                 ),
@@ -903,7 +984,7 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
                       ),
                     ),
                     const SizedBox(width: 6),
-                    if (isMine)
+                    if (isMine && !game.dateTime.isBefore(DateTime.now()))
                       IconButton(
                         padding: const EdgeInsets.all(4),
                         constraints:
@@ -967,161 +1048,181 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Row(
-                      children: [
-                        if (!isMine && _isUserJoined(game)) ...[
-                          Expanded(
-                            child: ElevatedButton.icon(
-                              onPressed: () => game.isActive
-                                  ? _leaveGame(game)
-                                  : _removeFromJoined(game),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: AppColors.red,
-                                foregroundColor: Colors.white,
-                                minimumSize: const Size(0, 36),
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 8, vertical: 6),
-                                textStyle: AppTextStyles.small,
-                                iconSize: 16,
+                    // Only show action buttons (edit, cancel, directions, share) for upcoming games
+                    if (!game.dateTime.isBefore(DateTime.now())) ...[
+                      Row(
+                        children: [
+                          if (!isMine && _isUserJoined(game)) ...[
+                            Expanded(
+                              child: ElevatedButton.icon(
+                                onPressed: () => game.isActive
+                                    ? _leaveGame(game)
+                                    : _removeFromJoined(game),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppColors.red,
+                                  foregroundColor: Colors.white,
+                                  minimumSize: const Size(0, 36),
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 8, vertical: 6),
+                                  textStyle: AppTextStyles.small,
+                                  iconSize: 16,
+                                ),
+                                icon: Icon(
+                                    game.isActive
+                                        ? Icons.logout
+                                        : Icons.delete_outline,
+                                    size: 16),
+                                label: Text(game.isActive ? 'Leave' : 'Remove'),
                               ),
-                              icon: Icon(
-                                  game.isActive
-                                      ? Icons.logout
-                                      : Icons.delete_outline,
-                                  size: 16),
-                              label: Text(game.isActive ? 'Leave' : 'Remove'),
                             ),
-                          ),
-                          const SizedBox(width: 6),
-                        ],
-                        if (isMine) ...[
-                          Expanded(
-                            child: ElevatedButton.icon(
-                              onPressed: () async {
-                                // If game is already cancelled, just remove it from view
-                                if (!game.isActive) {
-                                  await _removeFromCreated(game);
-                                  return;
-                                }
+                            const SizedBox(width: 6),
+                          ],
+                          if (isMine) ...[
+                            Expanded(
+                              child: ElevatedButton.icon(
+                                onPressed: () async {
+                                  // If game is already cancelled, just remove it from view
+                                  if (!game.isActive) {
+                                    await _removeFromCreated(game);
+                                    return;
+                                  }
 
-                                // Otherwise, cancel it (which marks inactive AND removes from createdGames)
-                                final confirmed = await showDialog<bool>(
-                                  context: context,
-                                  builder: (ctx) => AlertDialog(
-                                    title: Text('cancel'.tr()),
-                                    content: Text('are_you_sure'.tr()),
-                                    actions: [
-                                      TextButton(
-                                          onPressed: () =>
-                                              Navigator.pop(ctx, false),
-                                          child: Text('cancel'.tr())),
-                                      TextButton(
-                                          onPressed: () =>
-                                              Navigator.pop(ctx, true),
-                                          child: Text('ok'.tr())),
-                                    ],
-                                  ),
-                                );
-                                if (confirmed == true) {
-                                  try {
-                                    await ref
-                                        .read(gamesActionsProvider)
-                                        .deleteGame(game.id);
-                                    if (mounted) {
-                                      ScaffoldMessenger.of(context)
-                                          .showSnackBar(
-                                        SnackBar(
-                                          content: Text(
-                                              'game_cancelled_successfully'
-                                                  .tr()),
-                                          backgroundColor: AppColors.green,
-                                        ),
-                                      );
-                                    }
-                                    // No need to call _refreshData() - streams will update automatically
-                                  } catch (e) {
-                                    if (mounted) {
-                                      ScaffoldMessenger.of(context)
-                                          .showSnackBar(
-                                        SnackBar(
-                                          content: Text(
-                                              'game_cancellation_failed'.tr()),
-                                          backgroundColor: AppColors.red,
-                                        ),
-                                      );
+                                  // Otherwise, cancel it (which marks inactive AND removes from createdGames)
+                                  final confirmed = await showDialog<bool>(
+                                    context: context,
+                                    builder: (ctx) => AlertDialog(
+                                      title: Text('cancel'.tr()),
+                                      content: Text('are_you_sure'.tr()),
+                                      actions: [
+                                        TextButton(
+                                            onPressed: () =>
+                                                Navigator.pop(ctx, false),
+                                            child: Text('cancel'.tr())),
+                                        TextButton(
+                                            onPressed: () =>
+                                                Navigator.pop(ctx, true),
+                                            child: Text('ok'.tr())),
+                                      ],
+                                    ),
+                                  );
+                                  if (confirmed == true) {
+                                    try {
+                                      await ref
+                                          .read(gamesActionsProvider)
+                                          .deleteGame(game.id);
+                                      if (mounted) {
+                                        ScaffoldMessenger.of(context)
+                                            .showSnackBar(
+                                          SnackBar(
+                                            content: Text(
+                                                'game_cancelled_successfully'
+                                                    .tr()),
+                                            backgroundColor: AppColors.green,
+                                          ),
+                                        );
+                                      }
+                                      // No need to call _refreshData() - streams will update automatically
+                                    } catch (e) {
+                                      if (mounted) {
+                                        ScaffoldMessenger.of(context)
+                                            .showSnackBar(
+                                          SnackBar(
+                                            content: Text(
+                                                'game_cancellation_failed'
+                                                    .tr()),
+                                            backgroundColor: AppColors.red,
+                                          ),
+                                        );
+                                      }
                                     }
                                   }
-                                }
-                              },
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: AppColors.red,
-                                foregroundColor: Colors.white,
+                                },
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppColors.red,
+                                  foregroundColor: Colors.white,
+                                  minimumSize: const Size(0, 36),
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 8, vertical: 6),
+                                  textStyle: AppTextStyles.small,
+                                  iconSize: 16,
+                                  elevation: 0,
+                                ),
+                                icon: Icon(
+                                    game.isActive
+                                        ? Icons.cancel
+                                        : Icons.delete_outline,
+                                    size: 16),
+                                label: Text(
+                                    game.isActive ? 'cancel'.tr() : 'Remove'),
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                          ],
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: () => _openDirections(game),
+                              style: OutlinedButton.styleFrom(
                                 minimumSize: const Size(0, 36),
                                 padding: const EdgeInsets.symmetric(
-                                    horizontal: 8, vertical: 6),
+                                    horizontal: 6, vertical: 6),
                                 textStyle: AppTextStyles.small,
                                 iconSize: 16,
-                                elevation: 0,
+                                foregroundColor: AppColors.primary,
+                                side:
+                                    const BorderSide(color: AppColors.primary),
                               ),
-                              icon: Icon(
-                                  game.isActive
-                                      ? Icons.cancel
-                                      : Icons.delete_outline,
-                                  size: 16),
-                              label: Text(
-                                  game.isActive ? 'cancel'.tr() : 'Remove'),
+                              icon: const Icon(Icons.directions, size: 16),
+                              label: Text('directions'.tr()),
                             ),
                           ),
                           const SizedBox(width: 6),
-                        ],
-                        Expanded(
-                          child: OutlinedButton.icon(
-                            onPressed: () => _openDirections(game),
-                            style: OutlinedButton.styleFrom(
-                              minimumSize: const Size(0, 36),
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 6, vertical: 6),
-                              textStyle: AppTextStyles.small,
-                              iconSize: 16,
-                              foregroundColor: AppColors.primary,
-                              side: const BorderSide(color: AppColors.primary),
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: () => _shareGameLink(game),
+                              style: OutlinedButton.styleFrom(
+                                minimumSize: const Size(0, 36),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 6, vertical: 6),
+                                textStyle: AppTextStyles.small,
+                                iconSize: 16,
+                                foregroundColor: AppColors.primary,
+                                side:
+                                    const BorderSide(color: AppColors.primary),
+                              ),
+                              icon: const Icon(Icons.ios_share_outlined,
+                                  size: 16),
+                              label: const Text('Share'),
                             ),
-                            icon: const Icon(Icons.directions, size: 16),
-                            label: Text('directions'.tr()),
                           ),
-                        ),
-                        const SizedBox(width: 6),
-                        Expanded(
+                        ],
+                      ),
+                      if ((game.contactInfo?.isNotEmpty ?? false)) ...[
+                        const SizedBox(height: 8),
+                        Align(
+                          alignment: Alignment.centerRight,
                           child: OutlinedButton.icon(
-                            onPressed: () => _shareGameLink(game),
+                            onPressed: () => _messageOrganizer(game),
                             style: OutlinedButton.styleFrom(
-                              minimumSize: const Size(0, 36),
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 6, vertical: 6),
-                              textStyle: AppTextStyles.small,
-                              iconSize: 16,
                               foregroundColor: AppColors.primary,
                               side: const BorderSide(color: AppColors.primary),
                             ),
-                            icon:
-                                const Icon(Icons.ios_share_outlined, size: 16),
-                            label: const Text('Share'),
+                            icon: const Icon(Icons.mail_outline),
+                            label: const Text('Message organizer'),
                           ),
                         ),
                       ],
-                    ),
-                    if ((game.contactInfo?.isNotEmpty ?? false)) ...[
-                      const SizedBox(height: 8),
-                      Align(
-                        alignment: Alignment.centerRight,
+                    ],
+                    // Show "Report an issue" button for historic games (past games)
+                    if (game.dateTime.isBefore(DateTime.now())) ...[
+                      Center(
                         child: OutlinedButton.icon(
-                          onPressed: () => _messageOrganizer(game),
+                          onPressed: () => _openReportSheet(game),
                           style: OutlinedButton.styleFrom(
                             foregroundColor: AppColors.primary,
                             side: const BorderSide(color: AppColors.primary),
                           ),
-                          icon: const Icon(Icons.mail_outline),
-                          label: const Text('Message organizer'),
+                          icon: const Icon(Icons.report_problem_outlined),
+                          label: Text('field_report_button'.tr()),
                         ),
                       ),
                     ],
@@ -1184,6 +1285,22 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
             },
             child: Text('go_organize_a_game'.tr()),
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _emptyStateHistoric(BuildContext context) {
+    return Padding(
+      padding: AppPaddings.allSuperBig,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Icons.history, size: 64, color: AppColors.grey),
+          const SizedBox(height: AppHeights.reg),
+          Text('no_historic_games_yet'.tr(),
+              style: AppTextStyles.title.copyWith(color: AppColors.grey),
+              textAlign: TextAlign.center),
         ],
       ),
     );

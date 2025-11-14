@@ -38,10 +38,10 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
     'all',
     'soccer',
     'basketball',
-    'tennis',
     'volleyball',
-    'badminton',
-    'table_tennis'
+    'table_tennis',
+    'skateboard',
+    'boules'
   ];
 
   @override

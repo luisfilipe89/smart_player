@@ -51,6 +51,34 @@ class CloudGamesServiceInstance {
     return '$h$m';
   }
 
+  // Helper function to convert timeKey (HHmm) to minutes since midnight
+  int _timeKeyToMinutes(String timeKey) {
+    // timeKey format is HHmm (e.g., "1030" for 10:30)
+    if (timeKey.length == 4) {
+      final hour = int.parse(timeKey.substring(0, 2));
+      final minute = int.parse(timeKey.substring(2, 4));
+      return hour * 60 + minute;
+    }
+    // Fallback: assume it's already in minutes or handle error
+    return 0;
+  }
+
+  // Helper function to check if two 1-hour time slots overlap
+  // Games always last 1 hour, so we need to check if the 1-hour windows overlap
+  bool _timeSlotsOverlap(String timeKey1, String timeKey2) {
+    final minutes1 = _timeKeyToMinutes(timeKey1);
+    final minutes2 = _timeKeyToMinutes(timeKey2);
+
+    // Each slot is a 1-hour window: [start, start+60)
+    final start1 = minutes1;
+    final end1 = minutes1 + 60;
+    final start2 = minutes2;
+    final end2 = minutes2 + 60;
+
+    // Two intervals overlap if: start1 < end2 && start2 < end1
+    return start1 < end2 && start2 < end1;
+  }
+
   // Compute a stable field key. Prefer explicit fieldId; else lat,lon; else sanitized name
   String _fieldKeyForGame(Game game) {
     if ((game.fieldId ?? '').toString().trim().isNotEmpty) {
@@ -104,9 +132,9 @@ class CloudGamesServiceInstance {
 
           if (gameDateKey == dateKey &&
               gameFieldKey == fieldKey &&
-              gameTimeKey == timeKey) {
+              _timeSlotsOverlap(gameTimeKey, timeKey)) {
             NumberedLogger.i(
-                'Slot occupied by active game ${game.id} at ${game.location}');
+                'Slot occupied by active game ${game.id} at ${game.location} (overlaps with existing game at $gameTimeKey)');
             return true;
           }
         } catch (e) {
@@ -365,8 +393,10 @@ class CloudGamesServiceInstance {
 
         if (newSlotSnapshot.exists && newSlotSnapshot.value == true) {
           // Slot exists, check if it's actually occupied by an active game
+          // Exclude the current game from the check to avoid false conflicts when updating
           final isOccupied = await _isSlotOccupiedByActiveGame(
-              newDateKey, newFieldKey, newTimeKey);
+              newDateKey, newFieldKey, newTimeKey,
+              excludeGameId: game.id);
 
           if (isOccupied) {
             NumberedLogger.w(
@@ -416,8 +446,10 @@ class CloudGamesServiceInstance {
             newFieldKey != null &&
             newTimeKey != null) {
           try {
+            // Exclude the current game from the check to avoid false conflicts when updating
             final isOccupied = await _isSlotOccupiedByActiveGame(
-                newDateKey, newFieldKey, newTimeKey);
+                newDateKey, newFieldKey, newTimeKey,
+                excludeGameId: game.id);
             if (isOccupied) {
               throw ValidationException('new_slot_unavailable');
             }
@@ -1526,6 +1558,216 @@ class CloudGamesServiceInstance {
             prevGame.dateTime != nextGame.dateTime ||
             prevGame.location != nextGame.location ||
             prevGame.updatedAt != nextGame.updatedAt ||
+            prevGame.isActive != nextGame.isActive) {
+          return false; // Something meaningful changed
+        }
+      }
+
+      // Check for new games
+      for (final gameId in nextMap.keys) {
+        if (!prevMap.containsKey(gameId)) return false;
+      }
+
+      return true; // No meaningful changes
+    });
+  }
+
+  // Watch historic games (past games where user participated)
+  Stream<List<Game>> watchHistoricGames() {
+    final userId = _currentUserId;
+    if (userId == null) return Stream.value([]);
+
+    final now = DateTime.now();
+
+    // Stream 1: Watch games organized by the user
+    final organizedGamesStream = _gamesRef
+        .orderByChild('organizerId')
+        .equalTo(userId)
+        .onValue
+        .asyncMap((event) async {
+      final gamesMap = <String, Game>{};
+      // Get current createdGames index to filter
+      final createdIndexSnapshot =
+          await _usersRef.child(DbPaths.userCreatedGames(userId)).get();
+      final Set<String> createdGameIds = {};
+      if (createdIndexSnapshot.exists) {
+        final createdData =
+            Map<dynamic, dynamic>.from(createdIndexSnapshot.value as Map);
+        createdGameIds.addAll(createdData.keys.map((k) => k.toString()));
+      }
+
+      if (event.snapshot.exists) {
+        final data = Map<dynamic, dynamic>.from(event.snapshot.value as Map);
+        for (final entry in data.values) {
+          try {
+            final game = Game.fromJson(Map<String, dynamic>.from(entry));
+            // Include historic games (past games) where user is organizer
+            if (createdGameIds.contains(game.id) &&
+                game.dateTime.isBefore(now)) {
+              gamesMap[game.id] = game;
+            }
+          } catch (e) {
+            NumberedLogger.w('Error parsing historic organized game: $e');
+          }
+        }
+      }
+
+      return gamesMap;
+    });
+
+    // Stream 2: Watch games the user joined (from joinedGames index)
+    final joinedGamesStream = _usersRef
+        .child(DbPaths.userJoinedGames(userId))
+        .onValue
+        .asyncMap((event) async {
+      final gamesMap = <String, Game>{};
+
+      if (!event.snapshot.exists) return gamesMap;
+
+      final joinedData =
+          Map<dynamic, dynamic>.from(event.snapshot.value as Map);
+      final joinedIds = joinedData.keys.map((k) => k.toString()).toList();
+
+      // Fetch current state of all joined games
+      for (final gameId in joinedIds) {
+        try {
+          final gameSnapshot = await _gamesRef.child(gameId).get();
+          if (!gameSnapshot.exists) continue;
+          final game = Game.fromJson(
+              Map<String, dynamic>.from(gameSnapshot.value as Map));
+          // Include historic games (past games) where user is in players list
+          if (game.dateTime.isBefore(now) && game.players.contains(userId)) {
+            gamesMap[game.id] = game;
+          }
+        } catch (e) {
+          NumberedLogger.w('Error fetching historic joined game $gameId: $e');
+        }
+      }
+
+      return gamesMap;
+    });
+
+    // Combine both streams
+    final controller = StreamController<List<Game>>();
+    StreamSubscription<Map<String, Game>>? organizedSub;
+    StreamSubscription<Map<String, Game>>? joinedSub;
+
+    // Track current state
+    Map<String, Game> organizedGames = {};
+    Map<String, Game> joinedGames = {};
+
+    void emitCombined() {
+      if (controller.isClosed) return;
+
+      // Merge organized and joined games (organized take precedence)
+      final allGamesMap = <String, Game>{
+        ...joinedGames,
+        ...organizedGames, // Organized games override joined if same ID
+      };
+
+      final allGames = allGamesMap.values.toList();
+      // Sort by date descending (most recent first)
+      allGames.sort((a, b) => b.dateTime.compareTo(a.dateTime));
+      controller.add(allGames);
+    }
+
+    // Watch organized games stream
+    organizedSub = organizedGamesStream.listen((games) {
+      organizedGames = games;
+      emitCombined();
+    }, onError: (e) {
+      if (!controller.isClosed) controller.addError(e);
+    });
+
+    // Watch joined games stream
+    joinedSub = joinedGamesStream.listen((games) {
+      joinedGames = games;
+      emitCombined();
+    }, onError: (e) {
+      if (!controller.isClosed) controller.addError(e);
+    });
+
+    // Initial fetch
+    Future.microtask(() async {
+      // Fetch initial organized games
+      final organizedSnapshot =
+          await _gamesRef.orderByChild('organizerId').equalTo(userId).get();
+      final createdIndexSnapshot =
+          await _usersRef.child(DbPaths.userCreatedGames(userId)).get();
+      final Set<String> createdGameIds = {};
+      if (createdIndexSnapshot.exists) {
+        final createdData =
+            Map<dynamic, dynamic>.from(createdIndexSnapshot.value as Map);
+        createdGameIds.addAll(createdData.keys.map((k) => k.toString()));
+      }
+      if (organizedSnapshot.exists) {
+        final data = Map<dynamic, dynamic>.from(organizedSnapshot.value as Map);
+        for (final entry in data.values) {
+          try {
+            final game = Game.fromJson(Map<String, dynamic>.from(entry));
+            if (createdGameIds.contains(game.id) &&
+                game.dateTime.isBefore(now)) {
+              organizedGames[game.id] = game;
+            }
+          } catch (e) {
+            NumberedLogger.w(
+                'Error parsing initial historic organized game: $e');
+          }
+        }
+      }
+
+      // Fetch initial joined games
+      final joinedSnapshot =
+          await _usersRef.child(DbPaths.userJoinedGames(userId)).get();
+      if (joinedSnapshot.exists) {
+        final joinedData =
+            Map<dynamic, dynamic>.from(joinedSnapshot.value as Map);
+        final joinedIds = joinedData.keys.map((k) => k.toString()).toList();
+
+        for (final gameId in joinedIds) {
+          try {
+            final gameSnapshot = await _gamesRef.child(gameId).get();
+            if (gameSnapshot.exists) {
+              final game = Game.fromJson(
+                  Map<String, dynamic>.from(gameSnapshot.value as Map));
+              if (game.dateTime.isBefore(now) &&
+                  game.players.contains(userId)) {
+                joinedGames[game.id] = game;
+              }
+            }
+          } catch (e) {
+            NumberedLogger.w(
+                'Error fetching initial historic joined game $gameId: $e');
+          }
+        }
+      }
+
+      emitCombined();
+    });
+
+    controller.onCancel = () {
+      organizedSub?.cancel();
+      joinedSub?.cancel();
+    };
+
+    return controller.stream.distinct((prev, next) {
+      if (prev.length != next.length) return false;
+
+      // Create maps for faster lookup
+      final prevMap = {for (var g in prev) g.id: g};
+      final nextMap = {for (var g in next) g.id: g};
+
+      for (final gameId in prevMap.keys) {
+        final prevGame = prevMap[gameId]!;
+        final nextGame = nextMap[gameId];
+
+        if (nextGame == null) return false; // Game was removed
+
+        // Check for meaningful changes
+        if (prevGame.currentPlayers != nextGame.currentPlayers ||
+            prevGame.players.length != nextGame.players.length ||
+            prevGame.dateTime != nextGame.dateTime ||
+            prevGame.location != nextGame.location ||
             prevGame.isActive != nextGame.isActive) {
           return false; // Something meaningful changed
         }
