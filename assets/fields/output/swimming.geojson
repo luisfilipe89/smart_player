@@ -1,0 +1,79 @@
+{
+  "type": "FeatureCollection",
+  "generator": "overpass-turbo",
+  "copyright": "The data included in this document is from www.openstreetmap.org. The data is made available under ODbL.",
+  "timestamp": "2025-11-14T11:10:02Z",
+  "overpass_query": "[out:json][timeout:180];\n\narea[\"name\"=\"'s-Hertogenbosch\"][\"boundary\"=\"administrative\"][\"admin_level\"=\"8\"]->.searchArea;\n\n(\n\n  nwr[\"sport\"=\"swimming\"][\"access\"=\"yes\"](area.searchArea);\n\n);\n\nout center tags qt;",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "way/80759365",
+        "access": "yes",
+        "name": "Engelermeer West",
+        "natural": "beach",
+        "nudism": "no",
+        "source": "3dShapes",
+        "sport": "swimming",
+        "surface": "sand;grass",
+        "@geometry": "center",
+        "address_display_name": "Meerheuvelweg, Engelermeer, Vlijmen, Heusden, Noord-Brabant, Nederland, 5251 VB, Nederland",
+        "address_short": "Meerheuvelweg, 5251 VB, Vlijmen, Nederland",
+        "address_super_short": "Meerheuvelweg, 5251 VB",
+        "address_micro_short": "Meerheuvelweg"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          5.2452274,
+          51.7019583
+        ]
+      },
+      "id": "way/80759365"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "node/10116118973",
+        "access": "yes",
+        "leisure": "bathing_place",
+        "name": "Zuiderplas",
+        "sport": "swimming",
+        "address_display_name": "Zuiderplas, Zuiderstrandweg, Zuid, Zuidoost, 's-Hertogenbosch, Noord-Brabant, Nederland, 5216 HH, Nederland",
+        "address_short": "Zuiderstrandweg, 5216 HH, 's-Hertogenbosch, Nederland",
+        "address_super_short": "Zuiderstrandweg, 5216 HH",
+        "address_micro_short": "Zuiderstrandweg"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          5.313735,
+          51.6756065
+        ]
+      },
+      "id": "node/10116118973"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "node/10116097793",
+        "access": "yes",
+        "leisure": "bathing_place",
+        "name": "Oosterplas",
+        "sport": "swimming",
+        "address_display_name": "Oosterplas, Oosterplasweg, Aawijk-Zuid, Zuidoost, 's-Hertogenbosch, Noord-Brabant, Nederland, 5216 PA, Nederland",
+        "address_short": "Oosterplasweg, 5216 PA, 's-Hertogenbosch, Nederland",
+        "address_super_short": "Oosterplasweg, 5216 PA",
+        "address_micro_short": "Oosterplasweg"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          5.3409675,
+          51.6868941
+        ]
+      },
+      "id": "node/10116097793"
+    }
+  ]
+}

@@ -1,0 +1,448 @@
+{
+  "type": "FeatureCollection",
+  "generator": "overpass-turbo",
+  "copyright": "The data included in this document is from www.openstreetmap.org. The data is made available under ODbL.",
+  "timestamp": "2025-11-11T15:51:02Z",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "way/71179480",
+        "access": "yes",
+        "leisure": "pitch",
+        "lit": "no",
+        "sport": "skateboard",
+        "surface": "asphalt",
+        "address_display_name": "Linkermaasoeverweg, Maasdal, Empel, 's-Hertogenbosch, Noord-Brabant, Nederland, 5235 HR, Nederland",
+        "address_short": "Linkermaasoeverweg, 5235 HR, 's-Hertogenbosch, Nederland",
+        "address_super_short": "Linkermaasoeverweg, 5235 HR",
+        "address_micro_short": "Linkermaasoeverweg"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              5.3092041,
+              51.7201862
+            ],
+            [
+              5.3092271,
+              51.7201727
+            ],
+            [
+              5.3092019,
+              51.7201559
+            ],
+            [
+              5.309291,
+              51.7201039
+            ],
+            [
+              5.3093164,
+              51.7201191
+            ],
+            [
+              5.3094101,
+              51.7200608
+            ],
+            [
+              5.3096625,
+              51.7201013
+            ],
+            [
+              5.3093485,
+              51.7202822
+            ],
+            [
+              5.3092041,
+              51.7201862
+            ]
+          ]
+        ]
+      },
+      "id": "way/71179480"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "way/71289175",
+        "leisure": "pitch",
+        "sport": "skateboard",
+        "address_display_name": "Spanjaardwaard, Maasakker, Empel, 's-Hertogenbosch, Noord-Brabant, Nederland, 5236 WB, Nederland",
+        "address_short": "Spanjaardwaard, 5236 WB, 's-Hertogenbosch, Nederland",
+        "address_super_short": "Spanjaardwaard, 5236 WB",
+        "address_micro_short": "Spanjaardwaard"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              5.3174407,
+              51.7316343
+            ],
+            [
+              5.3174328,
+              51.7316392
+            ],
+            [
+              5.3174185,
+              51.7316401
+            ],
+            [
+              5.3172151,
+              51.7315998
+            ],
+            [
+              5.3170202,
+              51.7314723
+            ],
+            [
+              5.3170074,
+              51.7314665
+            ],
+            [
+              5.3169906,
+              51.7314653
+            ],
+            [
+              5.3168105,
+              51.7314671
+            ],
+            [
+              5.3167981,
+              51.7314628
+            ],
+            [
+              5.3167705,
+              51.7314402
+            ],
+            [
+              5.3167705,
+              51.7314295
+            ],
+            [
+              5.3168613,
+              51.7313311
+            ],
+            [
+              5.3168628,
+              51.731321
+            ],
+            [
+              5.3169028,
+              51.731321
+            ],
+            [
+              5.3169077,
+              51.7313283
+            ],
+            [
+              5.317115,
+              51.731395
+            ],
+            [
+              5.3171288,
+              51.7313962
+            ],
+            [
+              5.3171426,
+              51.7313944
+            ],
+            [
+              5.3171643,
+              51.7313864
+            ],
+            [
+              5.3171816,
+              51.7313843
+            ],
+            [
+              5.3171974,
+              51.7313892
+            ],
+            [
+              5.3174545,
+              51.7315609
+            ],
+            [
+              5.3174728,
+              51.7315671
+            ],
+            [
+              5.3174989,
+              51.7315652
+            ],
+            [
+              5.3175206,
+              51.7315533
+            ],
+            [
+              5.3175399,
+              51.7315671
+            ],
+            [
+              5.3174407,
+              51.7316343
+            ]
+          ]
+        ]
+      },
+      "id": "way/71289175"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "way/157107143",
+        "access": "yes",
+        "leisure": "pitch",
+        "sport": "skateboard",
+        "address_display_name": "Bevrijdingspad, Molenhoek, Rosmalen, 's-Hertogenbosch, Noord-Brabant, Nederland, 5241 EE, Nederland",
+        "address_short": "Bevrijdingspad, 5241 EE, Rosmalen, Nederland",
+        "address_super_short": "Bevrijdingspad, 5241 EE",
+        "address_micro_short": "Bevrijdingspad"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              5.3623025,
+              51.7126145
+            ],
+            [
+              5.3626599,
+              51.7125982
+            ],
+            [
+              5.362666,
+              51.7126535
+            ],
+            [
+              5.3625754,
+              51.7127624
+            ],
+            [
+              5.3623106,
+              51.7126826
+            ],
+            [
+              5.3623025,
+              51.7126145
+            ]
+          ]
+        ]
+      },
+      "id": "way/157107143"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "way/161598118",
+        "access": "yes",
+        "leisure": "pitch",
+        "sport": "skateboard",
+        "address_display_name": "Bundersteeg, De Overlaet, Overlaet Oost, Rosmalen, 's-Hertogenbosch, Noord-Brabant, Nederland, 5247 NP, Nederland",
+        "address_short": "Bundersteeg, 5247 NP, Rosmalen, Nederland",
+        "address_super_short": "Bundersteeg, 5247 NP",
+        "address_micro_short": "Bundersteeg"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              5.367179,
+              51.72895
+            ],
+            [
+              5.3673319,
+              51.728837
+            ],
+            [
+              5.3677261,
+              51.729043
+            ],
+            [
+              5.3675759,
+              51.7291527
+            ],
+            [
+              5.367179,
+              51.72895
+            ]
+          ]
+        ]
+      },
+      "id": "way/161598118"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "way/789245927",
+        "access": "yes",
+        "leisure": "pitch",
+        "sport": "skateboard",
+        "address_display_name": "Spanjaardwaard, Maasakker, Empel, 's-Hertogenbosch, Noord-Brabant, Nederland, 5236 WB, Nederland",
+        "address_short": "Spanjaardwaard, 5236 WB, 's-Hertogenbosch, Nederland",
+        "address_super_short": "Spanjaardwaard, 5236 WB",
+        "address_micro_short": "Spanjaardwaard"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              5.3168613,
+              51.7313311
+            ],
+            [
+              5.3168887,
+              51.7313313
+            ],
+            [
+              5.3169195,
+              51.7313315
+            ],
+            [
+              5.3171126,
+              51.7313855
+            ],
+            [
+              5.3171944,
+              51.7313847
+            ],
+            [
+              5.3174919,
+              51.7315817
+            ],
+            [
+              5.3175053,
+              51.7315905
+            ],
+            [
+              5.3174407,
+              51.7316343
+            ],
+            [
+              5.3174328,
+              51.7316392
+            ],
+            [
+              5.3174185,
+              51.7316401
+            ],
+            [
+              5.3172151,
+              51.7315998
+            ],
+            [
+              5.3170202,
+              51.7314723
+            ],
+            [
+              5.3170074,
+              51.7314665
+            ],
+            [
+              5.3169906,
+              51.7314653
+            ],
+            [
+              5.3168105,
+              51.7314671
+            ],
+            [
+              5.3167981,
+              51.7314628
+            ],
+            [
+              5.3167705,
+              51.7314402
+            ],
+            [
+              5.3167705,
+              51.7314295
+            ],
+            [
+              5.3168613,
+              51.7313311
+            ]
+          ]
+        ]
+      },
+      "id": "way/789245927"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "way/1006428679",
+        "access": "yes",
+        "leisure": "pitch",
+        "sport": "skateboard",
+        "address_display_name": "Limietlaan, Bazeldonk, Zuidoost, 's-Hertogenbosch, Noord-Brabant, Nederland, 5216 JJ, Nederland",
+        "address_short": "Limietlaan, 5216 JJ, 's-Hertogenbosch, Nederland",
+        "address_super_short": "Limietlaan, 5216 JJ",
+        "address_micro_short": "Limietlaan"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              5.3164624,
+              51.6869748
+            ],
+            [
+              5.3164289,
+              51.6869465
+            ],
+            [
+              5.3172958,
+              51.6865293
+            ],
+            [
+              5.3173263,
+              51.6865564
+            ],
+            [
+              5.3164624,
+              51.6869748
+            ]
+          ]
+        ]
+      },
+      "id": "way/1006428679"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "node/10982010079",
+        "access": "customers",
+        "addr:city": "'s-Hertogenbosch",
+        "addr:housenumber": "18",
+        "addr:postcode": "5211VB",
+        "addr:street": "Tramkade",
+        "leisure": "pitch",
+        "lit": "yes",
+        "name": "World Skate Center",
+        "opening_hours": "We 13:00-23:00; Fr 16:00-23:00; Sa",
+        "sport": "skateboard",
+        "website": "https://worldskatecenter.com",
+        "address_display_name": "World Skate Center, 18, Tramkade, Het Zand, 's-Hertogenbosch, Noord-Brabant, Nederland, 5211 VB, Nederland",
+        "address_short": "Tramkade, 18, 5211 VB, 's-Hertogenbosch, Nederland",
+        "address_super_short": "Tramkade, 5211 VB",
+        "address_micro_short": "Tramkade"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          5.2984799,
+          51.6964225
+        ]
+      },
+      "id": "node/10982010079"
+    }
+  ]
+}

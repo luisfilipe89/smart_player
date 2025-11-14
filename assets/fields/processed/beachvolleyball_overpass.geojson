@@ -10,10 +10,7 @@
         "@id": "way/1034013274",
         "leisure": "pitch",
         "lit": "yes",
-        "sport": "beachvolleyball",
-        "address_display_name": "Sportpark De Groote Wielen, Laaghemaal, Vlietdijk, Rosmalen, 's-Hertogenbosch, Noord-Brabant, Nederland, 5241 HR, Nederland",
-        "address_short": "Laaghemaal, 5241 HR, Rosmalen, Nederland",
-        "address_super_short": "Laaghemaal, 5241 HR"
+        "sport": "beachvolleyball"
       },
       "geometry": {
         "type": "Polygon",
@@ -54,10 +51,7 @@
         "@id": "way/1365940624",
         "leisure": "pitch",
         "sport": "beachvolleyball",
-        "surface": "sand",
-        "address_display_name": "sv CHC, Kooikersweg, De Schutskamp, West, Deuteren, 's-Hertogenbosch, Noord-Brabant, Nederland, 5223 VZ, Nederland",
-        "address_short": "Kooikersweg, 5223 VZ, 's-Hertogenbosch, Nederland",
-        "address_super_short": "Kooikersweg, 5223 VZ"
+        "surface": "sand"
       },
       "geometry": {
         "type": "Polygon",

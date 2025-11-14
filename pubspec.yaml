@@ -70,6 +70,10 @@ dependencies:
   image_cropper: ^11.0.0
   font_awesome_flutter: ^10.7.0
   connectivity_plus: ^7.0.0
+  # Calendar
+  device_calendar: ^4.3.3
+  sqflite: ^2.3.0
+  path: ^1.9.0
 
 dev_dependencies:
   flutter_test:
@@ -92,6 +96,11 @@ dev_dependencies:
   network_image_mock: ^2.1.1
   alchemist: ^0.4.1
 
+dependency_overrides:
+  # Force timezone to 0.9.0 for device_calendar 4.3.3 compatibility
+  # flutter_local_notifications should still work with this version
+  timezone: 0.9.2
+
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
 
@@ -109,6 +118,7 @@ flutter:
     - assets/events/
     - assets/translations/
     - assets/fields/
+    - assets/fields/output/
   fonts:
     - family: Poppins
       fonts:

@@ -1,20 +1,19 @@
 #!/usr/bin/env python3
-"""Reverse-geocode features in a GeoJSON file.
+"""Reverse-geocode features in GeoJSON files from assets/fields/input/.
+
+Processes all files matching the pattern <sport>_overpass.geojson and outputs
+enhanced GeoJSON files to assets/fields/output/ with the name format <sport>.geojson.
 
 Usage:
-  python tools/reverse_geocode_fields.py \
-      assets/fields/football_leisure_pitch, sport_soccer, access_yes, equipment_yes.geojson \
-      --output assets/fields/football_leisure_pitch, sport_soccer, access_yes, equipment_yes_with_addresses.geojson
-
-By default, results are also cached in JSON so repeated runs do not hit the API again.
+  python tools/reverse_geocode_fields.py
 """
 
 from __future__ import annotations
 
-import argparse
 import json
 import math
 import pathlib
+import shutil
 import sys
 import time
 import typing as t
@@ -23,6 +22,10 @@ from urllib import parse, request
 
 
 NOMINATIM_ENDPOINT = "https://nominatim.openstreetmap.org/reverse"
+INPUT_DIR = pathlib.Path("assets/fields/input")
+OUTPUT_DIR = pathlib.Path("assets/fields/output")
+PROCESSED_DIR = pathlib.Path("assets/fields/processed")
+DELAY_SECONDS = 1.1  # Keep >=1s for public Nominatim
 
 
 def _build_user_agent() -> str:
@@ -170,76 +173,51 @@ def format_super_short_address(address: dict[str, t.Any] | None) -> str | None:
     return ", ".join(parts) or None
 
 
-def load_cache(path: pathlib.Path) -> dict[str, dict[str, t.Any]]:
-    if not path.exists():
-        return {}
-    try:
-        with path.open("r", encoding="utf-8") as fh:
-            return json.load(fh)
-    except Exception:
-        return {}
-
-
-def save_cache(path: pathlib.Path, cache: dict[str, dict[str, t.Any]]) -> None:
-    with path.open("w", encoding="utf-8") as fh:
-        json.dump(cache, fh, indent=2, ensure_ascii=False)
-
-
-def main(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("geojson", help="Path to the source GeoJSON file")
-    parser.add_argument(
-        "--output",
-        help="Optional path to write enhanced GeoJSON. If omitted, results are printed to stdout.",
+def format_micro_short_address(address: dict[str, t.Any] | None) -> str | None:
+    """Return only the road/pedestrian/footway name without any other details."""
+    if not address:
+        return None
+    return (
+        address.get("road")
+        or address.get("pedestrian")
+        or address.get("footway")
+        or None
     )
-    parser.add_argument(
-        "--cache",
-        default=".reverse_geocode_cache.json",
-        help="Path to store API results for reuse.",
-    )
-    parser.add_argument(
-        "--delay",
-        type=float,
-        default=1.1,
-        help="Delay between requests in seconds. Keep >=1s for public Nominatim.",
-    )
-    args = parser.parse_args(argv)
 
-    geojson_path = pathlib.Path(args.geojson)
-    if not geojson_path.exists():
-        parser.error(f"GeoJSON file not found: {geojson_path}")
 
-    with geojson_path.open("r", encoding="utf-8") as fh:
+def process_geojson_file(input_path: pathlib.Path, output_path: pathlib.Path) -> int:
+    """Process a single GeoJSON file and write the enhanced version."""
+    print(f"Processing {input_path.name}...", file=sys.stderr)
+
+    with input_path.open("r", encoding="utf-8") as fh:
         data = json.load(fh)
 
-    cache_path = pathlib.Path(args.cache)
-    cache = load_cache(cache_path)
-
     updated_features = []
+    feature_count = len(data.get("features", []))
+    processed = 0
 
     for feature in data.get("features", []):
         identifier = feature.get("id") or feature.get("properties", {}).get("@id")
         try:
             lon, lat = feature_point(feature["geometry"])
         except Exception as exc:
-            print(f"Skipping feature {identifier}: failed to determine point ({exc})", file=sys.stderr)
+            print(f"  Skipping feature {identifier}: failed to determine point ({exc})", file=sys.stderr)
             updated_features.append(feature)
             continue
 
-        cache_key = f"{lon:.6f},{lat:.6f}"
-        if cache_key in cache:
-            response = cache[cache_key]
-        else:
-            response = reverse_geocode(lon, lat, delay_seconds=args.delay).__dict__
-            cache[cache_key] = response
+        response = reverse_geocode(lon, lat, delay_seconds=DELAY_SECONDS)
+        processed += 1
+        if processed % 10 == 0:
+            print(f"  Processed {processed}/{feature_count} features...", file=sys.stderr)
 
-        address = response.get("address")
+        address = response.address
         short_address = format_short_address(address)
         super_short_address = format_super_short_address(address)
+        micro_short_address = format_micro_short_address(address)
 
         properties = dict(feature.get("properties", {}))
-        if response.get("display_name"):
-            properties["address_display_name"] = response["display_name"]
+        if response.display_name:
+            properties["address_display_name"] = response.display_name
         if short_address:
             properties["address_short"] = short_address
         elif "address_short" in properties:
@@ -248,29 +226,69 @@ def main(argv: list[str]) -> int:
             properties["address_super_short"] = super_short_address
         elif "address_super_short" in properties:
             properties.pop("address_super_short")
+        if micro_short_address:
+            properties["address_micro_short"] = micro_short_address
+        elif "address_micro_short" in properties:
+            properties.pop("address_micro_short")
 
         feature_copy = dict(feature)
         feature_copy["properties"] = properties
         updated_features.append(feature_copy)
 
+    # Preserve all root-level properties (including overpass_query if present)
     data_copy = dict(data)
     data_copy["features"] = updated_features
 
-    if args.output:
-        output_path = pathlib.Path(args.output)
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        with output_path.open("w", encoding="utf-8") as fh:
-            json.dump(data_copy, fh, ensure_ascii=False, indent=2)
-    else:
-        json.dump(data_copy, sys.stdout, ensure_ascii=False, indent=2)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with output_path.open("w", encoding="utf-8") as fh:
+        json.dump(data_copy, fh, ensure_ascii=False, indent=2)
 
-    save_cache(cache_path, cache)
+    print(f"  Completed! Output written to {output_path}", file=sys.stderr)
+    return 0
+
+
+def move_to_processed(input_path: pathlib.Path) -> None:
+    """Move a processed input file to the processed directory."""
+    PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
+    processed_path = PROCESSED_DIR / input_path.name
+    shutil.move(str(input_path), str(processed_path))
+    print(f"  Moved {input_path.name} to {PROCESSED_DIR}", file=sys.stderr)
+
+
+def main() -> int:
+    """Process all <sport>_overpass.geojson files from input directory."""
+    if not INPUT_DIR.exists():
+        print(f"Error: Input directory not found: {INPUT_DIR}", file=sys.stderr)
+        return 1
+
+    # Find all files matching <sport>_overpass.geojson pattern
+    input_files = list(INPUT_DIR.glob("*_overpass.geojson"))
+    
+    if not input_files:
+        print(f"No files matching pattern '*_overpass.geojson' found in {INPUT_DIR}", file=sys.stderr)
+        return 1
+
+    print(f"Found {len(input_files)} file(s) to process", file=sys.stderr)
+
+    for input_file in input_files:
+        # Extract sport name: <sport>_overpass.geojson -> <sport>
+        sport_name = input_file.stem.replace("_overpass", "")
+        output_file = OUTPUT_DIR / f"{sport_name}.geojson"
+
+        result = process_geojson_file(input_file, output_file)
+        if result != 0:
+            return result
+
+        # Move processed file to processed directory
+        move_to_processed(input_file)
+
+    print("All files processed successfully!", file=sys.stderr)
     return 0
 
 
 if __name__ == "__main__":
     try:
-        raise SystemExit(main(sys.argv[1:]))
+        raise SystemExit(main())
     except KeyboardInterrupt:
+        print("\nInterrupted by user", file=sys.stderr)
         raise SystemExit(130)
-

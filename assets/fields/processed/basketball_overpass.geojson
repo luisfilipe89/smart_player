@@ -15,10 +15,7 @@
         "leisure": "pitch",
         "lit": "no",
         "sport": "basketball",
-        "surface": "concrete",
-        "address_display_name": "Hengmeng, Maasstroom, 's-Hertogenbosch, Noord-Brabant, Nederland, 5235 JZ, Nederland",
-        "address_short": "Hengmeng, 5235 JZ, 's-Hertogenbosch, Nederland",
-        "address_super_short": "Hengmeng, 5235 JZ"
+        "surface": "concrete"
       },
       "geometry": {
         "type": "Polygon",
@@ -68,10 +65,7 @@
         "access": "yes",
         "hoops": "2",
         "leisure": "pitch",
-        "sport": "basketball",
-        "address_display_name": "de Diepteweg, Empel-Oost, Empel, 's-Hertogenbosch, Noord-Brabant, Nederland, 5236 AL, Nederland",
-        "address_short": "de Diepteweg, 5236 AL, 's-Hertogenbosch, Nederland",
-        "address_super_short": "de Diepteweg, 5236 AL"
+        "sport": "basketball"
       },
       "geometry": {
         "type": "Polygon",
@@ -109,10 +103,7 @@
         "access": "yes",
         "hoops": "1",
         "leisure": "pitch",
-        "sport": "basketball",
-        "address_display_name": "Annapark, Hintham-Zuid, Hintham, Rosmalen, 's-Hertogenbosch, Noord-Brabant, Nederland, 5246 AN, Nederland",
-        "address_short": "Annapark, 5246 AN, Rosmalen, Nederland",
-        "address_super_short": "Annapark, 5246 AN"
+        "sport": "basketball"
       },
       "geometry": {
         "type": "Polygon",
@@ -150,10 +141,7 @@
         "access": "yes",
         "hoops": "1",
         "leisure": "pitch",
-        "sport": "basketball",
-        "address_display_name": "Herman Moerkerklaan, Hintham-Zuid, Hintham, Rosmalen, 's-Hertogenbosch, Noord-Brabant, Nederland, 5246 GG, Nederland",
-        "address_short": "Herman Moerkerklaan, 5246 GG, Rosmalen, Nederland",
-        "address_super_short": "Herman Moerkerklaan, 5246 GG"
+        "sport": "basketball"
       },
       "geometry": {
         "type": "Polygon",
@@ -191,10 +179,7 @@
         "access": "yes",
         "hoops": "2",
         "leisure": "pitch",
-        "sport": "basketball",
-        "address_display_name": "Schout Dicbierlaan, Maasoever, 's-Hertogenbosch, Noord-Brabant, Nederland, 5237 SL, Nederland",
-        "address_short": "Schout Dicbierlaan, 5237 SL, 's-Hertogenbosch, Nederland",
-        "address_super_short": "Schout Dicbierlaan, 5237 SL"
+        "sport": "basketball"
       },
       "geometry": {
         "type": "Polygon",
@@ -234,10 +219,7 @@
         "leisure": "pitch",
         "lit": "no",
         "sport": "basketball",
-        "surface": "asphalt",
-        "address_display_name": "St. Luciaplein, Het Zand, 's-Hertogenbosch, Noord-Brabant, Nederland, 5211 ZR, Nederland",
-        "address_short": "St. Luciaplein, 5211 ZR, 's-Hertogenbosch, Nederland",
-        "address_super_short": "St. Luciaplein, 5211 ZR"
+        "surface": "asphalt"
       },
       "geometry": {
         "type": "Polygon",
@@ -275,10 +257,7 @@
         "access": "yes",
         "hoops": "2",
         "leisure": "pitch",
-        "sport": "basketball",
-        "address_display_name": "Pelssingel, De Muntel, 's-Hertogenbosch, Noord-Brabant, Nederland, 5212 PE, Nederland",
-        "address_short": "Pelssingel, 5212 PE, 's-Hertogenbosch, Nederland",
-        "address_super_short": "Pelssingel, 5212 PE"
+        "sport": "basketball"
       },
       "geometry": {
         "type": "Polygon",
@@ -317,10 +296,7 @@
         "hoops": "1",
         "leisure": "pitch",
         "sport": "basketball",
-        "surface": "asphalt",
-        "address_display_name": "8, Spaanse Matplein, Maasoever, 's-Hertogenbosch, Noord-Brabant, Nederland, 5237 RG, Nederland",
-        "address_short": "Spaanse Matplein, 8, 5237 RG, 's-Hertogenbosch, Nederland",
-        "address_super_short": "Spaanse Matplein, 5237 RG"
+        "surface": "asphalt"
       },
       "geometry": {
         "type": "Polygon",
@@ -360,10 +336,7 @@
         "leisure": "pitch",
         "lit": "no",
         "sport": "basketball",
-        "surface": "asphalt",
-        "address_display_name": "Lugteren, Het Zilverpark, 's-Hertogenbosch, Noord-Brabant, Nederland, 5237 JW, Nederland",
-        "address_short": "Lugteren, 5237 JW, 's-Hertogenbosch, Nederland",
-        "address_super_short": "Lugteren, 5237 JW"
+        "surface": "asphalt"
       },
       "geometry": {
         "type": "Polygon",
@@ -401,10 +374,7 @@
         "access": "yes",
         "hoops": "2",
         "leisure": "pitch",
-        "sport": "basketball",
-        "address_display_name": "Taxandriaplein, De Muntel, 's-Hertogenbosch, Noord-Brabant, Nederland, 5212 TR, Nederland",
-        "address_short": "Taxandriaplein, 5212 TR, 's-Hertogenbosch, Nederland",
-        "address_super_short": "Taxandriaplein, 5212 TR"
+        "sport": "basketball"
       },
       "geometry": {
         "type": "Polygon",
@@ -448,10 +418,7 @@
         "leisure": "pitch",
         "lit": "yes",
         "sport": "basketball",
-        "surface": "asphalt",
-        "address_display_name": "Jacob van Maerlantstraat, Zuid, Zuidoost, 's-Hertogenbosch, Noord-Brabant, Nederland, 5216 JL, Nederland",
-        "address_short": "Jacob van Maerlantstraat, 5216 JL, 's-Hertogenbosch, Nederland",
-        "address_super_short": "Jacob van Maerlantstraat, 5216 JL"
+        "surface": "asphalt"
       },
       "geometry": {
         "type": "Polygon",
@@ -491,10 +458,7 @@
         "leisure": "pitch",
         "source": "imagery",
         "source:date": "2014-02-24",
-        "sport": "basketball",
-        "address_display_name": "Rompert Park, De Rompert, 's-Hertogenbosch, Noord-Brabant, Nederland, 5233 RK, Nederland",
-        "address_short": "Rompert Park, 5233 RK, 's-Hertogenbosch, Nederland",
-        "address_super_short": "Rompert Park, 5233 RK"
+        "sport": "basketball"
       },
       "geometry": {
         "type": "Polygon",
@@ -532,10 +496,7 @@
         "access": "yes",
         "hoops": "2",
         "leisure": "pitch",
-        "sport": "basketball",
-        "address_display_name": "Randweg, Willemspoort, West, 's-Hertogenbosch, Noord-Brabant, Nederland, 5223 AS, Nederland",
-        "address_short": "Randweg, 5223 AS, 's-Hertogenbosch, Nederland",
-        "address_super_short": "Randweg, 5223 AS"
+        "sport": "basketball"
       },
       "geometry": {
         "type": "Polygon",
@@ -573,10 +534,7 @@
         "access": "yes",
         "hoops": "2",
         "leisure": "pitch",
-        "sport": "basketball",
-        "address_display_name": "Krokusvallei, Maasvallei, 's-Hertogenbosch, Noord-Brabant, Nederland, 5237 LL, Nederland",
-        "address_short": "Krokusvallei, 5237 LL, 's-Hertogenbosch, Nederland",
-        "address_super_short": "Krokusvallei, 5237 LL"
+        "sport": "basketball"
       },
       "geometry": {
         "type": "Polygon",
@@ -613,10 +571,7 @@
         "@id": "way/417166080",
         "access": "yes",
         "leisure": "pitch",
-        "sport": "basketball",
-        "address_display_name": "Muntelplein, De Muntel, 's-Hertogenbosch, Noord-Brabant, Nederland, 5212 NR, Nederland",
-        "address_short": "Muntelplein, 5212 NR, 's-Hertogenbosch, Nederland",
-        "address_super_short": "Muntelplein, 5212 NR"
+        "sport": "basketball"
       },
       "geometry": {
         "type": "Polygon",
@@ -654,10 +609,7 @@
         "access": "yes",
         "hoops": "2",
         "leisure": "pitch",
-        "sport": "basketball",
-        "address_display_name": "Hondsberg, Kattenbosch, Kruisstraat, 's-Hertogenbosch, Noord-Brabant, Nederland, 5243 RL, Nederland",
-        "address_short": "Hondsberg, 5243 RL, Kruisstraat, Nederland",
-        "address_super_short": "Hondsberg, 5243 RL"
+        "sport": "basketball"
       },
       "geometry": {
         "type": "Polygon",
@@ -695,10 +647,7 @@
         "access": "yes",
         "hoops": "2",
         "leisure": "pitch",
-        "sport": "basketball",
-        "address_display_name": "Brussellaan, De Kruiskamp, West, 's-Hertogenbosch, Noord-Brabant, Nederland, 5224 VJ, Nederland",
-        "address_short": "Brussellaan, 5224 VJ, 's-Hertogenbosch, Nederland",
-        "address_super_short": "Brussellaan, 5224 VJ"
+        "sport": "basketball"
       },
       "geometry": {
         "type": "Polygon",
@@ -738,10 +687,7 @@
         "leisure": "pitch",
         "lit": "no",
         "sport": "basketball",
-        "surface": "paved",
-        "address_display_name": "Maastrichtseweg, Aawijk-Zuid, Zuidoost, 's-Hertogenbosch, Noord-Brabant, Nederland, 5216 KT, Nederland",
-        "address_short": "Maastrichtseweg, 5216 KT, 's-Hertogenbosch, Nederland",
-        "address_super_short": "Maastrichtseweg, 5216 KT"
+        "surface": "paved"
       },
       "geometry": {
         "type": "Polygon",
@@ -779,10 +725,7 @@
         "access": "yes",
         "hoops": "2",
         "leisure": "pitch",
-        "sport": "basketball",
-        "address_display_name": "Orthensedonk, Orthen-West, 's-Hertogenbosch, Noord-Brabant, Nederland, 5231 VD, Nederland",
-        "address_short": "Orthensedonk, 5231 VD, 's-Hertogenbosch, Nederland",
-        "address_super_short": "Orthensedonk, 5231 VD"
+        "sport": "basketball"
       },
       "geometry": {
         "type": "Polygon",
@@ -820,10 +763,7 @@
         "access": "yes",
         "hoops": "1",
         "leisure": "pitch",
-        "sport": "basketball",
-        "address_display_name": "Orpheusstraat, Kattenbosch, Hondsberg, Rosmalen, 's-Hertogenbosch, Noord-Brabant, Nederland, 5243 XH, Nederland",
-        "address_short": "Orpheusstraat, 5243 XH, Rosmalen, Nederland",
-        "address_super_short": "Orpheusstraat, 5243 XH"
+        "sport": "basketball"
       },
       "geometry": {
         "type": "Polygon",
@@ -921,10 +861,7 @@
         "access": "yes",
         "hoops": "3",
         "leisure": "pitch",
-        "sport": "basketball",
-        "address_display_name": "Hustenweg, Lanen, Landelijk gebied De Groote Wielen, Rosmalen, 's-Hertogenbosch, Noord-Brabant, Nederland, 5245 DN, Nederland",
-        "address_short": "Hustenweg, 5245 DN, Rosmalen, Nederland",
-        "address_super_short": "Hustenweg, 5245 DN"
+        "sport": "basketball"
       },
       "geometry": {
         "type": "Polygon",
@@ -963,10 +900,7 @@
         "hoops": "1",
         "leisure": "pitch",
         "sport": "basketball",
-        "surface": "asphalt",
-        "address_display_name": "Rosmalensedijk, Vlietdijk, Rosmalen, 's-Hertogenbosch, Noord-Brabant, Nederland, 5247 JR, Nederland",
-        "address_short": "Rosmalensedijk, 5247 JR, Rosmalen, Nederland",
-        "address_super_short": "Rosmalensedijk, 5247 JR"
+        "surface": "asphalt"
       },
       "geometry": {
         "type": "Polygon",
@@ -1012,10 +946,7 @@
         "access": "yes",
         "hoops": "1",
         "leisure": "pitch",
-        "sport": "basketball",
-        "address_display_name": "Weymouthstraat, Hinthammerpoort, 's-Hertogenbosch, Noord-Brabant, Nederland, 5213 TR, Nederland",
-        "address_short": "Weymouthstraat, 5213 TR, 's-Hertogenbosch, Nederland",
-        "address_super_short": "Weymouthstraat, 5213 TR"
+        "sport": "basketball"
       },
       "geometry": {
         "type": "Polygon",

@@ -48,6 +48,7 @@
     "choose_a_game": "Choose a game to join",
     "choose_date": "Choose the Date",
     "choose_field": "Choose a Field",
+    "finding_closest_fields": "Finding closest fields...",
     "show_on_map": "Show on map",
     "choose_sport": "Choose a Sport",
     "choose_time": "Choose a Time",
@@ -532,5 +533,14 @@
     "field_report_submit_button": "Send report",
     "field_report_error_description": "Please describe the issue in at least 10 characters.",
     "field_report_submitted": "Thanks! Your report was sent.",
-    "modified": "Modified"
+    "modified": "Modified",
+    "add_to_calendar": "Add to Calendar",
+    "in_calendar": "In Calendar",
+    "calendar_event_added": "Game added to calendar",
+    "calendar_event_added_error": "Failed to add game to calendar",
+    "calendar_permission_required": "Calendar permission is required to add events",
+    "calendar_event_updated": "Calendar event updated",
+    "calendar_event_updated_error": "Failed to update calendar event",
+    "calendar_event_removed": "Calendar event removed",
+    "calendar_event_removed_error": "Failed to remove calendar event"
 }

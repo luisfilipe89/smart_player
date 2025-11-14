@@ -3,6 +3,7 @@
   "generator": "overpass-turbo",
   "copyright": "The data included in this document is from www.openstreetmap.org. The data is made available under ODbL.",
   "timestamp": "2025-11-07T17:09:51Z",
+  "overpass_query": "[out:json][timeout:180];\n\narea[\"name\"=\"'s-Hertogenbosch\"][\"boundary\"=\"administrative\"][\"admin_level\"=\"8\"]->.searchArea;\n\n\n\n(\n\n  node[\"leisure\"=\"pitch\"][\"sport\"=\"table_tennis\"](area.searchArea);\n\n  way[\"leisure\"=\"pitch\"][\"sport\"=\"table_tennis\"](area.searchArea);\n\n  relation[\"leisure\"=\"pitch\"][\"sport\"=\"table_tennis\"](area.searchArea);\n\n);\n\n\n\nout body;\n\n>;\n\nout skel qt;",
   "features": [
     {
       "type": "Feature",
@@ -10,10 +11,7 @@
         "@id": "way/1006424012",
         "access": "yes",
         "leisure": "pitch",
-        "sport": "table_tennis",
-        "address_display_name": "Jacob van Maerlantstraat, Zuid, Zuidoost, 's-Hertogenbosch, Noord-Brabant, Nederland, 5216 JC, Nederland",
-        "address_short": "Jacob van Maerlantstraat, 5216 JC, 's-Hertogenbosch, Nederland",
-        "address_super_short": "Jacob van Maerlantstraat, 5216 JC"
+        "sport": "table_tennis"
       },
       "geometry": {
         "type": "Polygon",
@@ -50,10 +48,7 @@
         "@id": "way/1395689594",
         "access": "yes",
         "leisure": "pitch",
-        "sport": "table_tennis",
-        "address_display_name": "Weymouthstraat, Hinthammerpoort, 's-Hertogenbosch, Noord-Brabant, Nederland, 5213 TR, Nederland",
-        "address_short": "Weymouthstraat, 5213 TR, 's-Hertogenbosch, Nederland",
-        "address_super_short": "Weymouthstraat, 5213 TR"
+        "sport": "table_tennis"
       },
       "geometry": {
         "type": "Polygon",
@@ -90,10 +85,7 @@
         "@id": "node/8480298510",
         "access": "yes",
         "leisure": "pitch",
-        "sport": "table_tennis",
-        "address_display_name": "Jupitersingel, Overlaet West, Rosmalen, 's-Hertogenbosch, Noord-Brabant, Nederland, 5241 JG, Nederland",
-        "address_short": "Jupitersingel, 5241 JG, Rosmalen, Nederland",
-        "address_super_short": "Jupitersingel, 5241 JG"
+        "sport": "table_tennis"
       },
       "geometry": {
         "type": "Point",
@@ -110,10 +102,7 @@
         "@id": "node/9525279447",
         "access": "yes",
         "leisure": "pitch",
-        "sport": "table_tennis",
-        "address_display_name": "Bevrijdingspad, Molenhoek, Rosmalen, 's-Hertogenbosch, Noord-Brabant, Nederland, 5241 EE, Nederland",
-        "address_short": "Bevrijdingspad, 5241 EE, Rosmalen, Nederland",
-        "address_super_short": "Bevrijdingspad, 5241 EE"
+        "sport": "table_tennis"
       },
       "geometry": {
         "type": "Point",
@@ -130,10 +119,7 @@
         "@id": "node/9546068392",
         "access": "yes",
         "leisure": "pitch",
-        "sport": "table_tennis",
-        "address_display_name": "Terpeborch, Overlaet West, Rosmalen, 's-Hertogenbosch, Noord-Brabant, Nederland, 5241 KB, Nederland",
-        "address_short": "Terpeborch, 5241 KB, Rosmalen, Nederland",
-        "address_super_short": "Terpeborch, 5241 KB"
+        "sport": "table_tennis"
       },
       "geometry": {
         "type": "Point",

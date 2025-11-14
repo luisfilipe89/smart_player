@@ -18,6 +18,7 @@ import 'package:move_young/providers/infrastructure/firebase_providers.dart';
 import 'package:move_young/services/system/location_provider.dart';
 import 'package:move_young/screens/maps/gmaps_screen.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:move_young/services/calendar/calendar_service.dart';
 
 class GameOrganizeScreen extends ConsumerStatefulWidget {
   final Game? initialGame;
@@ -45,8 +46,9 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
   List<Map<String, dynamic>> _filteredFields = [];
   Map<String, dynamic>? _selectedField;
   bool _isLoadingFields = false;
+  bool _isCalculatingDistances = false;
   bool _isPublic = true;
-  
+
   // Search for fields
   final TextEditingController _fieldSearchController = TextEditingController();
   Timer? _searchDebounce;
@@ -224,13 +226,13 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
   bool _slotsOverlap(String time1, String time2) {
     final minutes1 = _timeStringToMinutes(time1);
     final minutes2 = _timeStringToMinutes(time2);
-    
+
     // Each slot is a 1-hour window: [start, start+60)
     final start1 = minutes1;
     final end1 = minutes1 + 60;
     final start2 = minutes2;
     final end2 = minutes2 + 60;
-    
+
     // Two intervals overlap if: start1 < end2 && start2 < end1
     return start1 < end2 && start2 < end1;
   }
@@ -277,14 +279,11 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
     } else {
       _filteredFields = _availableFields.where((field) {
         final name = (field['name'] as String?)?.toLowerCase().trim() ?? '';
-        final addressSuperShort = (field['addressSuperShort'] as String?)
-                ?.toLowerCase()
-                .trim() ??
-            '';
-        final addressSuperShortFull = (field['addressSuperShortFull'] as String?)
-                ?.toLowerCase()
-                .trim() ??
-            '';
+        final addressSuperShort =
+            (field['addressSuperShort'] as String?)?.toLowerCase().trim() ?? '';
+        final addressSuperShortFull =
+            (field['addressSuperShortFull'] as String?)?.toLowerCase().trim() ??
+                '';
         return name.contains(query) ||
             addressSuperShort.contains(query) ||
             addressSuperShortFull.contains(query);
@@ -327,18 +326,12 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
         _ => 'soccer',
       };
 
+      // Fetch fields first (this is the main data we need)
       final rawFields = await fieldsActions.fetchFields(
         areaName: 's-Hertogenbosch',
         sportType: sportType,
         bypassCache: true, // Force fresh fetch to debug
       );
-
-      Position? userPosition;
-      try {
-        userPosition = await ref.read(locationActionsProvider).getCurrentPosition();
-      } catch (e) {
-        debugPrint('📍 Could not obtain user position: $e');
-      }
 
       // Debug: Check what we got back
       debugPrint(
@@ -359,6 +352,7 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
         return shortened.isNotEmpty ? shortened : text;
       }
 
+      // Process fields without waiting for location - display immediately
       final fields = rawFields
           .map<Map<String, dynamic>>((f) {
             final address =
@@ -366,15 +360,15 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
             final rawAddressSuperShort =
                 f['address_super_short'] ?? f['addressSuperShort'];
             final condensedAddressSuperShort =
-                shortenAddress(rawAddressSuperShort) ??
-                    shortenAddress(address);
-            final candidateName =
-                (f['name'] ?? condensedAddressSuperShort ?? rawAddressSuperShort)
-                    ?.toString();
+                shortenAddress(rawAddressSuperShort) ?? shortenAddress(address);
+            final candidateName = (f['name'] ??
+                    condensedAddressSuperShort ??
+                    rawAddressSuperShort)
+                ?.toString();
             final name =
                 (candidateName != null && candidateName.trim().isNotEmpty)
-                ? candidateName.trim()
-                : 'Unnamed Field';
+                    ? candidateName.trim()
+                    : 'Unnamed Field';
             final lat = f['lat'] ?? f['latitude'];
             final lon = f['lon'] ?? f['longitude'];
             final lit = f['lit'] ?? f['lighting'];
@@ -384,21 +378,6 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
             if (lon is num) lonDouble = lon.toDouble();
             latDouble ??= double.tryParse(lat?.toString() ?? '');
             lonDouble ??= double.tryParse(lon?.toString() ?? '');
-            double? distance;
-            if (userPosition != null &&
-                latDouble != null &&
-                lonDouble != null) {
-              distance = Geolocator.distanceBetween(
-                userPosition.latitude,
-                userPosition.longitude,
-                latDouble,
-                lonDouble,
-              );
-              if (!distance.isFinite ||
-                  distance > _kMaxDistanceMetersToDisplay) {
-                distance = null;
-              }
-            }
             return {
               'id': f['id'],
               'name': name,
@@ -413,24 +392,16 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
               'surface': f['surface'],
               'lighting':
                   (lit == true) || (lit?.toString().toLowerCase() == 'yes'),
-              if (distance != null) 'distance': distance,
             };
           })
           .where((m) => m['latitude'] != null && m['longitude'] != null)
           .toList();
 
-      if (userPosition != null) {
-        fields.sort((a, b) {
-          final da = (a['distance'] as num?)?.toDouble() ?? double.infinity;
-          final db = (b['distance'] as num?)?.toDouble() ?? double.infinity;
-          return da.compareTo(db);
-        });
-      }
-
       debugPrint(
         '🔍 Normalized to ${fields.length} fields with valid coordinates',
       );
 
+      // Display fields immediately without waiting for location
       if (mounted) {
         setState(() {
           _availableFields = fields;
@@ -452,6 +423,10 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
           }
         });
       }
+
+      // Now fetch location in the background and update distances/sorting
+      // This happens asynchronously after fields are already displayed
+      _updateFieldDistances(fields);
     } catch (e) {
       // Log the error so we can see Overpass or parsing failures
       debugPrint('❌ Failed to load fields: $e');
@@ -462,6 +437,86 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
           _isLoadingFields = false;
         });
       }
+    }
+  }
+
+  /// Updates field distances and sorts by distance in the background
+  /// This is called after fields are already displayed to improve perceived performance
+  Future<void> _updateFieldDistances(List<Map<String, dynamic>> fields) async {
+    if (mounted) {
+      setState(() {
+        _isCalculatingDistances = true;
+      });
+    }
+
+    Position userPosition;
+    try {
+      userPosition =
+          await ref.read(locationActionsProvider).getCurrentPosition();
+    } catch (e) {
+      debugPrint('📍 Could not obtain user position: $e');
+      if (mounted) {
+        setState(() {
+          _isCalculatingDistances = false;
+        });
+      }
+      return; // Exit early if location can't be obtained
+    }
+
+    if (!mounted) return;
+
+    // Calculate distances for all fields
+    final fieldsWithDistances = fields.map((f) {
+      final latDouble = (f['latitude'] as num?)?.toDouble() ??
+          double.tryParse(f['latitude']?.toString() ?? '');
+      final lonDouble = (f['longitude'] as num?)?.toDouble() ??
+          double.tryParse(f['longitude']?.toString() ?? '');
+
+      double? distance;
+      if (latDouble != null && lonDouble != null) {
+        distance = Geolocator.distanceBetween(
+          userPosition.latitude,
+          userPosition.longitude,
+          latDouble,
+          lonDouble,
+        );
+        if (!distance.isFinite || distance > _kMaxDistanceMetersToDisplay) {
+          distance = null;
+        }
+      }
+
+      return {
+        ...f,
+        if (distance != null) 'distance': distance,
+      };
+    }).toList();
+
+    // Sort by distance
+    fieldsWithDistances.sort((a, b) {
+      final da = (a['distance'] as num?)?.toDouble() ?? double.infinity;
+      final db = (b['distance'] as num?)?.toDouble() ?? double.infinity;
+      return da.compareTo(db);
+    });
+
+    // Update UI with sorted fields
+    if (mounted) {
+      setState(() {
+        _availableFields = fieldsWithDistances;
+        _isCalculatingDistances = false;
+        _applyFieldSearchFilter();
+
+        // Update selected field reference if it exists
+        if (_selectedField != null) {
+          final String selName = (_selectedField?['name'] as String?) ?? '';
+          final match = fieldsWithDistances.firstWhere(
+            (f) => (f['name'] as String?) == selName,
+            orElse: () => {},
+          );
+          if (match.isNotEmpty) {
+            _selectedField = match;
+          }
+        }
+      });
     }
   }
 
@@ -477,15 +532,16 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
     // instead of falling back to default coordinates
     final selectedFieldLat =
         (_selectedField?['latitude'] as num?)?.toDouble() ??
-        double.tryParse(_selectedField?['latitude']?.toString() ?? '') ??
-        (_selectedField?['lat'] as num?)?.toDouble();
+            double.tryParse(_selectedField?['latitude']?.toString() ?? '') ??
+            (_selectedField?['lat'] as num?)?.toDouble();
     final selectedFieldLon =
         (_selectedField?['longitude'] as num?)?.toDouble() ??
-        double.tryParse(_selectedField?['longitude']?.toString() ?? '') ??
-        (_selectedField?['lon'] as num?)?.toDouble();
-    
+            double.tryParse(_selectedField?['longitude']?.toString() ?? '') ??
+            (_selectedField?['lon'] as num?)?.toDouble();
+
     if (selectedFieldLat == null || selectedFieldLon == null) {
-      debugPrint('🌤️ Weather: No field selected - skipping weather load to ensure field-specific coordinates are used');
+      debugPrint(
+          '🌤️ Weather: No field selected - skipping weather load to ensure field-specific coordinates are used');
       if (mounted) {
         setState(() {
           _weatherData = {};
@@ -516,7 +572,8 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
         longitude: longitude,
       );
 
-      debugPrint('🌤️ Weather: Received ${weatherData.length} hours of data for field at ($latitude, $longitude)');
+      debugPrint(
+          '🌤️ Weather: Received ${weatherData.length} hours of data for field at ($latitude, $longitude)');
 
       if (mounted) {
         setState(() {
@@ -703,8 +760,7 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
       if (mounted) {
         String errorMsg = 'game_creation_failed'.tr();
         final es = e.toString();
-        final isSlotUnavailable =
-            es.contains('new_slot_unavailable') ||
+        final isSlotUnavailable = es.contains('new_slot_unavailable') ||
             es.contains('time_slot_unavailable');
 
         if (isSlotUnavailable) {
@@ -1105,12 +1161,33 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
 
       final createdId = await ref.read(gamesActionsProvider).createGame(game);
 
+      // Update game with the created ID for calendar integration
+      final createdGame = game.copyWith(id: createdId);
+
       if (mounted) {
         ref.read(hapticsActionsProvider)?.mediumImpact();
         setState(() => _showSuccess = true);
         Future.delayed(const Duration(milliseconds: 750), () {
           if (mounted) setState(() => _showSuccess = false);
         });
+
+        // Automatically add newly created game to calendar (non-blocking)
+        // This helps organizers keep track of their games
+        CalendarService.addGameToCalendar(createdGame).then((eventId) {
+          if (mounted && eventId != null) {
+            // Calendar event added successfully - show subtle feedback
+            // Don't show a separate snackbar to avoid UI clutter
+            debugPrint('✅ Game $createdId automatically added to calendar');
+          } else if (mounted) {
+            // Calendar add failed - log but don't show error (game creation succeeded)
+            debugPrint(
+                '⚠️ Failed to add game $createdId to calendar (non-critical)');
+          }
+        }).catchError((e) {
+          // Log error but don't interrupt user flow
+          debugPrint('⚠️ Error adding game to calendar: $e');
+        });
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('game_created_successfully'.tr()),
@@ -1136,50 +1213,48 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
               .read(cloudGamesActionsProvider)
               .sendGameInvitesToFriends(createdId, _selectedFriendUids.toList())
               .then((_) {
-                debugPrint(
-                  '✅ Successfully sent invites to ${_selectedFriendUids.length} friends',
-                );
-              })
-              .catchError((e, stackTrace) {
-                // Log error but don't fail game creation or interrupt navigation
-                debugPrint('❌ Failed to send game invites: $e');
-                debugPrint('Stack trace: $stackTrace');
-                // Show error to user so they know invites weren't sent (if still mounted)
-                if (mounted) {
-                  messenger.showSnackBar(
-                    SnackBar(
-                      content: Row(
-                        children: [
-                          const Icon(
-                            Icons.warning,
-                            color: Colors.white,
-                            size: 20,
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              'Game created but failed to send invites: ${e.toString().replaceAll('Exception: ', '')}',
-                              style: AppTextStyles.body.copyWith(
-                                color: Colors.white,
-                              ),
-                            ),
-                          ),
-                        ],
+            debugPrint(
+              '✅ Successfully sent invites to ${_selectedFriendUids.length} friends',
+            );
+          }).catchError((e, stackTrace) {
+            // Log error but don't fail game creation or interrupt navigation
+            debugPrint('❌ Failed to send game invites: $e');
+            debugPrint('Stack trace: $stackTrace');
+            // Show error to user so they know invites weren't sent (if still mounted)
+            if (mounted) {
+              messenger.showSnackBar(
+                SnackBar(
+                  content: Row(
+                    children: [
+                      const Icon(
+                        Icons.warning,
+                        color: Colors.white,
+                        size: 20,
                       ),
-                      backgroundColor: AppColors.orange,
-                      duration: const Duration(seconds: 5),
-                    ),
-                  );
-                }
-              });
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Game created but failed to send invites: ${e.toString().replaceAll('Exception: ', '')}',
+                          style: AppTextStyles.body.copyWith(
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  backgroundColor: AppColors.orange,
+                  duration: const Duration(seconds: 5),
+                ),
+              );
+            }
+          });
         }
       }
     } catch (e) {
       if (mounted) {
         String errorMsg = 'game_creation_failed'.tr();
         final es = e.toString();
-        final isSlotUnavailable =
-            es.contains('new_slot_unavailable') ||
+        final isSlotUnavailable = es.contains('new_slot_unavailable') ||
             es.contains('time_slot_unavailable');
 
         if (isSlotUnavailable) {
@@ -1260,10 +1335,10 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                       color: disabled
                           ? AppColors.grey.withValues(alpha: 0.06)
                           : (isSelected
-                                ? AppColors.blue.withValues(alpha: 0.1)
-                                : (sport['color'] as Color).withValues(
-                                    alpha: 0.1,
-                                  )),
+                              ? AppColors.blue.withValues(alpha: 0.1)
+                              : (sport['color'] as Color).withValues(
+                                  alpha: 0.1,
+                                )),
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: Icon(
@@ -1272,8 +1347,8 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                       color: disabled
                           ? AppColors.grey
                           : (isSelected
-                                ? AppColors.blue
-                                : sport['color'] as Color),
+                              ? AppColors.blue
+                              : sport['color'] as Color),
                     ),
                   ),
                 ),
@@ -1353,8 +1428,8 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                     color: isSelected
                         ? AppColors.blue
                         : isToday
-                        ? AppColors.blue
-                        : AppColors.grey,
+                            ? AppColors.blue
+                            : AppColors.grey,
                     fontWeight: FontWeight.w600,
                     fontSize: 7,
                   ),
@@ -1375,8 +1450,8 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                     color: isSelected
                         ? AppColors.blue
                         : isToday
-                        ? AppColors.blue
-                        : AppColors.grey,
+                            ? AppColors.blue
+                            : AppColors.grey,
                     fontWeight: FontWeight.w600,
                     fontSize: 7,
                   ),
@@ -1408,19 +1483,19 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
         color: isSelected
             ? AppColors.blue.withValues(alpha: 0.06)
             : (isDisabled
-                  ? AppColors.lightgrey.withValues(alpha: 0.18)
-                  : AppColors.white),
+                ? AppColors.lightgrey.withValues(alpha: 0.18)
+                : AppColors.white),
         border: isSelected
             ? Border.all(color: AppColors.blue, width: 2)
             : (isDisabled
-                  ? Border.all(
-                      color: AppColors.grey.withValues(alpha: 0.5),
-                      width: 1,
-                    )
-                  : Border.all(
-                      color: AppColors.grey.withValues(alpha: 0.3),
-                      width: 1,
-                    )),
+                ? Border.all(
+                    color: AppColors.grey.withValues(alpha: 0.5),
+                    width: 1,
+                  )
+                : Border.all(
+                    color: AppColors.grey.withValues(alpha: 0.3),
+                    width: 1,
+                  )),
       ),
       child: Material(
         color: Colors.transparent,
@@ -1518,8 +1593,7 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
     required VoidCallback onTap,
   }) {
     final dynamic rawSurface = field['surface'];
-    final String? surface =
-        rawSurface == null ? null : rawSurface.toString().trim();
+    final String? surface = rawSurface?.toString().trim();
     final lighting = field['lighting'] ?? false;
     final rawName = (field['name'] as String?)?.trim() ?? '';
     final addressSuperShort =
@@ -1615,8 +1689,7 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                       surfaceText != null && surfaceText.isNotEmpty;
                   final displaySurfaceText =
                       hasSurfaceText ? surfaceText : 'Unknown';
-                  final shouldShowText =
-                      hasSurfaceText || icon != null;
+                  final shouldShowText = hasSurfaceText || icon != null;
                   if (!shouldShowText) {
                     return const SizedBox.shrink();
                   }
@@ -1688,9 +1761,8 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
       child: Container(
         height: 60, // Much smaller
         decoration: BoxDecoration(
-          color: isSelected
-              ? AppColors.blue.withValues(alpha: 0.1)
-              : Colors.white,
+          color:
+              isSelected ? AppColors.blue.withValues(alpha: 0.1) : Colors.white,
           borderRadius: BorderRadius.circular(AppRadius.card),
           border: Border.all(
             color: isSelected
@@ -1848,7 +1920,8 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                                                       _availableFields = [];
                                                       _filteredFields = [];
                                                       _weatherData = {};
-                                                      _fieldSearchController.clear();
+                                                      _fieldSearchController
+                                                          .clear();
                                                       _fieldSearchQuery = '';
                                                     });
                                                     _loadFields();
@@ -1881,91 +1954,89 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                                     ),
                                     const SizedBox(width: 8),
                                     TextButton.icon(
-                                      onPressed:
-                                          (_isLoadingFields ||
+                                      onPressed: (_isLoadingFields ||
                                               _availableFields.isEmpty)
                                           ? null
                                           : () {
-                                              final mapLocations = _availableFields
-                                                  .map<Map<String, dynamic>>((
-                                                    field,
-                                                  ) {
-                                                    final lat =
-                                                        field['latitude'] ??
-                                                        field['lat'];
-                                                    final lon =
-                                                        field['longitude'] ??
-                                                        field['lon'];
-                                                    final latDouble = lat is num
-                                                        ? lat.toDouble()
-                                                        : double.tryParse(
-                                                            lat?.toString() ??
-                                                                '',
-                                                          );
-                                                    final lonDouble = lon is num
-                                                        ? lon.toDouble()
-                                                        : double.tryParse(
-                                                            lon?.toString() ??
-                                                                '',
-                                                          );
-                                                    if (latDouble == null ||
-                                                        lonDouble == null) {
-                                                      return <
-                                                        String,
-                                                        dynamic
-                                                      >{};
-                                                    }
-                                                    return {
-                                                      'id': field['id'] ??
-                                                          field['fieldId'] ??
-                                                          field['@id'] ??
-                                                          field['osm_id'] ??
-                                                          field['osmId'],
-                                                      'name':
-                                                        (field['name']
-                                                                    ?.toString()
-                                                                    .trim()
-                                                                    .isNotEmpty ==
-                                                                true)
-                                                            ? field['name']
-                                                                .toString()
-                                                                .trim()
-                                                            : (field[
-                                                                        'address_super_short']
-                                                                    ?.toString()
-                                                                    .trim()
-                                                                    .isNotEmpty ==
-                                                                true)
-                                                                ? field[
-                                                                        'address_super_short']
-                                                                    .toString()
-                                                                    .trim()
-                                                                : (field[
-                                                                            'addressSuperShort']
-                                                                        ?.toString()
-                                                                        .trim()
-                                                                        .isNotEmpty ==
-                                                                    true)
-                                                                    ? field[
-                                                                            'addressSuperShort']
-                                                                        .toString()
-                                                                        .trim()
-                                                                    : 'Unnamed Field',
-                                                      'lat': latDouble,
-                                                      'lon': lonDouble,
-                                                      'lit':
-                                                          (field['lighting'] ==
-                                                              true)
-                                                          ? 'yes'
-                                                          : 'no',
-                                                      'surface':
-                                                          field['surface'],
-                                                    };
-                                                  })
-                                                  .where(
-                                                    (loc) => loc.isNotEmpty,
-                                                  )
-                                                  .toList();
+                                              final mapLocations =
+                                                  _availableFields
+                                                      .map<
+                                                          Map<String,
+                                                              dynamic>>((
+                                                        field,
+                                                      ) {
+                                                        final lat =
+                                                            field['latitude'] ??
+                                                                field['lat'];
+                                                        final lon = field[
+                                                                'longitude'] ??
+                                                            field['lon'];
+                                                        final latDouble = lat
+                                                                is num
+                                                            ? lat.toDouble()
+                                                            : double.tryParse(
+                                                                lat?.toString() ??
+                                                                    '',
+                                                              );
+                                                        final lonDouble = lon
+                                                                is num
+                                                            ? lon.toDouble()
+                                                            : double.tryParse(
+                                                                lon?.toString() ??
+                                                                    '',
+                                                              );
+                                                        if (latDouble == null ||
+                                                            lonDouble == null) {
+                                                          return <String,
+                                                              dynamic>{};
+                                                        }
+                                                        return {
+                                                          'id': field['id'] ??
+                                                              field[
+                                                                  'fieldId'] ??
+                                                              field['@id'] ??
+                                                              field['osm_id'] ??
+                                                              field['osmId'],
+                                                          'name': (field['name']
+                                                                      ?.toString()
+                                                                      .trim()
+                                                                      .isNotEmpty ==
+                                                                  true)
+                                                              ? field['name']
+                                                                  .toString()
+                                                                  .trim()
+                                                              : (field['address_super_short']
+                                                                          ?.toString()
+                                                                          .trim()
+                                                                          .isNotEmpty ==
+                                                                      true)
+                                                                  ? field['address_super_short']
+                                                                      .toString()
+                                                                      .trim()
+                                                                  : (field['addressSuperShort']
+                                                                              ?.toString()
+                                                                              .trim()
+                                                                              .isNotEmpty ==
+                                                                          true)
+                                                                      ? field['addressSuperShort']
+                                                                          .toString()
+                                                                          .trim()
+                                                                      : 'Unnamed Field',
+                                                          'lat': latDouble,
+                                                          'lon': lonDouble,
+                                                          'lit':
+                                                              (field['lighting'] ==
+                                                                      true)
+                                                                  ? 'yes'
+                                                                  : 'no',
+                                                          'surface':
+                                                              field['surface'],
+                                                        };
+                                                      })
+                                                      .where(
+                                                        (loc) => loc.isNotEmpty,
+                                                      )
+                                                      .toList();
 
                                               if (mapLocations.isEmpty) {
                                                 ScaffoldMessenger.of(
@@ -1983,16 +2054,16 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
 
                                               final mapTitle =
                                                   _selectedSport == 'basketball'
-                                                  ? 'basketball_courts'.tr()
-                                                  : 'football_fields'.tr();
+                                                      ? 'basketball_courts'.tr()
+                                                      : 'football_fields'.tr();
 
                                               Navigator.of(context).push(
                                                 MaterialPageRoute(
                                                   builder: (_) =>
                                                       GenericMapScreen(
-                                                        title: mapTitle,
-                                                        locations: mapLocations,
-                                                      ),
+                                                    title: mapTitle,
+                                                    locations: mapLocations,
+                                                  ),
                                                 ),
                                               );
                                             },
@@ -2022,7 +2093,8 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                                       filled: true,
                                       fillColor: AppColors.lightgrey,
                                       isDense: true,
-                                      contentPadding: const EdgeInsets.symmetric(
+                                      contentPadding:
+                                          const EdgeInsets.symmetric(
                                         horizontal: 12,
                                         vertical: 10,
                                       ),
@@ -2126,7 +2198,42 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                                           ),
                                         ),
                                       )
-                                    else
+                                    else ...[
+                                      // Show subtle loading indicator when calculating distances
+                                      if (_isCalculatingDistances)
+                                        Padding(
+                                          padding: const EdgeInsets.only(
+                                            bottom: 8,
+                                          ),
+                                          child: Row(
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.center,
+                                            children: [
+                                              SizedBox(
+                                                width: 16,
+                                                height: 16,
+                                                child:
+                                                    CircularProgressIndicator(
+                                                  strokeWidth: 2,
+                                                  valueColor:
+                                                      AlwaysStoppedAnimation<
+                                                          Color>(
+                                                    AppColors.blue,
+                                                  ),
+                                                ),
+                                              ),
+                                              const SizedBox(width: 8),
+                                              Text(
+                                                'finding_closest_fields'.tr(),
+                                                style: AppTextStyles.small
+                                                    .copyWith(
+                                                  color: AppColors.grey,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      const SizedBox(height: 4),
                                       Transform.translate(
                                         offset: const Offset(0, -6),
                                         child: SizedBox(
@@ -2142,8 +2249,7 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
 
                                               return Padding(
                                                 padding: EdgeInsets.only(
-                                                  right:
-                                                      index <
+                                                  right: index <
                                                           _filteredFields
                                                                   .length -
                                                               1
@@ -2176,6 +2282,7 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                                           ),
                                         ),
                                       ),
+                                    ],
                                   ],
                                 ),
                               ),
@@ -2204,47 +2311,40 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                                             child: SliderTheme(
                                               data: SliderTheme.of(context)
                                                   .copyWith(
-                                                    activeTrackColor:
-                                                        (widget.initialGame !=
-                                                            null)
-                                                        ? AppColors.grey
-                                                              .withValues(
-                                                                alpha: 0.4,
-                                                              )
-                                                        : AppColors.blue,
-                                                    inactiveTrackColor:
-                                                        (widget.initialGame !=
-                                                            null)
-                                                        ? AppColors.grey
-                                                              .withValues(
-                                                                alpha: 0.2,
-                                                              )
-                                                        : AppColors.blue
-                                                              .withValues(
-                                                                alpha: 0.2,
-                                                              ),
-                                                    thumbColor:
-                                                        (widget.initialGame !=
-                                                            null)
+                                                activeTrackColor: (widget
+                                                            .initialGame !=
+                                                        null)
+                                                    ? AppColors.grey.withValues(
+                                                        alpha: 0.4,
+                                                      )
+                                                    : AppColors.blue,
+                                                inactiveTrackColor: (widget
+                                                            .initialGame !=
+                                                        null)
+                                                    ? AppColors.grey.withValues(
+                                                        alpha: 0.2,
+                                                      )
+                                                    : AppColors.blue.withValues(
+                                                        alpha: 0.2,
+                                                      ),
+                                                thumbColor:
+                                                    (widget.initialGame != null)
                                                         ? AppColors.grey
                                                         : AppColors.blue,
-                                                    overlayColor:
-                                                        (widget.initialGame !=
-                                                            null)
-                                                        ? AppColors.grey
-                                                              .withValues(
-                                                                alpha: 0.1,
-                                                              )
-                                                        : AppColors.blue
-                                                              .withValues(
-                                                                alpha: 0.1,
-                                                              ),
-                                                    valueIndicatorColor:
-                                                        (widget.initialGame !=
-                                                            null)
+                                                overlayColor: (widget
+                                                            .initialGame !=
+                                                        null)
+                                                    ? AppColors.grey.withValues(
+                                                        alpha: 0.1,
+                                                      )
+                                                    : AppColors.blue.withValues(
+                                                        alpha: 0.1,
+                                                      ),
+                                                valueIndicatorColor:
+                                                    (widget.initialGame != null)
                                                         ? AppColors.grey
                                                         : AppColors.blue,
-                                                  ),
+                                              ),
                                               child: Slider(
                                                 value: _maxPlayers.toDouble(),
                                                 min: 2,
@@ -2260,13 +2360,13 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                                                 },
                                                 onChanged:
                                                     (widget.initialGame != null)
-                                                    ? null
-                                                    : (v) {
-                                                        setState(() {
-                                                          _maxPlayers = v
-                                                              .round();
-                                                        });
-                                                      },
+                                                        ? null
+                                                        : (v) {
+                                                            setState(() {
+                                                              _maxPlayers =
+                                                                  v.round();
+                                                            });
+                                                          },
                                                 onChangeEnd: (_) {
                                                   ref
                                                       .read(
@@ -2314,8 +2414,7 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                                             final date = _availableDates[index];
                                             final isSelected =
                                                 _selectedDate == date;
-                                            final isToday =
-                                                date.day ==
+                                            final isToday = date.day ==
                                                     DateTime.now().day &&
                                                 date.month ==
                                                     DateTime.now().month &&
@@ -2324,8 +2423,7 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
 
                                             return Padding(
                                               padding: EdgeInsets.only(
-                                                right:
-                                                    index <
+                                                right: index <
                                                         _availableDates.length -
                                                             1
                                                     ? AppWidths.regular
@@ -2355,9 +2453,14 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                                                   // Weather requires field coordinates, so it will load when field is selected
                                                   if (_selectedDate != null) {
                                                     // Only load weather if field is already selected (has coordinates)
-                                                    if (_selectedField != null &&
-                                                        _selectedField?['latitude'] != null &&
-                                                        _selectedField?['longitude'] != null) {
+                                                    if (_selectedField !=
+                                                            null &&
+                                                        _selectedField?[
+                                                                'latitude'] !=
+                                                            null &&
+                                                        _selectedField?[
+                                                                'longitude'] !=
+                                                            null) {
                                                       _loadWeather();
                                                     }
                                                     _loadBookedSlots();
@@ -2409,7 +2512,9 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                                             // Weather API returns hourly data (e.g., "10:00"), so map 30-minute slots
                                             // to their hour's weather data (e.g., "10:30" -> "10:00")
                                             String weatherKey = time;
-                                            if (hasWeatherData && !_weatherData.containsKey(time)) {
+                                            if (hasWeatherData &&
+                                                !_weatherData
+                                                    .containsKey(time)) {
                                               // For 30-minute slots, use the hour's weather data
                                               final timeParts = time.split(':');
                                               final hour = timeParts[0];
@@ -2417,37 +2522,36 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                                             }
                                             final weatherCondition =
                                                 hasWeatherData
-                                                ? _weatherData[weatherKey]
-                                                : null;
+                                                    ? _weatherData[weatherKey]
+                                                    : null;
 
                                             final weatherIcon =
                                                 hasWeatherData &&
-                                                    weatherCondition != null
-                                                ? ref
-                                                      .read(
-                                                        weatherActionsProvider,
-                                                      )
-                                                      .getWeatherIcon(
-                                                        time,
-                                                        weatherCondition,
-                                                      )
-                                                : null;
+                                                        weatherCondition != null
+                                                    ? ref
+                                                        .read(
+                                                          weatherActionsProvider,
+                                                        )
+                                                        .getWeatherIcon(
+                                                          time,
+                                                          weatherCondition,
+                                                        )
+                                                    : null;
                                             final weatherColor =
                                                 hasWeatherData &&
-                                                    weatherCondition != null
-                                                ? ref
-                                                      .read(
-                                                        weatherActionsProvider,
-                                                      )
-                                                      .getWeatherColor(
-                                                        weatherCondition,
-                                                      )
-                                                : null;
+                                                        weatherCondition != null
+                                                    ? ref
+                                                        .read(
+                                                          weatherActionsProvider,
+                                                        )
+                                                        .getWeatherColor(
+                                                          weatherCondition,
+                                                        )
+                                                    : null;
 
                                             return Padding(
                                               padding: EdgeInsets.only(
-                                                right:
-                                                    index <
+                                                right: index <
                                                         _availableTimes.length -
                                                             1
                                                     ? AppWidths.regular
@@ -2465,7 +2569,8 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                                                       weatherCondition,
                                                   weatherIcon: weatherIcon,
                                                   weatherColor: weatherColor,
-                                                  isLoadingWeather: _isLoadingWeather,
+                                                  isLoadingWeather:
+                                                      _isLoadingWeather,
                                                   onTap: () {
                                                     if (isBooked) {
                                                       ScaffoldMessenger.of(
@@ -2490,9 +2595,9 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                                                                   style: AppTextStyles
                                                                       .body
                                                                       .copyWith(
-                                                                        color: Colors
-                                                                            .white,
-                                                                      ),
+                                                                    color: Colors
+                                                                        .white,
+                                                                  ),
                                                                 ),
                                                               ),
                                                             ],
@@ -2501,8 +2606,8 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                                                               AppColors.red,
                                                           duration:
                                                               const Duration(
-                                                                seconds: 3,
-                                                              ),
+                                                            seconds: 3,
+                                                          ),
                                                           behavior:
                                                               SnackBarBehavior
                                                                   .floating,
@@ -2626,16 +2731,16 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                                 child: ElevatedButton(
                                   onPressed: _isFormComplete && !_isLoading
                                       ? (widget.initialGame != null
-                                            ? _updateGame
-                                            : _createGame)
+                                          ? _updateGame
+                                          : _createGame)
                                       : null,
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor: _isFormComplete
                                         ? (widget.initialGame != null
-                                              ? (_hasChanges
-                                                    ? Colors.orange
-                                                    : AppColors.green)
-                                              : AppColors.blue)
+                                            ? (_hasChanges
+                                                ? Colors.orange
+                                                : AppColors.green)
+                                            : AppColors.blue)
                                         : AppColors.grey,
                                     foregroundColor: Colors.white,
                                     shape: RoundedRectangleBorder(
@@ -2653,19 +2758,19 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                                             strokeWidth: 2,
                                             valueColor:
                                                 AlwaysStoppedAnimation<Color>(
-                                                  Colors.white,
-                                                ),
+                                              Colors.white,
+                                            ),
                                           ),
                                         )
                                       : Text(
                                           widget.initialGame != null
                                               ? 'update_game'.tr()
                                               : 'create_game'.tr(),
-                                          style: AppTextStyles.cardTitle
-                                              .copyWith(
-                                                color: Colors.white,
-                                                fontWeight: FontWeight.w600,
-                                              ),
+                                          style:
+                                              AppTextStyles.cardTitle.copyWith(
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.w600,
+                                          ),
                                         ),
                                 ),
                               ),
@@ -2748,9 +2853,8 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
       builder: (context) => _FriendSelectionSheet(
         currentUid: ref.read(currentUserIdProvider) ?? '',
         initiallySelected: _selectedFriendUids,
-        lockedUids: widget.initialGame != null
-            ? _lockedInvitedUids
-            : const <String>{},
+        lockedUids:
+            widget.initialGame != null ? _lockedInvitedUids : const <String>{},
         onApply: (selectedUids) {
           // Apply changes when Done is pressed
           setState(() {
@@ -2841,9 +2945,8 @@ class _FriendSelectionSheetState extends ConsumerState<_FriendSelectionSheet> {
   void _handleApply() {
     ref.read(hapticsActionsProvider)?.selectionClick();
     // Apply selections (excluding locked ones from the set we pass back)
-    final newSelections = _selectedUids
-        .where((uid) => !widget.lockedUids.contains(uid))
-        .toSet();
+    final newSelections =
+        _selectedUids.where((uid) => !widget.lockedUids.contains(uid)).toSet();
     widget.onApply(newSelections);
     Navigator.of(context).pop();
   }
@@ -2999,9 +3102,7 @@ class _SearchableFriendPicker extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     return Container(
       decoration: const BoxDecoration(color: AppColors.white),
-      child: ref
-          .watch(watchFriendsListProvider)
-          .when(
+      child: ref.watch(watchFriendsListProvider).when(
             data: (friendUids) {
               if (friendUids.isEmpty) {
                 return Padding(
@@ -3015,24 +3116,21 @@ class _SearchableFriendPicker extends ConsumerWidget {
 
               // Fetch all profiles upfront to avoid FutureBuilder in ListView
               return FutureBuilder<Map<String, Map<String, String?>>>(
-                future:
-                    Future.wait(
-                      friendUids.map(
-                        (id) => ref
-                            .read(friendsActionsProvider)
-                            .fetchMinimalProfile(id),
-                      ),
-                    ).then((profiles) {
-                      final map = <String, Map<String, String?>>{};
-                      for (
-                        int i = 0;
-                        i < friendUids.length && i < profiles.length;
-                        i++
-                      ) {
-                        map[friendUids[i]] = profiles[i];
-                      }
-                      return map;
-                    }),
+                future: Future.wait(
+                  friendUids.map(
+                    (id) => ref
+                        .read(friendsActionsProvider)
+                        .fetchMinimalProfile(id),
+                  ),
+                ).then((profiles) {
+                  final map = <String, Map<String, String?>>{};
+                  for (int i = 0;
+                      i < friendUids.length && i < profiles.length;
+                      i++) {
+                    map[friendUids[i]] = profiles[i];
+                  }
+                  return map;
+                }),
                 builder: (context, snap) {
                   if (snap.connectionState == ConnectionState.waiting) {
                     return const Center(child: CircularProgressIndicator());
@@ -3058,8 +3156,8 @@ class _SearchableFriendPicker extends ConsumerWidget {
                       : friendUids.where((uid) {
                           final name = profiles[uid]?['displayName'] ?? '';
                           return name.toLowerCase().contains(
-                            searchQuery.toLowerCase(),
-                          );
+                                searchQuery.toLowerCase(),
+                              );
                         }).toList();
 
                   if (filtered.isEmpty) {
@@ -3081,8 +3179,7 @@ class _SearchableFriendPicker extends ConsumerWidget {
                         const Divider(height: 1, color: AppColors.lightgrey),
                     itemBuilder: (context, i) {
                       final uid = filtered[i];
-                      final data =
-                          profiles[uid] ??
+                      final data = profiles[uid] ??
                           const {'displayName': 'User', 'photoURL': null};
                       final name = data['displayName'] ?? 'User';
                       final photo = data['photoURL'];

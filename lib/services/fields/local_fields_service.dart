@@ -63,6 +63,7 @@ class LocalFieldsService {
             'addr:street': properties['addr:street'],
             'address_short': properties['address_short'],
             'address_super_short': properties['address_super_short'],
+            'address_micro_short': properties['address_micro_short'],
             'address_display_name': properties['address_display_name'],
             'tags': properties,
           };
@@ -70,50 +71,69 @@ class LocalFieldsService {
         .where((m) => m.isNotEmpty)
         .toList();
 
-    return items
-        .where((m) {
-          final tags = m['tags'] as Map<String, dynamic>?;
-          final sport = tags?['sport']?.toString();
-          final leisure = tags?['leisure']?.toString();
-          if (sport == sportType) {
-            return true;
-          }
-          if (leisure == 'sports_centre' && sport == sportType) {
-            return true;
-          }
-          if ((leisure == 'pitch' || leisure == 'stadium') &&
-              sport == sportType) {
-            return true;
-          }
-          return false;
-        })
-        .where((e) => e['lat'] != null && e['lon'] != null)
-        .toList();
+    // Since each GeoJSON file is already sport-specific, we can be lenient with filtering
+    // Just ensure we have valid coordinates and optionally verify sport matches
+    final normalizedSportType = sportType.toLowerCase();
+    final normalizedForMatching =
+        normalizedSportType == 'football' ? 'soccer' : normalizedSportType;
+
+    final filtered = items.where((m) {
+      // First check: must have valid coordinates
+      if (m['lat'] == null || m['lon'] == null) {
+        return false;
+      }
+
+      // Second check: verify sport matches (but be lenient since file is already filtered)
+      final tags = m['tags'] as Map<String, dynamic>?;
+      final sport = tags?['sport']?.toString().toLowerCase();
+
+      // If sport is specified, it should match (with soccer/football equivalence)
+      if (sport != null) {
+        if (sport == normalizedForMatching) {
+          return true;
+        }
+        // Handle soccer/football equivalence
+        if ((normalizedSportType == 'soccer' && sport == 'football') ||
+            (normalizedSportType == 'football' && sport == 'soccer')) {
+          return true;
+        }
+        // If sport doesn't match, skip it
+        return false;
+      }
+
+      // If no sport specified but has coordinates, include it (file is already filtered)
+      return true;
+    }).toList();
+
+    return filtered;
   }
 
   List<String> _resolveAssetCandidates(String sportType) {
     final normalized = sportType.toLowerCase();
     const defaultAssets = <String>[
-      'assets/fields/football_fields_with_addresses.geojson',
+      'assets/fields/output/football.geojson',
     ];
 
     const sportAssets = <String, List<String>>{
       'soccer': defaultAssets,
       'football': defaultAssets,
       'basketball': <String>[
-        'assets/fields/basketball_fields_with_addresses.geojson',
+        'assets/fields/output/basketball.geojson',
       ],
       'beachvolleyball': <String>[
-        'assets/fields/beachvolleyball_with_addresses.geojson',
+        'assets/fields/output/beachvolleyball.geojson',
       ],
       'table_tennis': <String>[
-        'assets/fields/table_tennis_with_addresses.geojson',
+        'assets/fields/output/tabletennis.geojson',
       ],
       'boules': <String>[
-        'assets/fields/boules_with_addresses.geojson',
+        'assets/fields/output/boules.geojson',
       ],
       'skateboard': <String>[
-        'assets/fields/skateboard_with_addresses.geojson',
+        'assets/fields/output/skateboard.geojson',
+      ],
+      'swimming': <String>[
+        'assets/fields/output/swimming.geojson',
       ],
     };
 

@@ -3,6 +3,7 @@
   "generator": "overpass-turbo",
   "copyright": "The data included in this document is from www.openstreetmap.org. The data is made available under ODbL.",
   "timestamp": "2025-11-07T17:21:01Z",
+  "overpass_query": "[out:json][timeout:180];\n\narea[\"name\"=\"'s-Hertogenbosch\"][\"boundary\"=\"administrative\"][\"admin_level\"=\"8\"]->.searchArea;\n\n\n\n(\n\n  node[\"leisure\"=\"pitch\"][\"sport\"=\"boules\"](area.searchArea);\n\n  way[\"leisure\"=\"pitch\"][\"sport\"=\"boules\"](area.searchArea);\n\n  relation[\"leisure\"=\"pitch\"][\"sport\"=\"boules\"](area.searchArea);\n\n);\n\n\n\nout body;\n\n>;\n\nout skel qt;",
   "features": [
     {
       "type": "Feature",
@@ -12,7 +13,8 @@
         "sport": "boules",
         "address_display_name": "Spanjaardwaard, Maasakker, Empel, 's-Hertogenbosch, Noord-Brabant, Nederland, 5236 XS, Nederland",
         "address_short": "Spanjaardwaard, 5236 XS, 's-Hertogenbosch, Nederland",
-        "address_super_short": "Spanjaardwaard, 5236 XS"
+        "address_super_short": "Spanjaardwaard, 5236 XS",
+        "address_micro_short": "Spanjaardwaard"
       },
       "geometry": {
         "type": "Polygon",
@@ -51,7 +53,8 @@
         "sport": "boules",
         "address_display_name": "Vincent van Goghlaan, Hintham-Zuid, Hintham, Rosmalen, 's-Hertogenbosch, Noord-Brabant, Nederland, 5246 GB, Nederland",
         "address_short": "Vincent van Goghlaan, 5246 GB, Rosmalen, Nederland",
-        "address_super_short": "Vincent van Goghlaan, 5246 GB"
+        "address_super_short": "Vincent van Goghlaan, 5246 GB",
+        "address_micro_short": "Vincent van Goghlaan"
       },
       "geometry": {
         "type": "Polygon",
@@ -90,7 +93,8 @@
         "sport": "boules",
         "address_display_name": "Van Leeuwenhoekstraat, Boschveld, West, 's-Hertogenbosch, Noord-Brabant, Nederland, 5223 CW, Nederland",
         "address_short": "Van Leeuwenhoekstraat, 5223 CW, 's-Hertogenbosch, Nederland",
-        "address_super_short": "Van Leeuwenhoekstraat, 5223 CW"
+        "address_super_short": "Van Leeuwenhoekstraat, 5223 CW",
+        "address_micro_short": "Van Leeuwenhoekstraat"
       },
       "geometry": {
         "type": "Polygon",
@@ -127,9 +131,10 @@
         "@id": "way/362215222",
         "leisure": "pitch",
         "sport": "boules",
-        "address_display_name": "Crolliusstraat, Aawijk-Noord, 's-Hertogenbosch, Noord-Brabant, Nederland, 5213 GG, Nederland",
-        "address_short": "Crolliusstraat, 5213 GG, 's-Hertogenbosch, Nederland",
-        "address_super_short": "Crolliusstraat, 5213 GG"
+        "address_display_name": "Martinipad, Aawijk-Noord, 's-Hertogenbosch, Noord-Brabant, Nederland, 5213 HG, Nederland",
+        "address_short": "Martinipad, 5213 HG, 's-Hertogenbosch, Nederland",
+        "address_super_short": "Martinipad, 5213 HG",
+        "address_micro_short": "Martinipad"
       },
       "geometry": {
         "type": "Polygon",
@@ -176,7 +181,8 @@
         "sport": "boules",
         "address_display_name": "Sint Corneliusweg, Bokhoven, 's-Hertogenbosch, Noord-Brabant, Nederland, 5221 BZ, Nederland",
         "address_short": "Sint Corneliusweg, 5221 BZ, 's-Hertogenbosch, Nederland",
-        "address_super_short": "Sint Corneliusweg, 5221 BZ"
+        "address_super_short": "Sint Corneliusweg, 5221 BZ",
+        "address_micro_short": "Sint Corneliusweg"
       },
       "geometry": {
         "type": "Polygon",
@@ -215,7 +221,8 @@
         "sport": "boules",
         "address_display_name": "2, Wuyvenhaerd, Haverleij, 's-Hertogenbosch, Noord-Brabant, Nederland, 5221 RA, Nederland",
         "address_short": "Wuyvenhaerd, 2, 5221 RA, 's-Hertogenbosch, Nederland",
-        "address_super_short": "Wuyvenhaerd, 5221 RA"
+        "address_super_short": "Wuyvenhaerd, 5221 RA",
+        "address_micro_short": "Wuyvenhaerd"
       },
       "geometry": {
         "type": "Polygon",
@@ -252,9 +259,10 @@
         "@id": "way/929288398",
         "leisure": "pitch",
         "sport": "boules",
-        "address_display_name": "Kwartierenlaan, Maasdal, Empel, 's-Hertogenbosch, Noord-Brabant, Nederland, 5235 JE, Nederland",
-        "address_short": "Kwartierenlaan, 5235 JE, 's-Hertogenbosch, Nederland",
-        "address_super_short": "Kwartierenlaan, 5235 JE"
+        "address_display_name": "Kwartierenlaan, Maasdal, Empel, 's-Hertogenbosch, Noord-Brabant, Nederland, 5235 JC, Nederland",
+        "address_short": "Kwartierenlaan, 5235 JC, 's-Hertogenbosch, Nederland",
+        "address_super_short": "Kwartierenlaan, 5235 JC",
+        "address_micro_short": "Kwartierenlaan"
       },
       "geometry": {
         "type": "Polygon",

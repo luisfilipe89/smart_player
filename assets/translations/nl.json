@@ -48,6 +48,7 @@
     "choose_a_game": "Kies & speel",
     "choose_date": "Kies de Datum",
     "choose_field": "Kies een veld",
+    "finding_closest_fields": "Zoeken naar dichtstbijzijnde velden...",
     "show_on_map": "Toon op kaart",
     "choose_sport": "Kies een Sport",
     "choose_time": "Kies een Tijd",
@@ -532,5 +533,14 @@
     "field_report_submit_button": "Verstuur melding",
     "field_report_error_description": "Beschrijf het probleem in minimaal 10 tekens.",
     "field_report_submitted": "Bedankt! Je melding is verzonden.",
-    "modified": "Gewijzigd"
+    "modified": "Gewijzigd",
+    "add_to_calendar": "Toevoegen aan kalender",
+    "in_calendar": "In kalender",
+    "calendar_event_added": "Spel toegevoegd aan kalender",
+    "calendar_event_added_error": "Kon spel niet toevoegen aan kalender",
+    "calendar_permission_required": "Kalendertoegang is vereist om evenementen toe te voegen",
+    "calendar_event_updated": "Kalenderevenement bijgewerkt",
+    "calendar_event_updated_error": "Kon kalenderevenement niet bijwerken",
+    "calendar_event_removed": "Kalenderevenement verwijderd",
+    "calendar_event_removed_error": "Kon kalenderevenement niet verwijderen"
 }

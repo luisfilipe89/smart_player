@@ -3,6 +3,7 @@
   "generator": "overpass-turbo",
   "copyright": "The data included in this document is from www.openstreetmap.org. The data is made available under ODbL.",
   "timestamp": "2025-11-07T14:16:20Z",
+  "overpass_query": "[out:json][timeout:180];\n\narea[\"name\"=\"'s-Hertogenbosch\"][\"boundary\"=\"administrative\"][\"admin_level\"=\"8\"]->.searchArea;\n\n\n\n(\n\n  node[\"leisure\"=\"pitch\"][\"sport\"=\"soccer\"][\"access\"=\"yes\"][\"equipment\"=\"yes\"](area.searchArea);\n\n  way[\"leisure\"=\"pitch\"][\"sport\"=\"soccer\"][\"access\"=\"yes\"][\"equipment\"=\"yes\"](area.searchArea);\n\n  relation[\"leisure\"=\"pitch\"][\"sport\"=\"soccer\"][\"access\"=\"yes\"][\"equipment\"=\"yes\"](area.searchArea);\n\n);\n\n\n\nout body;\n\n>;\n\nout skel qt;",
   "features": [
     {
       "type": "Feature",
@@ -16,7 +17,8 @@
         "surface": "artificial_turf",
         "address_display_name": "Landstrekenlaan, Maasstroom, 's-Hertogenbosch, Noord-Brabant, Nederland, 5235 LC, Nederland",
         "address_short": "Landstrekenlaan, 5235 LC, 's-Hertogenbosch, Nederland",
-        "address_super_short": "Landstrekenlaan, 5235 LC"
+        "address_super_short": "Landstrekenlaan, 5235 LC",
+        "address_micro_short": "Landstrekenlaan"
       },
       "geometry": {
         "type": "Polygon",
@@ -58,7 +60,8 @@
         "sport": "soccer",
         "address_display_name": "Wijkspeelplaats Buitenpepers, Buitenpepersdreef, Buitenpepers, 's-Hertogenbosch, Noord-Brabant, Nederland, 5231 AH, Nederland",
         "address_short": "Buitenpepersdreef, 5231 AH, 's-Hertogenbosch, Nederland",
-        "address_super_short": "Buitenpepersdreef, 5231 AH"
+        "address_super_short": "Buitenpepersdreef, 5231 AH",
+        "address_micro_short": "Buitenpepersdreef"
       },
       "geometry": {
         "type": "Polygon",
@@ -99,7 +102,8 @@
         "sport": "soccer",
         "address_display_name": "Engelerpark, Kom Engelen, Engelen, 's-Hertogenbosch, Noord-Brabant, Nederland, 5221 GP, Nederland",
         "address_short": "Engelerpark, 5221 GP, 's-Hertogenbosch, Nederland",
-        "address_super_short": "Engelerpark, 5221 GP"
+        "address_super_short": "Engelerpark, 5221 GP",
+        "address_micro_short": "Engelerpark"
       },
       "geometry": {
         "type": "Polygon",
@@ -144,7 +148,8 @@
         "sport": "soccer",
         "address_display_name": "Smaragd, De Edelstenenbuurt, 's-Hertogenbosch, Noord-Brabant, Nederland, 5231 KK, Nederland",
         "address_short": "Smaragd, 5231 KK, 's-Hertogenbosch, Nederland",
-        "address_super_short": "Smaragd, 5231 KK"
+        "address_super_short": "Smaragd, 5231 KK",
+        "address_micro_short": "Smaragd"
       },
       "geometry": {
         "type": "Polygon",
@@ -185,7 +190,8 @@
         "sport": "soccer",
         "address_display_name": "Zuiderboschpad, Hintham-Zuid, Hintham, Rosmalen, 's-Hertogenbosch, Noord-Brabant, Nederland, 5246 BE, Nederland",
         "address_short": "Zuiderboschpad, 5246 BE, Rosmalen, Nederland",
-        "address_super_short": "Zuiderboschpad, 5246 BE"
+        "address_super_short": "Zuiderboschpad, 5246 BE",
+        "address_micro_short": "Zuiderboschpad"
       },
       "geometry": {
         "type": "Polygon",
@@ -227,7 +233,8 @@
         "surface": "artificial_turf",
         "address_display_name": "Platanenstraat, Vinkel, 's-Hertogenbosch, Noord-Brabant, Nederland, 5382 KB, Nederland",
         "address_short": "Platanenstraat, 5382 KB, Vinkel, Nederland",
-        "address_super_short": "Platanenstraat, 5382 KB"
+        "address_super_short": "Platanenstraat, 5382 KB",
+        "address_micro_short": "Platanenstraat"
       },
       "geometry": {
         "type": "Polygon",
@@ -268,7 +275,8 @@
         "sport": "soccer",
         "address_display_name": "Zomerdijk, Pelgrimsche Hoeve, Nuland, 's-Hertogenbosch, Noord-Brabant, Nederland, 5391 BV, Nederland",
         "address_short": "Zomerdijk, 5391 BV, Nuland, Nederland",
-        "address_super_short": "Zomerdijk, 5391 BV"
+        "address_super_short": "Zomerdijk, 5391 BV",
+        "address_micro_short": "Zomerdijk"
       },
       "geometry": {
         "type": "Polygon",
@@ -309,7 +317,8 @@
         "sport": "soccer",
         "address_display_name": "Sikkel, Pelgrimsche Hoeve, Nuland, 's-Hertogenbosch, Noord-Brabant, Nederland, 5391 CP, Nederland",
         "address_short": "Sikkel, 5391 CP, Nuland, Nederland",
-        "address_super_short": "Sikkel, 5391 CP"
+        "address_super_short": "Sikkel, 5391 CP",
+        "address_micro_short": "Sikkel"
       },
       "geometry": {
         "type": "Polygon",
@@ -350,7 +359,8 @@
         "sport": "soccer",
         "address_display_name": "Eerste Donk, De Donk, 's-Hertogenbosch, Noord-Brabant, Nederland, 5233 HN, Nederland",
         "address_short": "Eerste Donk, 5233 HN, 's-Hertogenbosch, Nederland",
-        "address_super_short": "Eerste Donk, 5233 HN"
+        "address_super_short": "Eerste Donk, 5233 HN",
+        "address_micro_short": "Eerste Donk"
       },
       "geometry": {
         "type": "Polygon",
@@ -396,7 +406,8 @@
         "surface": "artificial_turf",
         "address_display_name": "Cruyff Court De Schutskamp, Kooikersweg, De Schutskamp, West, 's-Hertogenbosch, Noord-Brabant, Nederland, 5223 VZ, Nederland",
         "address_short": "Kooikersweg, 5223 VZ, 's-Hertogenbosch, Nederland",
-        "address_super_short": "Kooikersweg, 5223 VZ"
+        "address_super_short": "Kooikersweg, 5223 VZ",
+        "address_micro_short": "Kooikersweg"
       },
       "geometry": {
         "type": "Polygon",
@@ -441,7 +452,8 @@
         "surface": "artificial_turf",
         "address_display_name": "Special Cruyff Court Maikel Scheffers, De Eendenkooi, De Schutskamp, West, 's-Hertogenbosch, Noord-Brabant, Nederland, 5223 KE, Nederland",
         "address_short": "De Eendenkooi, 5223 KE, 's-Hertogenbosch, Nederland",
-        "address_super_short": "De Eendenkooi, 5223 KE"
+        "address_super_short": "De Eendenkooi, 5223 KE",
+        "address_micro_short": "De Eendenkooi"
       },
       "geometry": {
         "type": "Polygon",
@@ -496,9 +508,10 @@
         "equipment": "yes",
         "leisure": "pitch",
         "sport": "soccer",
-        "address_display_name": "Koning Willem I College, 2, Vlijmenseweg, Willemspoort, West, 's-Hertogenbosch, Noord-Brabant, Nederland, 5223 GW, Nederland",
-        "address_short": "Vlijmenseweg, 2, 5223 GW, 's-Hertogenbosch, Nederland",
-        "address_super_short": "Vlijmenseweg, 5223 GW"
+        "address_display_name": "Randweg, Willemspoort, West, 's-Hertogenbosch, Noord-Brabant, Nederland, 5223 AS, Nederland",
+        "address_short": "Randweg, 5223 AS, 's-Hertogenbosch, Nederland",
+        "address_super_short": "Randweg, 5223 AS",
+        "address_micro_short": "Randweg"
       },
       "geometry": {
         "type": "Polygon",
@@ -562,9 +575,10 @@
         "leisure": "pitch",
         "sport": "soccer",
         "surface": "artificial_turf",
-        "address_display_name": "Trappistenborch, Overlaet West, Rosmalen, 's-Hertogenbosch, Noord-Brabant, Nederland, 5241 KX, Nederland",
-        "address_short": "Trappistenborch, 5241 KX, Rosmalen, Nederland",
-        "address_super_short": "Trappistenborch, 5241 KX"
+        "address_display_name": "Trappistenborch, Overlaet West, Rosmalen, 's-Hertogenbosch, Noord-Brabant, Nederland, 5241 KK, Nederland",
+        "address_short": "Trappistenborch, 5241 KK, Rosmalen, Nederland",
+        "address_super_short": "Trappistenborch, 5241 KK",
+        "address_micro_short": "Trappistenborch"
       },
       "geometry": {
         "type": "Polygon",
@@ -607,7 +621,8 @@
         "surface": "artificial_turf",
         "address_display_name": "Maastrichtseweg, Aawijk-Zuid, Zuidoost, 's-Hertogenbosch, Noord-Brabant, Nederland, 5216 KT, Nederland",
         "address_short": "Maastrichtseweg, 5216 KT, 's-Hertogenbosch, Nederland",
-        "address_super_short": "Maastrichtseweg, 5216 KT"
+        "address_super_short": "Maastrichtseweg, 5216 KT",
+        "address_micro_short": "Maastrichtseweg"
       },
       "geometry": {
         "type": "Polygon",
@@ -652,7 +667,8 @@
         "surface": "artificial_turf",
         "address_display_name": "Cruyff Court FC Den Bosch, Martinipad, Aawijk-Noord, 's-Hertogenbosch, Noord-Brabant, Nederland, 5213 HG, Nederland",
         "address_short": "Martinipad, 5213 HG, 's-Hertogenbosch, Nederland",
-        "address_super_short": "Martinipad, 5213 HG"
+        "address_super_short": "Martinipad, 5213 HG",
+        "address_micro_short": "Martinipad"
       },
       "geometry": {
         "type": "Polygon",
@@ -693,7 +709,8 @@
         "sport": "soccer",
         "address_display_name": "de Vaartgraaf, De Meerendonk, Zuidoost, 's-Hertogenbosch, Noord-Brabant, Nederland, 5216 JH, Nederland",
         "address_short": "de Vaartgraaf, 5216 JH, 's-Hertogenbosch, Nederland",
-        "address_super_short": "de Vaartgraaf, 5216 JH"
+        "address_super_short": "de Vaartgraaf, 5216 JH",
+        "address_micro_short": "de Vaartgraaf"
       },
       "geometry": {
         "type": "Polygon",
@@ -736,7 +753,8 @@
         "surface": "artificial_turf",
         "address_display_name": "Meester van Ekartstraat, Het Zilverpark, 's-Hertogenbosch, Noord-Brabant, Nederland, 5237 KJ, Nederland",
         "address_short": "Meester van Ekartstraat, 5237 KJ, 's-Hertogenbosch, Nederland",
-        "address_super_short": "Meester van Ekartstraat, 5237 KJ"
+        "address_super_short": "Meester van Ekartstraat, 5237 KJ",
+        "address_micro_short": "Meester van Ekartstraat"
       },
       "geometry": {
         "type": "Polygon",
@@ -777,7 +795,8 @@
         "sport": "soccer",
         "address_display_name": "Bevrijdingspad, Molenhoek, Rosmalen, 's-Hertogenbosch, Noord-Brabant, Nederland, 5241 EE, Nederland",
         "address_short": "Bevrijdingspad, 5241 EE, Rosmalen, Nederland",
-        "address_super_short": "Bevrijdingspad, 5241 EE"
+        "address_super_short": "Bevrijdingspad, 5241 EE",
+        "address_micro_short": "Bevrijdingspad"
       },
       "geometry": {
         "type": "Polygon",
@@ -819,7 +838,8 @@
         "sport": "soccer",
         "address_display_name": "Het Jan Hoefspleintje, Oude Baan, Sparrenburg, Rosmalen, 's-Hertogenbosch, Noord-Brabant, Nederland, 5244 GX, Nederland",
         "address_short": "Oude Baan, 5244 GX, Rosmalen, Nederland",
-        "address_super_short": "Oude Baan, 5244 GX"
+        "address_super_short": "Oude Baan, 5244 GX",
+        "address_micro_short": "Oude Baan"
       },
       "geometry": {
         "type": "Polygon",
@@ -860,7 +880,8 @@
         "sport": "soccer",
         "address_display_name": "Baden Powellstraat, De Vliert, 's-Hertogenbosch, Noord-Brabant, Nederland, 5212 BX, Nederland",
         "address_short": "Baden Powellstraat, 5212 BX, 's-Hertogenbosch, Nederland",
-        "address_super_short": "Baden Powellstraat, 5212 BX"
+        "address_super_short": "Baden Powellstraat, 5212 BX",
+        "address_micro_short": "Baden Powellstraat"
       },
       "geometry": {
         "type": "Polygon",
@@ -903,7 +924,8 @@
         "surface": "grass",
         "address_display_name": "Graaf van Solmsweg, Haverleij, Engelen, 's-Hertogenbosch, Noord-Brabant, Nederland, 5221 LK, Nederland",
         "address_short": "Graaf van Solmsweg, 5221 LK, 's-Hertogenbosch, Nederland",
-        "address_super_short": "Graaf van Solmsweg, 5221 LK"
+        "address_super_short": "Graaf van Solmsweg, 5221 LK",
+        "address_micro_short": "Graaf van Solmsweg"
       },
       "geometry": {
         "type": "Polygon",
@@ -948,7 +970,8 @@
         "surface": "artificial_turf",
         "address_display_name": "Special Cruyff Court Cello/Hub Rosmalen, Waterkant, Binckhorst, Rosmalen, 's-Hertogenbosch, Noord-Brabant, Nederland, 5244 PS, Nederland",
         "address_short": "Waterkant, 5244 PS, Rosmalen, Nederland",
-        "address_super_short": "Waterkant, 5244 PS"
+        "address_super_short": "Waterkant, 5244 PS",
+        "address_micro_short": "Waterkant"
       },
       "geometry": {
         "type": "Polygon",
@@ -991,7 +1014,8 @@
         "surface": "artificial_turf",
         "address_display_name": "Chopinlaan, Molenhoek, Rosmalen, 's-Hertogenbosch, Noord-Brabant, Nederland, 5242 HM, Nederland",
         "address_short": "Chopinlaan, 5242 HM, Rosmalen, Nederland",
-        "address_super_short": "Chopinlaan, 5242 HM"
+        "address_super_short": "Chopinlaan, 5242 HM",
+        "address_micro_short": "Chopinlaan"
       },
       "geometry": {
         "type": "Polygon",
@@ -1032,7 +1056,8 @@
         "sport": "soccer",
         "address_display_name": "Negende Donk, De Donk, Empel, 's-Hertogenbosch, Noord-Brabant, Nederland, 5233 PL, Nederland",
         "address_short": "Negende Donk, 5233 PL, 's-Hertogenbosch, Nederland",
-        "address_super_short": "Negende Donk, 5233 PL"
+        "address_super_short": "Negende Donk, 5233 PL",
+        "address_micro_short": "Negende Donk"
       },
       "geometry": {
         "type": "Polygon",
@@ -1076,7 +1101,8 @@
         "surface": "artificial_turf",
         "address_display_name": "Brolijnplein, Meester van Merwicklaan, Het Zilverpark, 's-Hertogenbosch, Noord-Brabant, Nederland, 5237 KL, Nederland",
         "address_short": "Meester van Merwicklaan, 5237 KL, 's-Hertogenbosch, Nederland",
-        "address_super_short": "Meester van Merwicklaan, 5237 KL"
+        "address_super_short": "Meester van Merwicklaan, 5237 KL",
+        "address_micro_short": "Meester van Merwicklaan"
       },
       "geometry": {
         "type": "Polygon",
@@ -1117,7 +1143,8 @@
         "sport": "soccer",
         "address_display_name": "Slagendreef, De Slagen, 's-Hertogenbosch, Noord-Brabant, Nederland, 5233 VE, Nederland",
         "address_short": "Slagendreef, 5233 VE, 's-Hertogenbosch, Nederland",
-        "address_super_short": "Slagendreef, 5233 VE"
+        "address_super_short": "Slagendreef, 5233 VE",
+        "address_micro_short": "Slagendreef"
       },
       "geometry": {
         "type": "Polygon",
@@ -1159,7 +1186,8 @@
         "surface": "artificial_turf",
         "address_display_name": "Vliertsesteeg, Hintham-Noord, Hintham, Rosmalen, 's-Hertogenbosch, Noord-Brabant, Nederland, 5246 PK, Nederland",
         "address_short": "Vliertsesteeg, 5246 PK, Rosmalen, Nederland",
-        "address_super_short": "Vliertsesteeg, 5246 PK"
+        "address_super_short": "Vliertsesteeg, 5246 PK",
+        "address_micro_short": "Vliertsesteeg"
       },
       "geometry": {
         "type": "Polygon",
@@ -1200,7 +1228,8 @@
         "sport": "soccer",
         "address_display_name": "Hustenweg, Lanen, Landelijk gebied De Groote Wielen, Rosmalen, 's-Hertogenbosch, Noord-Brabant, Nederland, 5245 DN, Nederland",
         "address_short": "Hustenweg, 5245 DN, Rosmalen, Nederland",
-        "address_super_short": "Hustenweg, 5245 DN"
+        "address_super_short": "Hustenweg, 5245 DN",
+        "address_micro_short": "Hustenweg"
       },
       "geometry": {
         "type": "Polygon",
@@ -1273,7 +1302,8 @@
         "sport": "soccer",
         "address_display_name": "Groote Wielenlaan, Hoven, Rosmalen, 's-Hertogenbosch, Noord-Brabant, Nederland, 5245 AW, Nederland",
         "address_short": "Groote Wielenlaan, 5245 AW, Rosmalen, Nederland",
-        "address_super_short": "Groote Wielenlaan, 5245 AW"
+        "address_super_short": "Groote Wielenlaan, 5245 AW",
+        "address_micro_short": "Groote Wielenlaan"
       },
       "geometry": {
         "type": "Polygon",
@@ -1314,7 +1344,8 @@
         "sport": "soccer",
         "address_display_name": "Bevrijdingspad, Molenhoek, Rosmalen, 's-Hertogenbosch, Noord-Brabant, Nederland, 5241 EE, Nederland",
         "address_short": "Bevrijdingspad, 5241 EE, Rosmalen, Nederland",
-        "address_super_short": "Bevrijdingspad, 5241 EE"
+        "address_super_short": "Bevrijdingspad, 5241 EE",
+        "address_micro_short": "Bevrijdingspad"
       },
       "geometry": {
         "type": "Polygon",
@@ -1355,7 +1386,8 @@
         "sport": "soccer",
         "address_display_name": "Vlietdijkpad, Vlietdijk, Rosmalen, 's-Hertogenbosch, Noord-Brabant, Nederland, 5247 JZ, Nederland",
         "address_short": "Vlietdijkpad, 5247 JZ, Rosmalen, Nederland",
-        "address_super_short": "Vlietdijkpad, 5247 JZ"
+        "address_super_short": "Vlietdijkpad, 5247 JZ",
+        "address_micro_short": "Vlietdijkpad"
       },
       "geometry": {
         "type": "Polygon",
@@ -1426,9 +1458,10 @@
         "equipment": "yes",
         "leisure": "pitch",
         "sport": "soccer",
-        "address_display_name": "Riek, Empel-Oost, Empel, 's-Hertogenbosch, Noord-Brabant, Nederland, 5236 PS, Nederland",
-        "address_short": "Riek, 5236 PS, 's-Hertogenbosch, Nederland",
-        "address_super_short": "Riek, 5236 PS"
+        "address_display_name": "r.k.v.v. Emplina, 1, Riek, Empel-Oost, Empel, 's-Hertogenbosch, Noord-Brabant, Nederland, 5236 PS, Nederland",
+        "address_short": "Riek, 1, 5236 PS, 's-Hertogenbosch, Nederland",
+        "address_super_short": "Riek, 5236 PS",
+        "address_micro_short": "Riek"
       },
       "geometry": {
         "type": "Polygon",
@@ -1469,7 +1502,8 @@
         "sport": "soccer",
         "address_display_name": "Weymouthstraat, Hinthammerpoort, 's-Hertogenbosch, Noord-Brabant, Nederland, 5213 TR, Nederland",
         "address_short": "Weymouthstraat, 5213 TR, 's-Hertogenbosch, Nederland",
-        "address_super_short": "Weymouthstraat, 5213 TR"
+        "address_super_short": "Weymouthstraat, 5213 TR",
+        "address_micro_short": "Weymouthstraat"
       },
       "geometry": {
         "type": "Polygon",

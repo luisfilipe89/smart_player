@@ -1,0 +1,1406 @@
+{
+  "type": "FeatureCollection",
+  "generator": "overpass-turbo",
+  "copyright": "The data included in this document is from www.openstreetmap.org. The data is made available under ODbL.",
+  "timestamp": "2025-11-07T14:16:20Z",
+  "overpass_query": "[out:json][timeout:180];\n\narea[\"name\"=\"'s-Hertogenbosch\"][\"boundary\"=\"administrative\"][\"admin_level\"=\"8\"]->.searchArea;\n\n\n\n(\n\n  node[\"leisure\"=\"pitch\"][\"sport\"=\"soccer\"][\"access\"=\"yes\"][\"equipment\"=\"yes\"](area.searchArea);\n\n  way[\"leisure\"=\"pitch\"][\"sport\"=\"soccer\"][\"access\"=\"yes\"][\"equipment\"=\"yes\"](area.searchArea);\n\n  relation[\"leisure\"=\"pitch\"][\"sport\"=\"soccer\"][\"access\"=\"yes\"][\"equipment\"=\"yes\"](area.searchArea);\n\n);\n\n\n\nout body;\n\n>;\n\nout skel qt;",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "way/58278329",
+        "access": "yes",
+        "equipment": "yes",
+        "leisure": "pitch",
+        "lit": "no",
+        "sport": "soccer",
+        "surface": "artificial_turf"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              5.3029375,
+              51.7292869
+            ],
+            [
+              5.3029415,
+              51.7289237
+            ],
+            [
+              5.3032412,
+              51.728925
+            ],
+            [
+              5.3032372,
+              51.7292881
+            ],
+            [
+              5.3029375,
+              51.7292869
+            ]
+          ]
+        ]
+      },
+      "id": "way/58278329"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "way/159559621",
+        "access": "yes",
+        "equipment": "yes",
+        "leisure": "pitch",
+        "name": "Wijkspeelplaats Buitenpepers",
+        "sport": "soccer"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              5.3176174,
+              51.7051722
+            ],
+            [
+              5.3176176,
+              51.704994
+            ],
+            [
+              5.3177597,
+              51.7049941
+            ],
+            [
+              5.3177595,
+              51.7051723
+            ],
+            [
+              5.3176174,
+              51.7051722
+            ]
+          ]
+        ]
+      },
+      "id": "way/159559621"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "way/169712124",
+        "access": "yes",
+        "equipment": "yes",
+        "leisure": "pitch",
+        "sport": "soccer"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              5.2637499,
+              51.7179012
+            ],
+            [
+              5.2638046,
+              51.717841
+            ],
+            [
+              5.2639278,
+              51.7177053
+            ],
+            [
+              5.2641181,
+              51.7177716
+            ],
+            [
+              5.2639401,
+              51.7179676
+            ],
+            [
+              5.2637499,
+              51.7179012
+            ]
+          ]
+        ]
+      },
+      "id": "way/169712124"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "way/261837772",
+        "access": "yes",
+        "equipment": "yes",
+        "leisure": "pitch",
+        "sport": "soccer"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              5.299462,
+              51.7125455
+            ],
+            [
+              5.2997978,
+              51.7126401
+            ],
+            [
+              5.2997085,
+              51.7127619
+            ],
+            [
+              5.2993727,
+              51.7126673
+            ],
+            [
+              5.299462,
+              51.7125455
+            ]
+          ]
+        ]
+      },
+      "id": "way/261837772"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "way/286046178",
+        "access": "yes",
+        "equipment": "yes",
+        "leisure": "pitch",
+        "sport": "soccer"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              5.3489592,
+              51.7000488
+            ],
+            [
+              5.3488127,
+              51.6997997
+            ],
+            [
+              5.3490887,
+              51.6997373
+            ],
+            [
+              5.3492353,
+              51.6999864
+            ],
+            [
+              5.3489592,
+              51.7000488
+            ]
+          ]
+        ]
+      },
+      "id": "way/286046178"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "way/301302826",
+        "access": "yes",
+        "equipment": "yes",
+        "leisure": "pitch",
+        "sport": "soccer",
+        "surface": "artificial_turf"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              5.4600562,
+              51.7050385
+            ],
+            [
+              5.459821,
+              51.7049959
+            ],
+            [
+              5.459944,
+              51.7047346
+            ],
+            [
+              5.4601793,
+              51.7047771
+            ],
+            [
+              5.4600562,
+              51.7050385
+            ]
+          ]
+        ]
+      },
+      "id": "way/301302826"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "way/307880894",
+        "access": "yes",
+        "equipment": "yes",
+        "leisure": "pitch",
+        "sport": "soccer"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              5.4402495,
+              51.7286919
+            ],
+            [
+              5.440197,
+              51.7285313
+            ],
+            [
+              5.4405317,
+              51.7284893
+            ],
+            [
+              5.4405842,
+              51.7286499
+            ],
+            [
+              5.4402495,
+              51.7286919
+            ]
+          ]
+        ]
+      },
+      "id": "way/307880894"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "way/307880895",
+        "access": "yes",
+        "equipment": "yes",
+        "leisure": "pitch",
+        "sport": "soccer"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              5.4391943,
+              51.7243581
+            ],
+            [
+              5.4388902,
+              51.7243543
+            ],
+            [
+              5.4388979,
+              51.7240906
+            ],
+            [
+              5.4392098,
+              51.7240963
+            ],
+            [
+              5.4391943,
+              51.7243581
+            ]
+          ]
+        ]
+      },
+      "id": "way/307880895"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "way/309177062",
+        "access": "yes",
+        "equipment": "yes",
+        "leisure": "pitch",
+        "sport": "soccer"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              5.320653,
+              51.7153959
+            ],
+            [
+              5.3205319,
+              51.7153492
+            ],
+            [
+              5.3206531,
+              51.7152286
+            ],
+            [
+              5.3207742,
+              51.7152752
+            ],
+            [
+              5.320653,
+              51.7153959
+            ]
+          ]
+        ]
+      },
+      "id": "way/309177062"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "way/310486716",
+        "access": "yes",
+        "brand": "Cruyff Court",
+        "brand:wikidata": "Q2385493",
+        "equipment": "yes",
+        "leisure": "pitch",
+        "lit": "no",
+        "name": "Cruyff Court De Schutskamp",
+        "sport": "soccer",
+        "surface": "artificial_turf"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              5.2757813,
+              51.6928484
+            ],
+            [
+              5.2761537,
+              51.6926618
+            ],
+            [
+              5.2763548,
+              51.692816
+            ],
+            [
+              5.2759824,
+              51.6930026
+            ],
+            [
+              5.2757813,
+              51.6928484
+            ]
+          ]
+        ]
+      },
+      "id": "way/310486716"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "way/311568162",
+        "access": "yes",
+        "brand": "Cruyff Court",
+        "brand:wikidata": "Q2385493",
+        "equipment": "yes",
+        "leisure": "pitch",
+        "name": "Special Cruyff Court Maikel Scheffers",
+        "sport": "soccer",
+        "surface": "artificial_turf"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              5.2735452,
+              51.6949922
+            ],
+            [
+              5.2735481,
+              51.6949713
+            ],
+            [
+              5.2737486,
+              51.6948779
+            ],
+            [
+              5.273784,
+              51.694881
+            ],
+            [
+              5.2738775,
+              51.6949581
+            ],
+            [
+              5.2738724,
+              51.6949804
+            ],
+            [
+              5.2736722,
+              51.6950736
+            ],
+            [
+              5.2736405,
+              51.6950708
+            ],
+            [
+              5.2735452,
+              51.6949922
+            ]
+          ]
+        ]
+      },
+      "id": "way/311568162"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "way/337227728",
+        "access": "yes",
+        "equipment": "yes",
+        "leisure": "pitch",
+        "sport": "soccer"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              5.2849101,
+              51.6837237
+            ],
+            [
+              5.2849275,
+              51.6837369
+            ],
+            [
+              5.2849304,
+              51.6837453
+            ],
+            [
+              5.2849233,
+              51.6837617
+            ],
+            [
+              5.2849019,
+              51.6837724
+            ],
+            [
+              5.2848732,
+              51.6837729
+            ],
+            [
+              5.2848493,
+              51.6837617
+            ],
+            [
+              5.2848425,
+              51.6837435
+            ],
+            [
+              5.284856,
+              51.6837269
+            ],
+            [
+              5.2848836,
+              51.6837195
+            ],
+            [
+              5.2849101,
+              51.6837237
+            ]
+          ]
+        ]
+      },
+      "id": "way/337227728"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "way/347134360",
+        "access": "yes",
+        "equipment": "yes",
+        "leisure": "pitch",
+        "sport": "soccer",
+        "surface": "artificial_turf"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              5.3574135,
+              51.7218513
+            ],
+            [
+              5.3573235,
+              51.721663
+            ],
+            [
+              5.3575276,
+              51.7216256
+            ],
+            [
+              5.3576176,
+              51.7218139
+            ],
+            [
+              5.3574135,
+              51.7218513
+            ]
+          ]
+        ]
+      },
+      "id": "way/347134360"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "way/347501754",
+        "access": "yes",
+        "equipment": "yes",
+        "leisure": "pitch",
+        "lit": "no",
+        "sport": "soccer",
+        "surface": "artificial_turf"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              5.3253774,
+              51.6880056
+            ],
+            [
+              5.3253214,
+              51.6878281
+            ],
+            [
+              5.3254669,
+              51.6878105
+            ],
+            [
+              5.3255229,
+              51.6879879
+            ],
+            [
+              5.3253774,
+              51.6880056
+            ]
+          ]
+        ]
+      },
+      "id": "way/347501754"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "way/362215219",
+        "access": "yes",
+        "brand": "Cruyff Court",
+        "brand:wikidata": "Q2385493",
+        "equipment": "yes",
+        "leisure": "pitch",
+        "name": "Cruyff Court FC Den Bosch",
+        "sport": "soccer",
+        "surface": "artificial_turf"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              5.3301164,
+              51.6936203
+            ],
+            [
+              5.3303607,
+              51.693365
+            ],
+            [
+              5.3306361,
+              51.6934662
+            ],
+            [
+              5.3303918,
+              51.6937215
+            ],
+            [
+              5.3301164,
+              51.6936203
+            ]
+          ]
+        ]
+      },
+      "id": "way/362215219"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "way/369172260",
+        "access": "yes",
+        "equipment": "yes",
+        "leisure": "pitch",
+        "sport": "soccer"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              5.3357159,
+              51.6832496
+            ],
+            [
+              5.335666,
+              51.6831191
+            ],
+            [
+              5.3360154,
+              51.6830679
+            ],
+            [
+              5.3360652,
+              51.6831983
+            ],
+            [
+              5.3357159,
+              51.6832496
+            ]
+          ]
+        ]
+      },
+      "id": "way/369172260"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "way/388197529",
+        "access": "yes",
+        "equipment": "yes",
+        "leisure": "pitch",
+        "lit": "no",
+        "sport": "soccer",
+        "surface": "artificial_turf"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              5.2900972,
+              51.7309511
+            ],
+            [
+              5.289925,
+              51.730607
+            ],
+            [
+              5.2902104,
+              51.7305522
+            ],
+            [
+              5.2903827,
+              51.7308963
+            ],
+            [
+              5.2900972,
+              51.7309511
+            ]
+          ]
+        ]
+      },
+      "id": "way/388197529"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "way/417350324",
+        "access": "yes",
+        "equipment": "yes",
+        "leisure": "pitch",
+        "sport": "soccer"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              5.3647687,
+              51.7138766
+            ],
+            [
+              5.364937,
+              51.7140199
+            ],
+            [
+              5.3647987,
+              51.7140823
+            ],
+            [
+              5.3646304,
+              51.7139389
+            ],
+            [
+              5.3647687,
+              51.7138766
+            ]
+          ]
+        ]
+      },
+      "id": "way/417350324"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "way/426595023",
+        "access": "yes",
+        "equipment": "yes",
+        "leisure": "pitch",
+        "name": "Het Jan Hoefspleintje",
+        "sport": "soccer"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              5.3796115,
+              51.7121263
+            ],
+            [
+              5.3797137,
+              51.7120412
+            ],
+            [
+              5.3799529,
+              51.7121514
+            ],
+            [
+              5.3798507,
+              51.7122365
+            ],
+            [
+              5.3796115,
+              51.7121263
+            ]
+          ]
+        ]
+      },
+      "id": "way/426595023"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "way/434335542",
+        "access": "yes",
+        "equipment": "yes",
+        "leisure": "pitch",
+        "sport": "soccer"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              5.3116825,
+              51.6981258
+            ],
+            [
+              5.311614,
+              51.6978207
+            ],
+            [
+              5.3119071,
+              51.6977954
+            ],
+            [
+              5.3119756,
+              51.6981005
+            ],
+            [
+              5.3116825,
+              51.6981258
+            ]
+          ]
+        ]
+      },
+      "id": "way/434335542"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "way/496923241",
+        "access": "yes",
+        "equipment": "yes",
+        "leisure": "pitch",
+        "lit": "no",
+        "sport": "soccer",
+        "surface": "grass"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              5.2536953,
+              51.7307981
+            ],
+            [
+              5.2538187,
+              51.7308808
+            ],
+            [
+              5.2535487,
+              51.7310352
+            ],
+            [
+              5.2534254,
+              51.7309524
+            ],
+            [
+              5.2536953,
+              51.7307981
+            ]
+          ]
+        ]
+      },
+      "id": "way/496923241"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "way/672957182",
+        "access": "yes",
+        "brand": "Cruyff Court",
+        "brand:wikidata": "Q2385493",
+        "equipment": "yes",
+        "leisure": "pitch",
+        "name": "Special Cruyff Court Cello/Hub Rosmalen",
+        "sport": "soccer",
+        "surface": "artificial_turf"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              5.4058052,
+              51.7223308
+            ],
+            [
+              5.4059011,
+              51.7221609
+            ],
+            [
+              5.4060936,
+              51.7222026
+            ],
+            [
+              5.4059977,
+              51.7223725
+            ],
+            [
+              5.4058052,
+              51.7223308
+            ]
+          ]
+        ]
+      },
+      "id": "way/672957182"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "way/676184634",
+        "access": "yes",
+        "equipment": "yes",
+        "leisure": "pitch",
+        "lit": "no",
+        "sport": "soccer",
+        "surface": "artificial_turf"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              5.3646339,
+              51.7069741
+            ],
+            [
+              5.365047,
+              51.7069683
+            ],
+            [
+              5.3650529,
+              51.7071295
+            ],
+            [
+              5.3646399,
+              51.7071353
+            ],
+            [
+              5.3646339,
+              51.7069741
+            ]
+          ]
+        ]
+      },
+      "id": "way/676184634"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "way/912670561",
+        "access": "yes",
+        "equipment": "yes",
+        "leisure": "pitch",
+        "sport": "soccer"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              5.3183464,
+              51.7193732
+            ],
+            [
+              5.3184217,
+              51.7192708
+            ],
+            [
+              5.3187251,
+              51.7193592
+            ],
+            [
+              5.3186532,
+              51.7194588
+            ],
+            [
+              5.3183464,
+              51.7193732
+            ]
+          ]
+        ]
+      },
+      "id": "way/912670561"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "way/929288367",
+        "access": "yes",
+        "equipment": "yes",
+        "leisure": "pitch",
+        "lit": "no",
+        "name": "Brolijnplein",
+        "sport": "soccer",
+        "surface": "artificial_turf"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              5.296947,
+              51.7295975
+            ],
+            [
+              5.2969546,
+              51.7293226
+            ],
+            [
+              5.2971749,
+              51.7293249
+            ],
+            [
+              5.2971672,
+              51.7295998
+            ],
+            [
+              5.296947,
+              51.7295975
+            ]
+          ]
+        ]
+      },
+      "id": "way/929288367"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "way/952580158",
+        "access": "yes",
+        "equipment": "yes",
+        "leisure": "pitch",
+        "sport": "soccer"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              5.3191829,
+              51.7115744
+            ],
+            [
+              5.3194165,
+              51.7113351
+            ],
+            [
+              5.3196192,
+              51.7114111
+            ],
+            [
+              5.3193784,
+              51.7116475
+            ],
+            [
+              5.3191829,
+              51.7115744
+            ]
+          ]
+        ]
+      },
+      "id": "way/952580158"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "way/1007391457",
+        "access": "yes",
+        "equipment": "yes",
+        "leisure": "pitch",
+        "sport": "soccer",
+        "surface": "artificial_turf"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              5.3348028,
+              51.7026132
+            ],
+            [
+              5.3349693,
+              51.7025618
+            ],
+            [
+              5.335141,
+              51.7027754
+            ],
+            [
+              5.3349745,
+              51.7028268
+            ],
+            [
+              5.3348028,
+              51.7026132
+            ]
+          ]
+        ]
+      },
+      "id": "way/1007391457"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "way/1105239803",
+        "access": "yes",
+        "equipment": "yes",
+        "leisure": "pitch",
+        "sport": "soccer"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              5.3516944,
+              51.7417446
+            ],
+            [
+              5.3514556,
+              51.741643
+            ],
+            [
+              5.3514882,
+              51.7416136
+            ],
+            [
+              5.351478,
+              51.7416093
+            ],
+            [
+              5.3514996,
+              51.7415898
+            ],
+            [
+              5.3515098,
+              51.7415942
+            ],
+            [
+              5.3515392,
+              51.7415676
+            ],
+            [
+              5.3517787,
+              51.7416695
+            ],
+            [
+              5.3517456,
+              51.7416993
+            ],
+            [
+              5.3517555,
+              51.7417035
+            ],
+            [
+              5.351735,
+              51.741722
+            ],
+            [
+              5.3517245,
+              51.7417175
+            ],
+            [
+              5.3516944,
+              51.7417446
+            ]
+          ]
+        ]
+      },
+      "id": "way/1105239803"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "way/1115407503",
+        "access": "yes",
+        "equipment": "yes",
+        "leisure": "pitch",
+        "sport": "soccer"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              5.3512386,
+              51.7303312
+            ],
+            [
+              5.351254,
+              51.7302383
+            ],
+            [
+              5.3515431,
+              51.7302566
+            ],
+            [
+              5.3515278,
+              51.7303495
+            ],
+            [
+              5.3512386,
+              51.7303312
+            ]
+          ]
+        ]
+      },
+      "id": "way/1115407503"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "way/1165690348",
+        "access": "yes",
+        "equipment": "yes",
+        "leisure": "pitch",
+        "sport": "soccer"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              5.3640109,
+              51.7129722
+            ],
+            [
+              5.3643595,
+              51.7128098
+            ],
+            [
+              5.3645259,
+              51.7129384
+            ],
+            [
+              5.3641467,
+              51.7130885
+            ],
+            [
+              5.3640109,
+              51.7129722
+            ]
+          ]
+        ]
+      },
+      "id": "way/1165690348"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "way/1192486088",
+        "access": "yes",
+        "equipment": "yes",
+        "leisure": "pitch",
+        "sport": "soccer"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              5.3572924,
+              51.7306605
+            ],
+            [
+              5.3574156,
+              51.7304972
+            ],
+            [
+              5.3574674,
+              51.7305122
+            ],
+            [
+              5.3574732,
+              51.7305044
+            ],
+            [
+              5.3575056,
+              51.7305138
+            ],
+            [
+              5.3574987,
+              51.730523
+            ],
+            [
+              5.3575451,
+              51.7305364
+            ],
+            [
+              5.3574228,
+              51.7306986
+            ],
+            [
+              5.3573739,
+              51.7306845
+            ],
+            [
+              5.3573675,
+              51.730693
+            ],
+            [
+              5.3573327,
+              51.7306829
+            ],
+            [
+              5.3573393,
+              51.7306741
+            ],
+            [
+              5.3572924,
+              51.7306605
+            ]
+          ]
+        ]
+      },
+      "id": "way/1192486088"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "way/1394511345",
+        "access": "yes",
+        "equipment": "yes",
+        "leisure": "pitch",
+        "sport": "soccer"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              5.3357644,
+              51.7299177
+            ],
+            [
+              5.3359292,
+              51.7300684
+            ],
+            [
+              5.3358071,
+              51.7301189
+            ],
+            [
+              5.3356471,
+              51.7299675
+            ],
+            [
+              5.3357644,
+              51.7299177
+            ]
+          ]
+        ]
+      },
+      "id": "way/1394511345"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "way/1395689593",
+        "access": "yes",
+        "equipment": "yes",
+        "leisure": "pitch",
+        "sport": "soccer"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              5.3199678,
+              51.6910307
+            ],
+            [
+              5.3201434,
+              51.6908182
+            ],
+            [
+              5.3203215,
+              51.6908747
+            ],
+            [
+              5.3201459,
+              51.6910873
+            ],
+            [
+              5.3199678,
+              51.6910307
+            ]
+          ]
+        ]
+      },
+      "id": "way/1395689593"
+    }
+  ]
+}
