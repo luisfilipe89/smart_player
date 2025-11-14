@@ -15,18 +15,10 @@ class CacheConfig {
   /// Time-to-live for public games list cache (default: 5 minutes)
   final Duration publicGamesTtl;
 
-  /// Time-to-live for games list cache (legacy, used by CacheMixin)
-  final Duration gamesTtl;
-
-  /// Time-to-live for friends list cache (legacy, used by CacheMixin)
-  final Duration friendsTtl;
-
   const CacheConfig({
     this.userProfileTtl = const Duration(hours: 1),
     this.gameDetailsTtl = const Duration(minutes: 30),
     this.publicGamesTtl = const Duration(minutes: 5),
-    this.gamesTtl = const Duration(minutes: 5),
-    this.friendsTtl = const Duration(minutes: 5),
   });
 }
 

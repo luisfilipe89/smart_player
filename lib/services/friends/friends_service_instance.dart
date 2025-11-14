@@ -11,7 +11,6 @@ import 'package:move_young/models/infrastructure/cached_data.dart';
 // Cache TTL can be added later if needed
 import 'package:move_young/services/firebase_error_handler.dart';
 import '../notifications/notification_interface.dart';
-import '../../utils/service_error.dart';
 import 'friends_service.dart';
 
 class _ProfileAccess {
@@ -723,72 +722,6 @@ class FriendsServiceInstance implements IFriendsService {
       });
     } catch (e) {
       NumberedLogger.e('Error recording friend request for $uid: $e');
-    }
-  }
-
-  // Generate friend token for QR code
-  @override
-  Future<String> generateFriendToken() async {
-    final user = _auth.currentUser;
-    if (user == null) throw AuthException('Not signed in');
-
-    final uid = user.uid;
-    final now = DateTime.now();
-    final expiry =
-        now.add(const Duration(minutes: 10)); // Token expires in 10 minutes
-
-    final tokenData = {
-      'uid': uid,
-      'expiry': expiry.millisecondsSinceEpoch,
-    };
-
-    final token = crypto.sha256
-        .convert(utf8.encode('$uid-${now.millisecondsSinceEpoch}'))
-        .toString();
-
-    // Store token in database
-    await _db.ref('friendTokens/$token').set(tokenData);
-
-    return token;
-  }
-
-  // Consume friend token from QR scan
-  @override
-  Future<bool> consumeFriendToken(String token) async {
-    try {
-      final snap = await _safeGet('friendTokens/$token');
-
-      if (!snap.exists) {
-        NumberedLogger.w('Friend token not found: $token');
-        return false;
-      }
-
-      final data = snap.value as Map<dynamic, dynamic>;
-      final expiry = DateTime.fromMillisecondsSinceEpoch(data['expiry'] as int);
-
-      if (DateTime.now().isAfter(expiry)) {
-        NumberedLogger.w('Friend token expired: $token');
-        return false;
-      }
-
-      final fromUid = data['uid'] as String;
-      final user = _auth.currentUser;
-
-      if (user == null || user.uid == fromUid) {
-        NumberedLogger.w('Cannot add self as friend');
-        return false;
-      }
-
-      // Send friend request
-      await sendFriendRequest(fromUid);
-
-      // Clean up used token
-      await _db.ref('friendTokens/$token').remove();
-
-      return true;
-    } catch (e) {
-      NumberedLogger.e('Error consuming friend token: $e');
-      return false;
     }
   }
 

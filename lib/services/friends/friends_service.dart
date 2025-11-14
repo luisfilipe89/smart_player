@@ -28,10 +28,6 @@ abstract class IFriendsService {
   Future<Duration> getRemainingCooldown(String uid);
   Future<bool> canSendFriendRequest(String uid);
 
-  // QR token
-  Future<String> generateFriendToken();
-  Future<bool> consumeFriendToken(String token);
-
   // Suggestions / mutual
   Future<List<Map<String, String>>> getSuggestedFriends();
   Future<int> fetchMutualFriendsCount(String uid);
