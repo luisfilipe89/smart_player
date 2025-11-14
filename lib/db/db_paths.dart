@@ -8,7 +8,6 @@ class DbPaths {
   static const String emailInvites = 'emailInvites';
   static const String pendingInviteIndex = 'pendingInviteIndex';
   static const String friendTokens = 'friendTokens';
-  static const String reports = 'reports';
   static const String fieldReports = 'fieldReports';
 
   // Users subpaths
@@ -18,9 +17,7 @@ class DbPaths {
       '$users/$uid/profile/displayName';
   static String userProfilePhotoUrl(String uid) =>
       '$users/$uid/profile/photoURL';
-  static String userMetadata(String uid) => '$users/$uid/metadata';
   static String userFriends(String uid) => '$users/$uid/friends';
-  static String userBlocks(String uid) => '$users/$uid/blocks';
   static String userFriendRequestsReceived(String uid) =>
       '$users/$uid/friendRequests/received';
   static String userFriendRequestsSent(String uid) =>
@@ -28,13 +25,8 @@ class DbPaths {
   static String userJoinedGames(String uid) => '$uid/joinedGames';
   static String userCreatedGames(String uid) => '$uid/createdGames';
   static String userGameInvites(String uid) => '$uid/gameInvites';
-  static String userSettingsRoot(String uid) => '$users/$uid/settings';
   static String userSettingsProfileRoot(String uid) =>
       '$users/$uid/settings/profile';
-  static String userSettingsNotifications(String uid, String key) =>
-      '$users/$uid/settings/notifications/$key';
-  static String userFcmToken(String uid, String token) =>
-      '$users/$uid/fcmTokens/$token';
 
   // Settings profile convenience
   static String userVisibility(String uid) =>
@@ -51,10 +43,6 @@ class DbPaths {
   static String gamePlayers(String gameId) => '$games/$gameId/players';
   static String gameInvites(String gameId) => '$games/$gameId/invites';
 
-  // Friend tokens
-  static String friendToken(String token) => '$friendTokens/$token';
-
   // Users by email hash (indexing)
   static const String usersByEmailHash = 'usersByEmailHash';
-  static String userByEmailHash(String hash) => '$usersByEmailHash/$hash';
 }

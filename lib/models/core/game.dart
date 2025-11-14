@@ -311,7 +311,7 @@ class Game {
   // Check if game is in the future
   bool get isUpcoming => dateTime.isAfter(DateTime.now());
 
-  // Get formatted date string
+  // Get formatted date string (non-localized, for backwards compatibility)
   String get formattedDate {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
@@ -321,6 +321,21 @@ class Game {
       return 'Today';
     } else if (gameDate == today.add(const Duration(days: 1))) {
       return 'Tomorrow';
+    } else {
+      return '${dateTime.day}/${dateTime.month}/${dateTime.year}';
+    }
+  }
+
+  // Get formatted date string with localization support
+  String getFormattedDateLocalized(String Function(String) translate) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final gameDate = DateTime(dateTime.year, dateTime.month, dateTime.day);
+
+    if (gameDate == today) {
+      return translate('today');
+    } else if (gameDate == today.add(const Duration(days: 1))) {
+      return translate('tomorrow');
     } else {
       return '${dateTime.day}/${dateTime.month}/${dateTime.year}';
     }

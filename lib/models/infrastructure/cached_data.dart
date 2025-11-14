@@ -11,10 +11,4 @@ class CachedData<T> {
     if (expiry == null) return false;
     return DateTime.now().difference(timestamp) > expiry!;
   }
-
-  /// Get the age of the cached data
-  Duration get age => DateTime.now().difference(timestamp);
-
-  /// Check if the data is still fresh (not expired)
-  bool get isFresh => !isExpired;
 }

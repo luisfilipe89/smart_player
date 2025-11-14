@@ -36,69 +36,61 @@ class PrivacyPolicyScreen extends StatelessWidget {
                   Text('help_privacy'.tr(), style: AppTextStyles.h3),
                   const SizedBox(height: AppSpacing.md),
                   Text(
-                    'Last updated: September 2025',
+                    'privacy_last_updated'.tr(),
                     style: AppTextStyles.smallMuted,
                   ),
                   const SizedBox(height: AppSpacing.md),
                   Text(
-                    'SmartPlayer respects your privacy. This policy explains what we collect, why we collect it, and how you can control your data.',
+                    'privacy_intro'.tr(),
                     style: AppTextStyles.body,
                   ),
                   const SizedBox(height: AppSpacing.md),
-                  Text('Data we collect', style: AppTextStyles.h3),
+                  Text('privacy_data_collect_title'.tr(), style: AppTextStyles.h3),
                   const SizedBox(height: AppSpacing.sm),
                   Text(
-                    '- Account: name, email, authentication identifiers (Firebase Auth).\n'
-                    '- Profile: optional photo, city, bio (stored in Firebase).\n'
-                    '- Usage: basic app interactions and diagnostics to improve stability.\n'
-                    '- Location: only if you grant permission, to show nearby fields/events (not tracked in the background unless you enable it).',
+                    'privacy_data_collect_content'.tr(),
                     style: AppTextStyles.body,
                   ),
                   const SizedBox(height: AppSpacing.md),
-                  Text('How we use data', style: AppTextStyles.h3),
+                  Text('privacy_data_use_title'.tr(), style: AppTextStyles.h3),
                   const SizedBox(height: AppSpacing.sm),
                   Text(
-                    '- Provide core features (organize and join games).\n'
-                    '- Personalize your experience (e.g., basic profile details).\n'
-                    '- Communicate important updates and support responses.\n'
-                    '- Keep the service secure (e.g., App Check, abuse prevention).',
+                    'privacy_data_use_content'.tr(),
                     style: AppTextStyles.body,
                   ),
                   const SizedBox(height: AppSpacing.md),
-                  Text('Legal basis (GDPR)', style: AppTextStyles.h3),
+                  Text('privacy_legal_basis_title'.tr(), style: AppTextStyles.h3),
                   const SizedBox(height: AppSpacing.sm),
                   Text(
-                    '- Contract: to deliver the app features you request.\n'
-                    '- Legitimate interests: service improvement and security.\n'
-                    '- Consent: optional features like notifications or analytics (if enabled in future).',
+                    'privacy_legal_basis_content'.tr(),
                     style: AppTextStyles.body,
                   ),
                   const SizedBox(height: AppSpacing.md),
-                  Text('Third parties', style: AppTextStyles.h3),
+                  Text('privacy_third_parties_title'.tr(), style: AppTextStyles.h3),
                   const SizedBox(height: AppSpacing.sm),
                   Text(
-                    'We use Google Firebase (Auth, Realtime Database, Storage, App Check) to operate the service. These providers process data on our behalf according to their terms.',
+                    'privacy_third_parties_content'.tr(),
                     style: AppTextStyles.body,
                   ),
                   const SizedBox(height: AppSpacing.md),
-                  Text('Data retention', style: AppTextStyles.h3),
+                  Text('privacy_retention_title'.tr(), style: AppTextStyles.h3),
                   const SizedBox(height: AppSpacing.sm),
                   Text(
-                    'We retain your data while your account is active. If you delete your account, we delete your profile and content within a reasonable period, subject to legal obligations and backups.',
+                    'privacy_retention_content'.tr(),
                     style: AppTextStyles.body,
                   ),
                   const SizedBox(height: AppSpacing.md),
-                  Text('Your rights', style: AppTextStyles.h3),
+                  Text('privacy_rights_title'.tr(), style: AppTextStyles.h3),
                   const SizedBox(height: AppSpacing.sm),
                   Text(
-                    'You may request access, correction, deletion, or export of your data, and object to or restrict certain processing, as applicable. Use the in‑app Delete account option or contact support.',
+                    'privacy_rights_content'.tr(),
                     style: AppTextStyles.body,
                   ),
                   const SizedBox(height: AppSpacing.md),
-                  Text('Contact', style: AppTextStyles.h3),
+                  Text('privacy_contact_title'.tr(), style: AppTextStyles.h3),
                   const SizedBox(height: AppSpacing.sm),
                   Text(
-                    'Email: luisfccfigueiredo@gmail.com',
+                    'privacy_contact_email'.tr(),
                     style: AppTextStyles.body,
                   ),
                 ],

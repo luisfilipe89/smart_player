@@ -18,6 +18,7 @@ import 'firebase_options.dart';
 import 'package:move_young/config/app_bootstrap.dart';
 import 'package:move_young/utils/logger.dart';
 import 'package:move_young/services/notifications/notification_provider.dart';
+import 'package:move_young/services/calendar/calendar_sync_service.dart';
 
 // Global navigator key for navigation from notifications
 // Note: This is still needed for Firebase notification callbacks in background
@@ -57,10 +58,11 @@ void main() async {
             return;
           }
         }
-        // Ignore legacy SQLite noise
+        // Ignore SQLite plugin errors during startup (calendar database uses sqflite)
+        // Only ignore if it's a missing plugin exception (package not installed yet)
         final exceptionText = details.exception.toString();
-        if (exceptionText.contains('sqflite') ||
-            exceptionText.contains('getDatabasesPath')) {
+        if (exceptionText.contains('MissingPluginException') &&
+            exceptionText.contains('sqflite')) {
           return;
         }
 
@@ -121,10 +123,12 @@ void main() async {
         debugPrint('Ignoring platform channel error during startup');
         return;
       }
-      // Ignore any remaining SQLite errors (no longer used)
-      if (error.toString().contains('sqflite') ||
-          error.toString().contains('MissingPluginException')) {
-        debugPrint('Ignoring SQLite-related error (no longer used)');
+      // Ignore SQLite errors from calendar database (it's intentionally used for calendar tracking)
+      // Only ignore if it's a missing plugin exception (package not installed yet)
+      if (error.toString().contains('MissingPluginException') &&
+          error.toString().contains('sqflite')) {
+        debugPrint(
+            'Ignoring SQLite plugin error (package may not be installed yet)');
         return;
       }
       // Best-effort Crashlytics reporting for uncaught async errors
@@ -259,6 +263,10 @@ class _MoveYoungAppState extends ConsumerState<MoveYoungApp>
             }
           });
         }
+
+        // Watch calendar sync provider to automatically sync calendar events
+        // This provider watches games and syncs calendar events when games change
+        ref.watch(calendarSyncProvider);
 
         return MaterialApp(
           navigatorKey: navigatorKey,

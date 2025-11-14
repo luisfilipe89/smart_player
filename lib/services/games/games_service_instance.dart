@@ -5,18 +5,18 @@ import 'games_service.dart';
 import '../../utils/service_error.dart';
 import '../../utils/logger.dart';
 import '../../services/firebase_error_handler.dart';
-import '../../repositories/game_repository.dart';
+import 'cloud_games_service_instance.dart';
 
 /// Instance-based GamesService - cloud-first, no SQLite
 /// All game data is managed through Firebase Realtime Database
 ///
-/// Uses IGameRepository for data access abstraction.
+/// Wraps CloudGamesServiceInstance with error handling and authentication checks.
 /// Error handling is done here at the service layer with direct try-catch patterns.
 class GamesServiceInstance implements IGamesService {
   final IAuthService _authService;
-  final IGameRepository _gameRepository;
+  final CloudGamesServiceInstance _cloudGamesService;
 
-  GamesServiceInstance(this._authService, this._gameRepository);
+  GamesServiceInstance(this._authService, this._cloudGamesService);
 
   // Create a new game
   @override
@@ -27,7 +27,7 @@ class GamesServiceInstance implements IGamesService {
     }
 
     try {
-      return await _gameRepository.createGame(game);
+      return await _cloudGamesService.createGame(game);
     } on ServiceException {
       rethrow; // Already typed, just rethrow
     } catch (e) {
@@ -43,7 +43,7 @@ class GamesServiceInstance implements IGamesService {
     if (userId == null) return [];
 
     try {
-      return await _gameRepository.getMyGames();
+      return await _cloudGamesService.getMyGames();
     } catch (e) {
       NumberedLogger.w('Error getting my games: $e');
       return []; // Return empty list on error (offline-friendly)
@@ -57,7 +57,7 @@ class GamesServiceInstance implements IGamesService {
     if (userId == null) return [];
 
     try {
-      return await _gameRepository.getJoinableGames();
+      return await _cloudGamesService.getJoinableGames();
     } catch (e) {
       NumberedLogger.w('Error getting joinable games: $e');
       return []; // Return empty list on error (offline-friendly)
@@ -68,7 +68,7 @@ class GamesServiceInstance implements IGamesService {
   @override
   Future<Game?> getGameById(String gameId) async {
     try {
-      return await _gameRepository.getGameById(gameId);
+      return await _cloudGamesService.getGameById(gameId);
     } catch (e) {
       NumberedLogger.w('Error getting game by ID: $e');
       return null; // Return null on error
@@ -79,7 +79,7 @@ class GamesServiceInstance implements IGamesService {
   @override
   Future<void> updateGame(Game game) async {
     try {
-      return await _gameRepository.updateGame(game);
+      return await _cloudGamesService.updateGame(game);
     } on ServiceException {
       rethrow;
     } catch (e) {
@@ -92,7 +92,7 @@ class GamesServiceInstance implements IGamesService {
   @override
   Future<void> deleteGame(String gameId) async {
     try {
-      return await _gameRepository.deleteGame(gameId);
+      return await _cloudGamesService.deleteGame(gameId);
     } on ServiceException {
       rethrow;
     } catch (e) {
@@ -110,7 +110,7 @@ class GamesServiceInstance implements IGamesService {
     }
 
     try {
-      return await _gameRepository.addPlayerToGame(gameId, userId);
+      return await _cloudGamesService.joinGame(gameId);
     } on ServiceException {
       rethrow;
     } catch (e) {
@@ -128,7 +128,7 @@ class GamesServiceInstance implements IGamesService {
     }
 
     try {
-      return await _gameRepository.removePlayerFromGame(gameId, userId);
+      return await _cloudGamesService.leaveGame(gameId);
     } on ServiceException {
       rethrow;
     } catch (e) {

@@ -119,11 +119,12 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
       if (myUid != null && myUid.isNotEmpty && games.isNotEmpty) {
         final cloudGamesActions = ref.read(cloudGamesActionsProvider);
         final inviteStatusFutures = games.map((game) async {
-          final status = await cloudGamesActions.getUserInviteStatusForGame(game.id);
+          final status =
+              await cloudGamesActions.getUserInviteStatusForGame(game.id);
           return MapEntry(game.id, status);
         });
         final inviteStatuses = await Future.wait(inviteStatusFutures);
-        
+
         if (!mounted) return;
         setState(() {
           _gameInviteStatuses.clear();
@@ -348,36 +349,40 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
     }
 
     final bool isHighlighted = currentGame.id == _highlightId;
-    
+
     // Check invite status from multiple sources for immediate detection
     Map<String, String> inviteStatuses = inviteStatusesAsync.valueOrNull ?? {};
     final bool streamHasData = inviteStatusesAsync.hasValue;
     final bool invitedGamesHasData = invitedGamesAsync.hasValue;
-    
+
     // Check cached invite status (populated when loading games - fastest)
     final String? cachedInviteStatus = _gameInviteStatuses[currentGame.id];
     final bool hasCachedPendingInvite = cachedInviteStatus == 'pending';
-    
+
     // Merge cached status into inviteStatuses map for immediate UI updates
     // (e.g., when user declines, we update cache immediately before stream updates)
     if (myUid != null && cachedInviteStatus != null) {
       inviteStatuses = Map<String, String>.from(inviteStatuses);
       inviteStatuses[myUid] = cachedInviteStatus;
     }
-    
+
     // Check if game is in invitedGames list (this is often faster/more reliable)
-    final bool isInInvitedGames = filteredInvited.any((g) => g.id == currentGame.id);
-    
+    final bool isInInvitedGames =
+        filteredInvited.any((g) => g.id == currentGame.id);
+
     // Determine if user is invited - prioritize cached status, then invitedGames list, then stream
     final String? myInviteStatus = myUid != null ? inviteStatuses[myUid] : null;
     final bool hasPendingInviteFromStatus = myInviteStatus == 'pending';
-    
+
     // If we have cached status or invitedGames has data, user is definitely invited
     // Otherwise, check invite status from stream
-    final bool isInvited = hasCachedPendingInvite || isInInvitedGames || hasPendingInviteFromStatus;
-    
+    final bool isInvited = hasCachedPendingInvite ||
+        isInInvitedGames ||
+        hasPendingInviteFromStatus;
+
     // Only fetch if stream hasn't emitted AND we don't have cached status
-    final bool needsSyncFetch = !streamHasData && cachedInviteStatus == null && myUid != null;
+    final bool needsSyncFetch =
+        !streamHasData && cachedInviteStatus == null && myUid != null;
 
     return Card(
       margin: const EdgeInsets.only(bottom: AppHeights.reg),
@@ -519,13 +524,15 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
                                   ),
                                 ),
                               // Show "Modified" badge for active games that have been edited
-                              if (currentGame.isActive && currentGame.isModified)
+                              if (currentGame.isActive &&
+                                  currentGame.isModified)
                                 Container(
                                   margin: const EdgeInsets.only(left: 4),
                                   padding: const EdgeInsets.symmetric(
                                       horizontal: 6, vertical: 2),
                                   decoration: BoxDecoration(
-                                    color: AppColors.blue.withValues(alpha: 0.1),
+                                    color:
+                                        AppColors.blue.withValues(alpha: 0.1),
                                     borderRadius: BorderRadius.circular(4),
                                   ),
                                   child: Row(
@@ -553,7 +560,7 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
                             style: AppTextStyles.cardTitle,
                           ),
                           Text(
-                            '${currentGame.formattedDate} at ${currentGame.formattedTime}',
+                            '${currentGame.getFormattedDateLocalized((key) => key.tr())} at ${currentGame.formattedTime}',
                             style: AppTextStyles.body.copyWith(
                               color: AppColors.grey,
                             ),
@@ -671,8 +678,10 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
                             if (!snapshot.hasData) {
                               // Still loading - merge cached status if available for immediate UI updates
                               // myUid is guaranteed to be non-null here due to needsSyncFetch check
-                              final cachedStatus = _gameInviteStatuses[currentGame.id];
-                              final loadingInviteStatuses = Map<String, String>.from(inviteStatuses);
+                              final cachedStatus =
+                                  _gameInviteStatuses[currentGame.id];
+                              final loadingInviteStatuses =
+                                  Map<String, String>.from(inviteStatuses);
                               if (cachedStatus != null) {
                                 // myUid is non-null because needsSyncFetch requires it
                                 loadingInviteStatuses[myUid] = cachedStatus;
@@ -686,22 +695,26 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
                             }
                             // Check user's invite status directly from their gameInvites path
                             final userInviteStatus = snapshot.data;
-                            final cachedStatus = _gameInviteStatuses[currentGame.id];
-                            final syncIsInvited = (userInviteStatus == 'pending') ||
-                                isInInvitedGames ||
-                                (cachedStatus == 'pending');
-                            
+                            final cachedStatus =
+                                _gameInviteStatuses[currentGame.id];
+                            final syncIsInvited =
+                                (userInviteStatus == 'pending') ||
+                                    isInInvitedGames ||
+                                    (cachedStatus == 'pending');
+
                             // Update cached status and inviteStatuses map with the fetched status
                             if (userInviteStatus != null) {
-                              _gameInviteStatuses[currentGame.id] = userInviteStatus;
+                              _gameInviteStatuses[currentGame.id] =
+                                  userInviteStatus;
                             }
-                            
+
                             // myUid is guaranteed to be non-null here due to needsSyncFetch check
-                            final updatedInviteStatuses = Map<String, String>.from(inviteStatuses);
+                            final updatedInviteStatuses =
+                                Map<String, String>.from(inviteStatuses);
                             if (userInviteStatus != null) {
                               updatedInviteStatuses[myUid] = userInviteStatus;
                             }
-                            
+
                             return _buildGameActions(
                               currentGame,
                               inviteStatuses: updatedInviteStatuses,
@@ -775,7 +788,7 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
 
     final String? myUid = ref.read(currentUserIdProvider);
     final bool isJoined = myUid != null && game.players.contains(myUid);
-    
+
     // Use passed invite statuses if available, otherwise watch the provider
     // If stream hasn't emitted yet and we don't have passed data, fetch synchronously
     Map<String, String> finalInviteStatuses;
@@ -783,36 +796,40 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
       finalInviteStatuses = inviteStatuses;
     } else if (streamHasData) {
       // Stream has data, use it
-      finalInviteStatuses = ref.watch(gameInviteStatusesProvider(game.id)).valueOrNull ?? {};
+      finalInviteStatuses =
+          ref.watch(gameInviteStatusesProvider(game.id)).valueOrNull ?? {};
     } else {
       // Stream hasn't emitted yet, use empty map and rely on isInvitedPending flag
       finalInviteStatuses = {};
     }
-    
+
     // Use passed isInvitedPending if available, otherwise check from streams
     bool finalIsInvitedPending;
     if (isInvitedPending != null) {
       finalIsInvitedPending = isInvitedPending;
     } else {
       // Fallback: check from streams
-      final String? myInviteStatus = myUid != null ? finalInviteStatuses[myUid] : null;
+      final String? myInviteStatus =
+          myUid != null ? finalInviteStatuses[myUid] : null;
       final bool hasPendingInvite = myInviteStatus == 'pending';
-      
+
       final invitedGamesAsync = ref.watch(invitedGamesProvider);
       final invitedGames = invitedGamesAsync.valueOrNull ?? [];
       final filteredInvited = myUid == null
           ? invitedGames
           : invitedGames.where((g) => !g.players.contains(myUid)).toList();
       final bool isInInvitedGames = filteredInvited.any((g) => g.id == game.id);
-      
+
       finalIsInvitedPending = hasPendingInvite || isInInvitedGames;
     }
 
     // Check if user previously left this game (for rejoin option)
-    final bool hasLeftGame = myUid != null && finalInviteStatuses[myUid] == 'left';
-    
+    final bool hasLeftGame =
+        myUid != null && finalInviteStatuses[myUid] == 'left';
+
     // Check if user previously declined this invite (for join option)
-    final bool hasDeclinedInvite = myUid != null && finalInviteStatuses[myUid] == 'declined';
+    final bool hasDeclinedInvite =
+        myUid != null && finalInviteStatuses[myUid] == 'declined';
 
     debugPrint(
         '🎮 Game ${game.id}: isInvitedPending=$finalIsInvitedPending, isJoined=$isJoined, hasLeftGame=$hasLeftGame, hasDeclinedInvite=$hasDeclinedInvite');

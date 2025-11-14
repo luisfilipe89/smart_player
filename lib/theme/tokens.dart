@@ -20,7 +20,6 @@ class AppColors {
   static const red = Color(0xFFF44336);
   static const orange = Color(0xFFFF9800);
   static const green = Color(0xFF4CAF50);
-  static const lightamber = Color(0xFFFFE082);
   static const amber = Color(0xFFFFC107);
 
   // High contrast colors
@@ -71,8 +70,6 @@ class AppHeights {
 class AppWidths {
   static const small = 4.0;
   static const regular = 8.0;
-  static const big = 12.0;
-  static const superbig = 16.0;
   static const huge = 20.0;
 }
 
@@ -117,13 +114,6 @@ class AppShadows {
     BoxShadow(
       color: AppColors.blackTransparent,
       blurRadius: 16,
-      offset: Offset(0, 6),
-    ),
-  ];
-  static const mdBlurred = [
-    BoxShadow(
-      color: AppColors.blackTransparent,
-      blurRadius: 12,
       offset: Offset(0, 6),
     ),
   ];
@@ -202,8 +192,5 @@ class AppTextStyles {
   static const smallMuted = TextStyle(fontSize: 13, color: AppColors.grey);
   static const superSmall = TextStyle(
     fontSize: 10,
-  );
-  static const incrediblySmall = TextStyle(
-    fontSize: 9,
   );
 }

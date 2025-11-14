@@ -1,16 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:firebase_database/firebase_database.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'email_service_instance.dart';
-
-// Firebase dependencies
-final firebaseDatabaseProvider = Provider<FirebaseDatabase>((ref) {
-  return FirebaseDatabase.instance;
-});
-
-final firebaseAuthProvider = Provider<FirebaseAuth>((ref) {
-  return FirebaseAuth.instance;
-});
+import '../../providers/infrastructure/firebase_providers.dart';
 
 // Email service provider
 final emailServiceProvider = Provider<EmailServiceInstance>((ref) {

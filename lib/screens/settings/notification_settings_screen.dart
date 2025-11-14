@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:move_young/theme/_theme.dart';
-import 'package:move_young/services/notifications/notification_provider.dart';
 
 class NotificationSettingsScreen extends ConsumerStatefulWidget {
   const NotificationSettingsScreen({super.key});
@@ -28,40 +27,11 @@ class _NotificationSettingsScreenState
   }
 
   Future<void> _loadSettings() async {
-    try {
-      final notificationService = ref.read(notificationServiceProvider);
-      final enabled = await notificationService.isNotificationsEnabled();
-      final gameReminders =
-          await notificationService.isCategoryEnabled('game_reminders');
-      final friendRequests =
-          await notificationService.isCategoryEnabled('friend_requests');
-      final gameInvites =
-          await notificationService.isCategoryEnabled('game_invites');
-      final gameUpdates =
-          await notificationService.isCategoryEnabled('game_updates');
-
-      if (mounted) {
-        setState(() {
-          _notificationsEnabled = enabled;
-          _gameReminders = gameReminders;
-          _friendRequests = friendRequests;
-          _gameInvites = gameInvites;
-          _gameUpdates = gameUpdates;
-          _isLoading = false;
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('settings_load_error'.tr()),
-            backgroundColor: AppColors.red,
-          ),
-        );
-      }
+    // Settings are stored in local state only (no persistence implemented)
+    if (mounted) {
+      setState(() {
+        _isLoading = false;
+      });
     }
   }
 
@@ -69,59 +39,11 @@ class _NotificationSettingsScreenState
     setState(() {
       _notificationsEnabled = value;
     });
-
-    try {
-      await ref
-          .read(notificationServiceProvider)
-          .setNotificationsEnabled(value);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('settings_prefs_saved'.tr()),
-            backgroundColor: AppColors.green,
-          ),
-        );
-      }
-    } catch (e) {
-      // Revert the toggle on error
-      setState(() {
-        _notificationsEnabled = !value;
-      });
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('settings_save_error'.tr()),
-            backgroundColor: AppColors.red,
-          ),
-        );
-      }
-    }
   }
 
   Future<void> _toggleCategory(String category, bool value) async {
-    try {
-      await ref
-          .read(notificationServiceProvider)
-          .setCategoryEnabled(category, value);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('settings_prefs_saved'.tr()),
-            backgroundColor: AppColors.green,
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('settings_save_error'.tr()),
-            backgroundColor: AppColors.red,
-          ),
-        );
-      }
-    }
+    // Settings are stored in local state only (no persistence implemented)
+    // This method is called but doesn't persist anywhere
   }
 
   @override

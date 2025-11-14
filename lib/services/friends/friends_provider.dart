@@ -27,36 +27,6 @@ final friendsServiceProvider = Provider<IFriendsService>((ref) {
   );
 });
 
-// Friends list provider (reactive)
-final friendsListProvider =
-    FutureProvider.autoDispose<List<String>>((ref) async {
-  final friendsService = ref.watch(friendsServiceProvider);
-  final userId = ref.watch(currentUserIdProvider);
-
-  if (userId == null) return [];
-  return await friendsService.getUserFriends(userId);
-});
-
-// Friend requests received provider (reactive)
-final friendRequestsReceivedProvider =
-    FutureProvider.autoDispose<List<String>>((ref) async {
-  final friendsService = ref.watch(friendsServiceProvider);
-  final userId = ref.watch(currentUserIdProvider);
-
-  if (userId == null) return [];
-  return await friendsService.getUserFriendRequestsReceived(userId);
-});
-
-// Friend requests sent provider (reactive)
-final friendRequestsSentProvider =
-    FutureProvider.autoDispose<List<String>>((ref) async {
-  final friendsService = ref.watch(friendsServiceProvider);
-  final userId = ref.watch(currentUserIdProvider);
-
-  if (userId == null) return [];
-  return await friendsService.getUserFriendRequestsSent(userId);
-});
-
 // Watch friends list provider (reactive stream)
 final watchFriendsListProvider =
     StreamProvider.autoDispose<List<String>>((ref) {

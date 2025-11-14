@@ -10,7 +10,6 @@ abstract class IAuthService {
 
   // Streams
   Stream<User?> get authStateChanges;
-  Stream<User?> get userChanges;
 
   // Auth flows
   Future<UserCredential?> signInWithGoogle();
@@ -30,7 +29,6 @@ abstract class IAuthService {
   Future<void> sendPasswordResetEmail(String email);
   Future<void> changeEmail(
       {required String currentPassword, required String newEmail});
-  Future<void> updateDisplayName(String displayName);
   Future<DeleteAccountResult> deleteAccount();
   Future<void> reauthenticateWithPassword(String password);
 

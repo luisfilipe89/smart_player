@@ -7,6 +7,7 @@ import 'package:firebase_analytics/firebase_analytics.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../firebase_options.dart';
+import '../services/calendar/calendar_service.dart';
 
 /// Centralized bootstrap utility to initialize platform services in order.
 class AppBootstrap {
@@ -16,7 +17,7 @@ class AppBootstrap {
   static Future<void> initialize() async {
     // Only initialize Firebase core - this is critical for app functionality
     await _initFirebase();
-    
+
     // Enable Crashlytics immediately for error reporting
     // This is lightweight and should be available early
     unawaited(_initCrashlytics());
@@ -33,6 +34,9 @@ class AppBootstrap {
 
     // Optionally pre-warm SharedPreferences
     unawaited(_warmSharedPreferences());
+
+    // Initialize CalendarService - non-critical, can be deferred
+    unawaited(_initCalendarService());
   }
 
   static Future<void> _initFirebase() async {
@@ -77,5 +81,14 @@ class AppBootstrap {
     try {
       await SharedPreferences.getInstance();
     } catch (_) {}
+  }
+
+  static Future<void> _initCalendarService() async {
+    try {
+      await CalendarService.initialize();
+    } catch (_) {
+      // Calendar service initialization is optional and may fail
+      // if permissions are not granted or calendar is not available
+    }
   }
 }

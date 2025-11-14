@@ -60,8 +60,6 @@ class AuthServiceInstance implements IAuthService {
   // Stream methods
   @override
   Stream<User?> get authStateChanges => _auth.authStateChanges();
-  @override
-  Stream<User?> get userChanges => _auth.userChanges();
 
   // Sign in with Google
   @override
@@ -207,28 +205,6 @@ class AuthServiceInstance implements IAuthService {
       NumberedLogger.i('Verification email sent to: $newEmail');
     } catch (e) {
       NumberedLogger.e('Error updating email: $e');
-      rethrow;
-    }
-  }
-
-  // Update nickname
-  @override
-  Future<void> updateDisplayName(String displayName) async {
-    try {
-      final user = _auth.currentUser;
-      if (user == null) {
-        throw AuthException('No user signed in');
-      }
-      if (displayName.isEmpty) {
-        throw ValidationException('Display name cannot be empty');
-      }
-
-      await user.updateDisplayName(displayName);
-      await user.reload();
-      // Force refresh the user data
-      await user.getIdToken(true);
-    } catch (e) {
-      NumberedLogger.e('Error updating nickname: $e');
       rethrow;
     }
   }

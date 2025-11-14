@@ -7,8 +7,6 @@ import 'package:move_young/utils/logger.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:timezone/data/latest_all.dart' as tz;
-import 'package:timezone/timezone.dart' as tz;
 import 'notification_interface.dart';
 
 /// Instance-based NotificationService for use with Riverpod dependency injection
@@ -21,9 +19,6 @@ class NotificationServiceInstance implements INotificationService {
   bool _isRequestingPermissions =
       false; // Guard to prevent concurrent permission requests
   bool _isInitialized = false; // Guard to prevent multiple initializations
-
-  // Navigation callback for handling notification taps
-  Function(String? payload)? _onNotificationTap;
 
   // Global navigation handler for deep linking
   Function(Map<String, dynamic>)? _onDeepLinkNavigation;
@@ -70,7 +65,6 @@ class NotificationServiceInstance implements INotificationService {
   );
 
   Future<void> initialize({
-    Function(String? payload)? onNotificationTap,
     Function(Map<String, dynamic>)? onDeepLinkNavigation,
   }) async {
     // Prevent multiple initializations
@@ -79,15 +73,7 @@ class NotificationServiceInstance implements INotificationService {
       return;
     }
 
-    _onNotificationTap = onNotificationTap;
     _onDeepLinkNavigation = onDeepLinkNavigation;
-
-    // Initialize timezone data for scheduled notifications
-    try {
-      tz.initializeTimeZones();
-    } catch (_) {
-      // Already initialized
-    }
 
     // Local notifications init with tap handling
     const InitializationSettings initSettings = InitializationSettings(
@@ -109,8 +95,8 @@ class NotificationServiceInstance implements INotificationService {
                 jsonDecode(response.payload!) as Map<String, dynamic>;
             _onDeepLinkNavigation?.call(payloadMap);
           } catch (e) {
-            // Fallback to string payload handler if not JSON
-            _onNotificationTap?.call(response.payload);
+            // Payload is not valid JSON, skip
+            NumberedLogger.d('Invalid notification payload format: ${response.payload}');
           }
         }
       },
@@ -369,48 +355,6 @@ class NotificationServiceInstance implements INotificationService {
         payload: payload);
   }
 
-  Future<void> showGameReminder({
-    required int id,
-    required String title,
-    required String body,
-    required DateTime scheduledTime,
-    String? payload,
-  }) async {
-    const AndroidNotificationDetails androidPlatformChannelSpecifics =
-        AndroidNotificationDetails(
-      'smartplayer_reminders',
-      'Reminders',
-      channelDescription: 'Game reminders',
-      importance: Importance.max,
-      priority: Priority.high,
-      playSound: true,
-      enableVibration: true,
-    );
-
-    const DarwinNotificationDetails iOSPlatformChannelSpecifics =
-        DarwinNotificationDetails(
-      presentAlert: true,
-      presentBadge: true,
-      presentSound: true,
-    );
-
-    const NotificationDetails platformChannelSpecifics = NotificationDetails(
-      android: androidPlatformChannelSpecifics,
-      iOS: iOSPlatformChannelSpecifics,
-    );
-
-    await _local.zonedSchedule(
-      id,
-      title,
-      body,
-      tz.TZDateTime.from(scheduledTime, tz.local),
-      platformChannelSpecifics,
-      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-      payload: payload,
-      matchDateTimeComponents: DateTimeComponents.time,
-    );
-  }
-
   @override
   Future<void> sendFriendRequestNotification(
       String toUid, String fromUid) async {
@@ -442,21 +386,6 @@ class NotificationServiceInstance implements INotificationService {
       NumberedLogger.i('Queued friend accepted notification to $toUid');
     } catch (e) {
       NumberedLogger.e('Error sending friend accepted notification: $e');
-    }
-  }
-
-  @override
-  Future<void> sendGameInviteNotification(String toUid, String gameId) async {
-    try {
-      await _db.ref('mail/notifications').push().set({
-        'type': 'game_invite',
-        'toUid': toUid,
-        'gameId': gameId,
-        'ts': DateTime.now().toIso8601String(),
-      });
-      NumberedLogger.i('Queued game invite notification to $toUid');
-    } catch (e) {
-      NumberedLogger.e('Error sending game invite notification: $e');
     }
   }
 
@@ -520,40 +449,6 @@ class NotificationServiceInstance implements INotificationService {
     } catch (e) {
       NumberedLogger.e('Error sending game cancelled notification: $e');
     }
-  }
-
-  Future<void> cancelNotification(int id) async {
-    await _local.cancel(id);
-  }
-
-  Future<void> cancelAllNotifications() async {
-    await _local.cancelAll();
-  }
-
-  /// Check if notifications are enabled
-  Future<bool> isNotificationsEnabled() async {
-    // This would typically check user preferences
-    // For now, return true as default
-    return true;
-  }
-
-  /// Check if a specific notification category is enabled
-  Future<bool> isCategoryEnabled(String category) async {
-    // This would typically check user preferences for the category
-    // For now, return true as default
-    return true;
-  }
-
-  /// Set notifications enabled/disabled
-  Future<void> setNotificationsEnabled(bool enabled) async {
-    // This would typically save user preferences
-    // Implementation would go here
-  }
-
-  /// Set a specific notification category enabled/disabled
-  Future<void> setCategoryEnabled(String category, bool enabled) async {
-    // This would typically save user preferences for the category
-    // Implementation would go here
   }
 
   Future<void> dispose() async {

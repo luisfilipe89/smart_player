@@ -17,7 +17,8 @@ class SportCharacteristics {
     //Individual
     'skateboard': ['surface'],
     'bmx': [],
-    'motocross': []
+    'motocross': [],
+    'swimming': []
   };
 
   //Raw OSM values
@@ -45,7 +46,8 @@ class SportCharacteristics {
       'surface': ['concrete', 'wood']
     },
     'bmx': {},
-    'motocross': {}
+    'motocross': {},
+    'swimming': {}
   };
 
   static const Map<String, String> surfaceLabels = {

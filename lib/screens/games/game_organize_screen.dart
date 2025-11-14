@@ -137,6 +137,11 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
       'icon': Icons.scatter_plot,
       'color': const Color(0xFF795548),
     },
+    {
+      'key': 'swimming',
+      'icon': Icons.pool,
+      'color': const Color(0xFF2196F3),
+    },
   ];
 
   // Generate list of dates for the next two weeks
@@ -255,6 +260,12 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
   }
 
   // Check if any changes have been made to the game
+  // Check if we're creating a similar game from a historic game (not editing)
+  bool get _isCreatingSimilarGame {
+    if (widget.initialGame == null) return false;
+    return widget.initialGame!.dateTime.isBefore(DateTime.now());
+  }
+
   bool get _hasChanges {
     if (widget.initialGame == null) return false;
 
@@ -323,6 +334,7 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
         'table_tennis' => 'table_tennis',
         'skateboard' => 'skateboard',
         'boules' => 'boules',
+        'swimming' => 'swimming',
         _ => 'soccer',
       };
 
@@ -357,18 +369,32 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
           .map<Map<String, dynamic>>((f) {
             final address =
                 f['address_short'] ?? f['addr:street'] ?? f['address'];
+            final rawAddressMicroShort =
+                f['address_micro_short'] ?? f['addressMicroShort'];
             final rawAddressSuperShort =
                 f['address_super_short'] ?? f['addressSuperShort'];
             final condensedAddressSuperShort =
                 shortenAddress(rawAddressSuperShort) ?? shortenAddress(address);
-            final candidateName = (f['name'] ??
-                    condensedAddressSuperShort ??
-                    rawAddressSuperShort)
-                ?.toString();
-            final name =
-                (candidateName != null && candidateName.trim().isNotEmpty)
-                    ? candidateName.trim()
-                    : 'Unnamed Field';
+            final rawName = f['name']?.toString().trim();
+            // Check if the name is actually just an address (matches super_short format)
+            final isNameAnAddress = rawName != null &&
+                rawName.isNotEmpty &&
+                rawAddressSuperShort != null &&
+                rawAddressSuperShort.toString().trim().isNotEmpty &&
+                rawName == rawAddressSuperShort.toString().trim();
+            // Prefer micro_short when name is missing or is just an address
+            final candidateName =
+                (rawName != null && rawName.isNotEmpty && !isNameAnAddress)
+                    ? rawName
+                    : (rawAddressMicroShort != null &&
+                            rawAddressMicroShort.toString().trim().isNotEmpty)
+                        ? rawAddressMicroShort.toString().trim()
+                        : (condensedAddressSuperShort ??
+                            rawAddressSuperShort?.toString().trim());
+            final name = (candidateName != null &&
+                    candidateName.toString().trim().isNotEmpty)
+                ? candidateName.toString().trim()
+                : 'Unnamed Field';
             final lat = f['lat'] ?? f['latitude'];
             final lon = f['lon'] ?? f['longitude'];
             final lit = f['lit'] ?? f['lighting'];
@@ -382,6 +408,9 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
               'id': f['id'],
               'name': name,
               'address': address,
+              if (rawAddressMicroShort != null &&
+                  rawAddressMicroShort.toString().trim().isNotEmpty)
+                'addressMicroShort': rawAddressMicroShort.toString().trim(),
               if (condensedAddressSuperShort != null)
                 'addressSuperShort': condensedAddressSuperShort,
               if (rawAddressSuperShort != null &&
@@ -408,19 +437,86 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
           _isLoadingFields = false;
           _applyFieldSearchFilter();
 
-          // If a field was preselected (e.g., editing a game), map it to the
-          // corresponding instance from the freshly loaded list so identity
+          // If a field was preselected (e.g., editing a game or creating similar game),
+          // map it to the corresponding instance from the freshly loaded list so identity
           // comparison (_selectedField == field) works for highlighting.
           if (_selectedField != null) {
             final String selName = (_selectedField?['name'] as String?) ?? '';
-            final match = fields.firstWhere(
-              (f) => (f['name'] as String?) == selName,
-              orElse: () => {},
-            );
-            if (match.isNotEmpty) {
+            final String? selFieldId = _selectedField?['id']?.toString();
+            final double? selLat = _selectedField?['latitude']?.toDouble();
+            final double? selLon = _selectedField?['longitude']?.toDouble();
+
+            // Try to match by fieldId first (most reliable)
+            Map<String, dynamic>? match;
+            if (selFieldId != null && selFieldId.isNotEmpty) {
+              match = fields.firstWhere(
+                (f) {
+                  final fId = f['id']?.toString();
+                  return fId != null && fId == selFieldId;
+                },
+                orElse: () => <String, dynamic>{},
+              );
+            }
+
+            // If no match by ID, try by name
+            if ((match == null || match.isEmpty) && selName.isNotEmpty) {
+              match = fields.firstWhere(
+                (f) {
+                  final fName = (f['name'] as String?) ?? '';
+                  return fName == selName ||
+                      fName.toLowerCase().trim() ==
+                          selName.toLowerCase().trim();
+                },
+                orElse: () => <String, dynamic>{},
+              );
+            }
+
+            // If still no match and we have coordinates, try matching by proximity
+            if ((match == null || match.isEmpty) &&
+                selLat != null &&
+                selLon != null) {
+              const double proximityThreshold = 0.0001; // ~11 meters
+              match = fields.firstWhere(
+                (f) {
+                  final fLat = f['latitude']?.toDouble();
+                  final fLon = f['longitude']?.toDouble();
+                  if (fLat == null || fLon == null) return false;
+                  final latDiff = (fLat - selLat).abs();
+                  final lonDiff = (fLon - selLon).abs();
+                  return latDiff < proximityThreshold &&
+                      lonDiff < proximityThreshold;
+                },
+                orElse: () => <String, dynamic>{},
+              );
+            }
+
+            if (match != null && match.isNotEmpty) {
               _selectedField = match;
+              debugPrint(
+                  '✅ Matched preselected field: ${match['name']} (id: ${match['id']})');
+              // Ensure the matched field is included in filtered fields
+              // (in case there's a search query that would filter it out)
+              final matchId = match['id']?.toString();
+              final matchName = (match['name'] as String?) ?? '';
+              final isInFiltered = _filteredFields.any((f) {
+                final fId = f['id']?.toString();
+                final fName = (f['name'] as String?) ?? '';
+                return (matchId != null && fId == matchId) ||
+                    (matchName.isNotEmpty && fName == matchName);
+              });
+              if (!isInFiltered) {
+                // If field is not in filtered list, clear search to show it
+                _fieldSearchQuery = '';
+                _fieldSearchController.clear();
+              }
+            } else {
+              debugPrint(
+                  '⚠️ Could not match preselected field: $selName (id: $selFieldId)');
             }
           }
+
+          // Re-apply filter after matching to ensure selected field is visible
+          _applyFieldSearchFilter();
         });
       }
 
@@ -503,19 +599,62 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
       setState(() {
         _availableFields = fieldsWithDistances;
         _isCalculatingDistances = false;
-        _applyFieldSearchFilter();
-
-        // Update selected field reference if it exists
+        // Update selected field reference if it exists (using improved matching)
         if (_selectedField != null) {
           final String selName = (_selectedField?['name'] as String?) ?? '';
-          final match = fieldsWithDistances.firstWhere(
-            (f) => (f['name'] as String?) == selName,
-            orElse: () => {},
-          );
-          if (match.isNotEmpty) {
+          final String? selFieldId = _selectedField?['id']?.toString();
+          final double? selLat = _selectedField?['latitude']?.toDouble();
+          final double? selLon = _selectedField?['longitude']?.toDouble();
+
+          // Try to match by fieldId first (most reliable)
+          Map<String, dynamic>? match;
+          if (selFieldId != null && selFieldId.isNotEmpty) {
+            match = fieldsWithDistances.firstWhere(
+              (f) {
+                final fId = f['id']?.toString();
+                return fId != null && fId == selFieldId;
+              },
+              orElse: () => <String, dynamic>{},
+            );
+          }
+
+          // If no match by ID, try by name
+          if ((match == null || match.isEmpty) && selName.isNotEmpty) {
+            match = fieldsWithDistances.firstWhere(
+              (f) {
+                final fName = (f['name'] as String?) ?? '';
+                return fName == selName ||
+                    fName.toLowerCase().trim() == selName.toLowerCase().trim();
+              },
+              orElse: () => <String, dynamic>{},
+            );
+          }
+
+          // If still no match and we have coordinates, try matching by proximity
+          if ((match == null || match.isEmpty) &&
+              selLat != null &&
+              selLon != null) {
+            const double proximityThreshold = 0.0001; // ~11 meters
+            match = fieldsWithDistances.firstWhere(
+              (f) {
+                final fLat = f['latitude']?.toDouble();
+                final fLon = f['longitude']?.toDouble();
+                if (fLat == null || fLon == null) return false;
+                final latDiff = (fLat - selLat).abs();
+                final lonDiff = (fLon - selLon).abs();
+                return latDiff < proximityThreshold &&
+                    lonDiff < proximityThreshold;
+              },
+              orElse: () => <String, dynamic>{},
+            );
+          }
+
+          if (match != null && match.isNotEmpty) {
             _selectedField = match;
           }
         }
+
+        _applyFieldSearchFilter();
       });
     }
   }
@@ -594,6 +733,13 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
   }
 
   Future<void> _updateGame() async {
+    // Safety check: don't update historic games (should create new game instead)
+    if (_isCreatingSimilarGame) {
+      // This shouldn't happen, but if it does, redirect to create
+      await _createGame();
+      return;
+    }
+
     // If no changes in edit mode, show info and exit early
     if (widget.initialGame != null && !_hasChanges) {
       if (mounted) {
@@ -1582,6 +1728,8 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
         return Icons.texture;
       case 'boules':
         return Icons.scatter_plot;
+      case 'swimming':
+        return Icons.pool;
       default:
         return Icons.landscape;
     }
@@ -1800,40 +1948,53 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
     // Pre-fill form if initial game provided and fields not set yet
     if (widget.initialGame != null && _selectedSport == null) {
       final g = widget.initialGame!;
+      final isHistoricGame = g.dateTime.isBefore(DateTime.now());
+
       _selectedSport = g.sport;
-      _selectedDate = DateTime(
-        g.dateTime.year,
-        g.dateTime.month,
-        g.dateTime.day,
-      );
-      _selectedTime = g.formattedTime;
+      // For historic games, don't pre-fill date/time - user must select new ones
+      // For future games (editing), pre-fill with existing date/time
+      if (isHistoricGame) {
+        _selectedDate = null;
+        _selectedTime = null;
+      } else {
+        _selectedDate = DateTime(
+          g.dateTime.year,
+          g.dateTime.month,
+          g.dateTime.day,
+        );
+        _selectedTime = g.formattedTime;
+      }
       _maxPlayers = g.maxPlayers;
       _selectedField = {
         'name': g.location,
         'address': g.address,
         'latitude': g.latitude,
         'longitude': g.longitude,
+        'id': g.fieldId,
       };
 
-      // Store original values for change detection
-      _originalSport = g.sport;
-      _originalDate = DateTime(
-        g.dateTime.year,
-        g.dateTime.month,
-        g.dateTime.day,
-      );
-      _originalTime = g.formattedTime;
-      _originalMaxPlayers = g.maxPlayers;
-      _originalField = {
-        'name': g.location,
-        'address': g.address,
-        'latitude': g.latitude,
-        'longitude': g.longitude,
-      };
+      // Store original values for change detection (only for future games being edited)
+      if (!isHistoricGame) {
+        _originalSport = g.sport;
+        _originalDate = DateTime(
+          g.dateTime.year,
+          g.dateTime.month,
+          g.dateTime.day,
+        );
+        _originalTime = g.formattedTime;
+        _originalMaxPlayers = g.maxPlayers;
+        _originalField = {
+          'name': g.location,
+          'address': g.address,
+          'latitude': g.latitude,
+          'longitude': g.longitude,
+          'id': g.fieldId,
+        };
+      }
 
       // Load fields for the selected sport
       _loadFields();
-      // Load existing invites to lock them in edit mode
+      // Load existing invites (or participants for historic games)
       _loadLockedInvites();
     }
     return Scaffold(
@@ -2005,20 +2166,20 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                                                               ? field['name']
                                                                   .toString()
                                                                   .trim()
-                                                              : (field['address_super_short']
+                                                              : (field['address_micro_short']
                                                                           ?.toString()
                                                                           .trim()
                                                                           .isNotEmpty ==
                                                                       true)
-                                                                  ? field['address_super_short']
+                                                                  ? field['address_micro_short']
                                                                       .toString()
                                                                       .trim()
-                                                                  : (field['addressSuperShort']
+                                                                  : (field['addressMicroShort']
                                                                               ?.toString()
                                                                               .trim()
                                                                               .isNotEmpty ==
                                                                           true)
-                                                                      ? field['addressSuperShort']
+                                                                      ? field['addressMicroShort']
                                                                           .toString()
                                                                           .trim()
                                                                       : 'Unnamed Field',
@@ -2730,17 +2891,21 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                                 height: 50,
                                 child: ElevatedButton(
                                   onPressed: _isFormComplete && !_isLoading
-                                      ? (widget.initialGame != null
-                                          ? _updateGame
-                                          : _createGame)
+                                      ? (_isCreatingSimilarGame
+                                          ? _createGame
+                                          : (widget.initialGame != null
+                                              ? _updateGame
+                                              : _createGame))
                                       : null,
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor: _isFormComplete
-                                        ? (widget.initialGame != null
-                                            ? (_hasChanges
-                                                ? Colors.orange
-                                                : AppColors.green)
-                                            : AppColors.blue)
+                                        ? (_isCreatingSimilarGame
+                                            ? AppColors.blue
+                                            : (widget.initialGame != null
+                                                ? (_hasChanges
+                                                    ? Colors.orange
+                                                    : AppColors.green)
+                                                : AppColors.blue))
                                         : AppColors.grey,
                                     foregroundColor: Colors.white,
                                     shape: RoundedRectangleBorder(
@@ -2763,9 +2928,11 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                                           ),
                                         )
                                       : Text(
-                                          widget.initialGame != null
-                                              ? 'update_game'.tr()
-                                              : 'create_game'.tr(),
+                                          _isCreatingSimilarGame
+                                              ? 'create_game'.tr()
+                                              : (widget.initialGame != null
+                                                  ? 'update_game'.tr()
+                                                  : 'create_game'.tr()),
                                           style:
                                               AppTextStyles.cardTitle.copyWith(
                                             color: Colors.white,
@@ -2872,21 +3039,66 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
 
   Future<void> _loadLockedInvites() async {
     if (widget.initialGame == null) return;
+    final game = widget.initialGame!;
+    final currentUserId = ref.read(currentUserIdProvider);
+
+    // Check if this is a historic game (past game) - if so, we're creating a similar game
+    final isHistoricGame = game.dateTime.isBefore(DateTime.now());
+
     try {
-      final statuses = await ref
-          .read(cloudGamesActionsProvider)
-          .getGameInviteStatuses(widget.initialGame!.id);
-      if (!mounted) return;
-      setState(() {
-        _lockedInvitedUids
-          ..clear()
-          ..addAll(statuses.keys);
-        // Also populate selectedFriendUids with already-invited friends
-        // so they appear checked in the UI
-        _selectedFriendUids
-          ..clear()
-          ..addAll(statuses.keys);
-      });
+      if (isHistoricGame) {
+        // For historic games: load all participants (players + invited friends) as friend invites
+        // This allows creating a similar game with the same people
+        final Set<String> allParticipants = <String>{};
+
+        // Add all players (excluding the current user who will be the new organizer)
+        for (final playerId in game.players) {
+          if (playerId != currentUserId) {
+            allParticipants.add(playerId);
+          }
+        }
+
+        // Also try to get invited users (even if they didn't join)
+        try {
+          final statuses = await ref
+              .read(cloudGamesActionsProvider)
+              .getGameInviteStatuses(game.id);
+          // Add invited users (excluding current user)
+          for (final uid in statuses.keys) {
+            if (uid != currentUserId) {
+              allParticipants.add(uid);
+            }
+          }
+        } catch (_) {
+          // If we can't load invite statuses, that's okay - we still have players
+        }
+
+        if (!mounted) return;
+        setState(() {
+          // For historic games, don't lock invites - user can modify them
+          _lockedInvitedUids.clear();
+          // Pre-populate friend invites with all participants
+          _selectedFriendUids
+            ..clear()
+            ..addAll(allParticipants);
+        });
+      } else {
+        // For future games: this is edit mode - load invite statuses as locked invites
+        final statuses = await ref
+            .read(cloudGamesActionsProvider)
+            .getGameInviteStatuses(game.id);
+        if (!mounted) return;
+        setState(() {
+          _lockedInvitedUids
+            ..clear()
+            ..addAll(statuses.keys);
+          // Also populate selectedFriendUids with already-invited friends
+          // so they appear checked in the UI
+          _selectedFriendUids
+            ..clear()
+            ..addAll(statuses.keys);
+        });
+      }
     } catch (_) {}
   }
 }

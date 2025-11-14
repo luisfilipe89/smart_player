@@ -36,7 +36,7 @@ class TermsScreen extends StatelessWidget {
                   Text('help_terms'.tr(), style: AppTextStyles.h3),
                   const SizedBox(height: AppSpacing.md),
                   Text(
-                    'By using SmartPlayer you agree to these terms.\n\nUse of service: You will use the app lawfully and respect other users.\nContent: You are responsible for content you create or share.\nLiability: The app is provided as-is without warranties.\n\nFor questions or disputes, contact support.',
+                    'terms_content'.tr(),
                     style: AppTextStyles.body,
                   ),
                 ],

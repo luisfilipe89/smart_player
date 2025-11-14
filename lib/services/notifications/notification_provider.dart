@@ -114,11 +114,9 @@ class NotificationActions {
   NotificationActions(this._notificationService);
 
   Future<void> initialize({
-    Function(String? payload)? onNotificationTap,
     Function(Map<String, dynamic>)? onDeepLinkNavigation,
   }) =>
       _notificationService.initialize(
-        onNotificationTap: onNotificationTap,
         onDeepLinkNavigation: onDeepLinkNavigation,
       );
 
@@ -138,26 +136,10 @@ class NotificationActions {
         body: body,
         payload: payload,
       );
-  Future<void> showGameReminder({
-    required int id,
-    required String title,
-    required String body,
-    required DateTime scheduledTime,
-    String? payload,
-  }) =>
-      _notificationService.showGameReminder(
-        id: id,
-        title: title,
-        body: body,
-        scheduledTime: scheduledTime,
-        payload: payload,
-      );
   Future<void> sendFriendRequestNotification(String toUid, String fromUid) =>
       _notificationService.sendFriendRequestNotification(toUid, fromUid);
   Future<void> sendFriendAcceptedNotification(String toUid, String fromUid) =>
       _notificationService.sendFriendAcceptedNotification(toUid, fromUid);
-  Future<void> sendGameInviteNotification(String toUid, String gameId) =>
-      _notificationService.sendGameInviteNotification(toUid, gameId);
   Future<void> sendGameReminderNotification(String gameId, DateTime gameTime) =>
       _notificationService.sendGameReminderNotification(gameId, gameTime);
   Future<void> sendFriendRemovedNotification({
@@ -172,10 +154,6 @@ class NotificationActions {
       _notificationService.sendGameEditedNotification(gameId);
   Future<void> sendGameCancelledNotification(String gameId) =>
       _notificationService.sendGameCancelledNotification(gameId);
-  Future<void> cancelNotification(int id) =>
-      _notificationService.cancelNotification(id);
-  Future<void> cancelAllNotifications() =>
-      _notificationService.cancelAllNotifications();
 }
 
 // Notification actions provider (for notification operations)

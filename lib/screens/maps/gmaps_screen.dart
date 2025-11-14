@@ -287,7 +287,7 @@ class _GenericMapScreenState extends ConsumerState<GenericMapScreen> {
                       child: Material(
                         color: _locationError == null
                             ? Colors.transparent
-                            : AppColors.white.withOpacity(0.9),
+                            : AppColors.white.withValues(alpha: 0.9),
                         borderRadius: BorderRadius.circular(6),
                         child: _locationError == null
                             ? const SizedBox.shrink()
@@ -321,7 +321,7 @@ class _GenericMapScreenState extends ConsumerState<GenericMapScreen> {
                       bottom: 8,
                       child: Container(
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.8),
+                          color: Colors.white.withValues(alpha: 0.8),
                           borderRadius: BorderRadius.circular(4),
                         ),
                         padding: AppPaddings.symmSuperSmall,
@@ -369,7 +369,7 @@ class _GenericMapScreenState extends ConsumerState<GenericMapScreen> {
                       top: 8,
                       child: Container(
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.8),
+                          color: Colors.white.withValues(alpha: 0.8),
                           borderRadius: BorderRadius.circular(4),
                         ),
                         padding: AppPaddings.symmSuperSmall,

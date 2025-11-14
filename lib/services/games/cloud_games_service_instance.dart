@@ -9,6 +9,7 @@ import 'package:move_young/utils/logger.dart';
 import '../notifications/notification_interface.dart';
 import '../../utils/service_error.dart';
 import 'package:move_young/utils/crashlytics_helper.dart';
+import '../calendar/calendar_service.dart';
 
 // Background processing will be added when needed
 
@@ -206,22 +207,10 @@ class CloudGamesServiceInstance {
       gameData['slotField'] = fieldKey;
       gameData['slotTime'] = timeKey;
 
-      // Prepare atomic multi-path update:
+      // Write each path individually (update() has issues with nested validation rules)
       // - games/{id}
       // - users/{uid}/createdGames/{id}
       // - slots/{dateKey}/{fieldKey}/{timeKey} = true
-      final Map<String, Object?> updates = {
-        '${DbPaths.games}/$gameId': gameData,
-        'users/$userId/createdGames/$gameId': {
-          'sport': gameWithId.sport,
-          'dateTime': gameWithId.dateTime.toIso8601String(),
-          'location': gameWithId.location,
-          'maxPlayers': gameWithId.maxPlayers,
-        },
-        'slots/$dateKey/$fieldKey/$timeKey': true,
-      };
-
-      // Write each path individually (update() has issues with nested validation rules)
       // Track what was written for rollback if any write fails
       bool gameWritten = false;
       bool indexWritten = false;
@@ -358,6 +347,25 @@ class CloudGamesServiceInstance {
           oldTimeKey != newTimeKey ||
           oldFieldKey != newFieldKey;
 
+      // Check if game details actually changed (excluding metadata and player fields)
+      // We should only send notifications if game details changed, not just invites
+      final bool gameDetailsChanged = 
+          existing.sport != game.sport ||
+          existing.dateTime != game.dateTime ||
+          existing.location != game.location ||
+          existing.address != game.address ||
+          existing.latitude != game.latitude ||
+          existing.longitude != game.longitude ||
+          existing.fieldId != game.fieldId ||
+          existing.maxPlayers != game.maxPlayers ||
+          existing.description != game.description ||
+          existing.isPublic != game.isPublic ||
+          existing.imageUrl != game.imageUrl ||
+          existing.skillLevels.toString() != game.skillLevels.toString() ||
+          existing.equipment != game.equipment ||
+          existing.cost != game.cost ||
+          existing.contactInfo != game.contactInfo;
+
       // Prepare game data with updated slot keys and lastOrganizerEditAt
       final gameData = gameToUpdate.toCloudJson();
       final nowMs = now.millisecondsSinceEpoch;
@@ -418,17 +426,43 @@ class CloudGamesServiceInstance {
       await _database.ref().update(updates);
       // Streams will update automatically - no cache clearing needed
 
-      // Send notifications to all players (excluding organizer)
-      try {
-        NumberedLogger.i(
-            'Sending game edited notification for game ${game.id}');
-        await _notificationService.sendGameEditedNotification(game.id);
-        NumberedLogger.i(
-            'Successfully queued game edited notification for game ${game.id}');
-      } catch (e, st) {
-        NumberedLogger.e('Error sending game edited notification: $e');
-        NumberedLogger.d('Stack trace: $st');
-        // Don't fail the update if notification fails
+      // Only send notifications if game details actually changed
+      // Don't send notifications if only invites were added (no game details changed)
+      if (gameDetailsChanged) {
+        // Send notifications to all players (excluding organizer)
+        try {
+          NumberedLogger.i(
+              'Sending game edited notification for game ${game.id} (game details changed)');
+          await _notificationService.sendGameEditedNotification(game.id);
+          NumberedLogger.i(
+              'Successfully queued game edited notification for game ${game.id}');
+        } catch (e, st) {
+          NumberedLogger.e('Error sending game edited notification: $e');
+          NumberedLogger.d('Stack trace: $st');
+          // Don't fail the update if notification fails
+        }
+      } else {
+        NumberedLogger.d(
+            'Skipping game edited notification for game ${game.id} - no game details changed (only invites or participant changes)');
+      }
+
+      // Sync calendar event only if game details changed
+      // Calendar events show game details (date, time, location), not invites
+      // So there's no need to update calendar if only invites were added
+      if (gameDetailsChanged) {
+        try {
+          NumberedLogger.i('Syncing calendar event for edited game ${game.id}');
+          await CalendarService.updateGameInCalendar(game);
+          NumberedLogger.i(
+              'Successfully synced calendar event for game ${game.id}');
+        } catch (e, st) {
+          NumberedLogger.w('Error syncing calendar event for edited game: $e');
+          NumberedLogger.d('Stack trace: $st');
+          // Don't fail the update if calendar sync fails (calendar sync is best-effort)
+        }
+      } else {
+        NumberedLogger.d(
+            'Skipping calendar sync for game ${game.id} - no game details changed');
       }
     } catch (e, st) {
       NumberedLogger.e('Error updating game: $e');
@@ -529,6 +563,22 @@ class CloudGamesServiceInstance {
         NumberedLogger.e('Error sending game cancelled notification: $e');
         NumberedLogger.d('Stack trace: $st');
         // Don't fail the cancellation if notification fails
+      }
+
+      // Remove calendar event for this game (if it's in any user's calendar)
+      // Note: Calendar removal happens per-user, so we can't remove from all users' calendars here
+      // The CalendarSyncService provider will handle syncing for the current user
+      // This is a best-effort sync for the game data
+      try {
+        NumberedLogger.i('Removing calendar event for cancelled game $gameId');
+        await CalendarService.removeGameFromCalendar(gameId);
+        NumberedLogger.i(
+            'Successfully removed calendar event for game $gameId');
+      } catch (e, st) {
+        NumberedLogger.w(
+            'Error removing calendar event for cancelled game: $e');
+        NumberedLogger.d('Stack trace: $st');
+        // Don't fail the cancellation if calendar removal fails (calendar sync is best-effort)
       }
     } catch (e, st) {
       NumberedLogger.e('Error deleting game: $e');

@@ -54,5 +54,8 @@
 	<string>This app needs photo library access to let you choose profile pictures.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>This app may save edited images to your photo library.</string>
+	<!-- Calendar permission -->
+	<key>NSCalendarsUsageDescription</key>
+	<string>We need access to your calendar to add game events so you don't miss them.</string>
 </dict>
 </plist>

@@ -81,9 +81,9 @@ class FriendsServiceInstance implements IFriendsService {
     final String displayName = (user.displayName?.trim().isNotEmpty == true)
         ? user.displayName!.trim()
         : _deriveNameFromEmail(user.email);
-    updates['users/$uid/profile/displayName'] = displayName;
+    updates[DbPaths.userProfileDisplayName(uid)] = displayName;
     if (user.photoURL != null && user.photoURL!.isNotEmpty) {
-      updates['users/$uid/profile/photoURL'] = user.photoURL;
+      updates[DbPaths.userProfilePhotoUrl(uid)] = user.photoURL;
     }
 
     // Index by lowercase display name for prefix search
