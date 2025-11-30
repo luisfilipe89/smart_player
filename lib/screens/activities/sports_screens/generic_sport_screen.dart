@@ -44,11 +44,15 @@ List<Map<String, dynamic>> _processLocationsIsolate(
 class GenericSportScreen extends ConsumerStatefulWidget {
   final String title;
   final String sportType;
+  final bool showScaffold;
+  final bool hideFilters;
 
   const GenericSportScreen({
     super.key,
     required this.title,
     required this.sportType,
+    this.showScaffold = true,
+    this.hideFilters = false,
   });
 
   @override
@@ -79,7 +83,9 @@ class _GenericSportScreenState extends ConsumerState<GenericSportScreen>
   @override
   void initState() {
     super.initState();
-    _filters = SportFiltersRegistry.buildForSport(widget.sportType);
+    _filters = widget.hideFilters
+        ? []
+        : SportFiltersRegistry.buildForSport(widget.sportType);
     _loadFavorites();
     _loadData();
     _searchController
@@ -512,17 +518,8 @@ class _GenericSportScreenState extends ConsumerState<GenericSportScreen>
   @override
   bool get wantKeepAlive => true;
 
-  @override
-  Widget build(BuildContext context) {
-    super.build(context);
-
-    return Scaffold(
-      appBar: AppBar(
-        leadingWidth: 48,
-        leading: const AppBackButton(),
-        title: Text(widget.title),
-      ),
-      body: _isLoading
+  Widget _buildContent() {
+    return _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _error != null
               ? Center(child: Text(_error!))
@@ -642,7 +639,24 @@ class _GenericSportScreenState extends ConsumerState<GenericSportScreen>
                       ],
                     ),
                   ),
-                ),
+                );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+
+    if (!widget.showScaffold) {
+      return _buildContent();
+    }
+
+    return Scaffold(
+      appBar: AppBar(
+        leadingWidth: 48,
+        leading: const AppBackButton(),
+        title: Text(widget.title),
+      ),
+      body: _buildContent(),
     );
   }
 }

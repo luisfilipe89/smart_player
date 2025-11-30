@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:move_young/screens/home/home_screen.dart';
-import 'package:move_young/screens/activities/activities_screen.dart';
+import 'package:move_young/screens/activities/fitness_screen.dart';
 import 'package:move_young/screens/agenda/agenda_screen.dart';
 import 'package:move_young/screens/games/game_organize_screen.dart';
 import 'package:move_young/models/core/game.dart';

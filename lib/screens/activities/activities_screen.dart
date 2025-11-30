@@ -194,7 +194,7 @@ class _ActivitiesScreenState extends ConsumerState<ActivitiesScreen> {
       appBar: AppBar(
         leadingWidth: 48,
         leading: const AppBackButton(),
-        title: Text('activities'.tr()),
+        title: Text('fitness'.tr()),
         backgroundColor: AppColors.white,
         elevation: 0,
       ),
