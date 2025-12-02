@@ -215,8 +215,7 @@ class _HomeScreenNewState extends ConsumerState<HomeScreenNew> {
           child: ListView(
             physics: const AlwaysScrollableScrollPhysics(),
             padding: AppPaddings.symmHorizontalReg.copyWith(
-              bottom:
-                  kBottomNavigationBarHeight +
+              bottom: kBottomNavigationBarHeight +
                   MediaQuery.of(context).padding.bottom +
                   16,
             ),
@@ -596,8 +595,8 @@ class _HomeScreenNewState extends ConsumerState<HomeScreenNew> {
                 color: isDestructive
                     ? Colors.red.shade600
                     : isSecondary
-                    ? AppColors.grey
-                    : AppColors.primary,
+                        ? AppColors.grey
+                        : AppColors.primary,
                 size: 22,
               ),
               const SizedBox(width: 16),
@@ -608,8 +607,8 @@ class _HomeScreenNewState extends ConsumerState<HomeScreenNew> {
                     color: isDestructive
                         ? Colors.red.shade600
                         : isSecondary
-                        ? AppColors.grey
-                        : AppColors.blackText,
+                            ? AppColors.grey
+                            : AppColors.blackText,
                     fontWeight: FontWeight.w500,
                     fontSize: 15,
                     letterSpacing: 0.2,

@@ -319,6 +319,53 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
     );
   }
 
+  /// Build a standardized badge widget
+  Widget _buildStatusBadge({
+    required String label,
+    required Color color,
+    IconData? icon,
+    bool showDot = true,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(12), // Pill shape
+        border: Border.all(
+          color: color.withValues(alpha: 0.3),
+          width: 1,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (showDot && icon == null)
+            Container(
+              width: 6,
+              height: 6,
+              margin: const EdgeInsets.only(right: 6),
+              decoration: BoxDecoration(
+                color: color,
+                shape: BoxShape.circle,
+              ),
+            )
+          else if (icon != null) ...[
+            Icon(icon, size: 12, color: color),
+            const SizedBox(width: 4),
+          ],
+          Text(
+            label,
+            style: AppTextStyles.small.copyWith(
+              color: color,
+              fontWeight: FontWeight.w600,
+              fontSize: 11,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildGameCard(Game game) {
     // Watch this specific game for real-time updates (when organizer edits)
     final gameStream = ref.watch(gameByIdProvider(game.id));
@@ -384,22 +431,31 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
     final bool needsSyncFetch =
         !streamHasData && cachedInviteStatus == null && myUid != null;
 
+    final sportColor = _getSportColor(currentGame.sport);
+    final accentColor = currentGame.isActive
+        ? (isInvited ? AppColors.blue : AppColors.green)
+        : AppColors.red;
+
     return Card(
-      margin: const EdgeInsets.only(bottom: AppHeights.reg),
+      margin: const EdgeInsets.only(bottom: AppHeights.superbig),
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppRadius.card),
-        side: BorderSide(
-          color: isInvited
-              ? AppColors.blue.withValues(alpha: 0.3)
-              : AppColors.lightgrey.withValues(alpha: 0.5),
-          width: isInvited ? 2 : 1,
-        ),
       ),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 300),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(AppRadius.card),
+          // Rounded accent gradient on the left
+          gradient: LinearGradient(
+            begin: Alignment.centerLeft,
+            end: Alignment.centerRight,
+            colors: [
+              accentColor.withValues(alpha: 0.15),
+              accentColor.withValues(alpha: 0.0),
+            ],
+            stops: const [0.0, 0.08],
+          ),
           boxShadow: isHighlighted
               ? [
                   BoxShadow(
@@ -411,9 +467,10 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
                 ]
               : [
                   BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.04),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
+                    color: Colors.black.withValues(alpha: 0.06),
+                    blurRadius: 10,
+                    offset: const Offset(0, 3),
+                    spreadRadius: 0,
                   ),
                 ],
         ),
@@ -428,40 +485,18 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
           },
           borderRadius: BorderRadius.circular(AppRadius.card),
           child: Padding(
-            padding: const EdgeInsets.all(AppWidths.regular),
+            padding: const EdgeInsets.all(16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 if (isInvited)
                   Container(
-                    margin: const EdgeInsets.only(bottom: 8),
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                    decoration: BoxDecoration(
+                    margin: const EdgeInsets.only(bottom: 10),
+                    child: _buildStatusBadge(
+                      label: 'Invited',
                       color: AppColors.blue,
-                      borderRadius: BorderRadius.circular(AppRadius.smallCard),
-                      boxShadow: [
-                        BoxShadow(
-                          color: AppColors.blue.withValues(alpha: 0.25),
-                          blurRadius: 8,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(Icons.mail, size: 14, color: Colors.white),
-                        const SizedBox(width: 6),
-                        Text(
-                          'Invited',
-                          style: AppTextStyles.small.copyWith(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w600,
-                            letterSpacing: 0.3,
-                          ),
-                        ),
-                      ],
+                      icon: Icons.mail,
+                      showDot: false,
                     ),
                   ),
                 Row(
@@ -469,17 +504,15 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
                     Hero(
                       tag: 'game-${currentGame.id}-icon',
                       child: Container(
-                        padding: const EdgeInsets.all(8),
+                        padding: const EdgeInsets.all(10),
                         decoration: BoxDecoration(
-                          color: _getSportColor(currentGame.sport)
-                              .withValues(alpha: 0.1),
-                          borderRadius:
-                              BorderRadius.circular(AppRadius.smallCard),
+                          color: sportColor.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(12),
                         ),
                         child: Icon(
                           _getSportIcon(currentGame.sport),
-                          color: _getSportColor(currentGame.sport),
-                          size: 24,
+                          color: sportColor,
+                          size: 22,
                         ),
                       ),
                     ),
@@ -501,63 +534,34 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
                               ),
                               // Show "Cancelled" (red) badge
                               if (!currentGame.isActive)
-                                Container(
-                                  margin: const EdgeInsets.only(left: 4),
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 6, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: Colors.red.withValues(alpha: 0.1),
-                                    borderRadius: BorderRadius.circular(4),
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(Icons.cancel,
-                                          size: 10, color: Colors.red.shade800),
-                                      const SizedBox(width: 2),
-                                      Text('Cancelled',
-                                          style: AppTextStyles.superSmall
-                                              .copyWith(
-                                                  color: Colors.red.shade800,
-                                                  fontWeight: FontWeight.bold)),
-                                    ],
+                                Padding(
+                                  padding: const EdgeInsets.only(left: 6),
+                                  child: _buildStatusBadge(
+                                    label: 'Cancelled',
+                                    color: AppColors.red,
+                                    icon: Icons.cancel,
+                                    showDot: false,
                                   ),
                                 ),
                               // Show "Modified" badge for active games that have been edited
                               if (currentGame.isActive &&
                                   currentGame.isModified)
-                                Container(
-                                  margin: const EdgeInsets.only(left: 4),
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 6, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color:
-                                        AppColors.blue.withValues(alpha: 0.1),
-                                    borderRadius: BorderRadius.circular(4),
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Container(
-                                          width: 6,
-                                          height: 6,
-                                          decoration: const BoxDecoration(
-                                              color: AppColors.blue,
-                                              shape: BoxShape.circle)),
-                                      const SizedBox(width: 4),
-                                      Text('modified'.tr(),
-                                          style: AppTextStyles.superSmall
-                                              .copyWith(
-                                                  color: AppColors.blue,
-                                                  fontWeight: FontWeight.bold)),
-                                    ],
+                                Padding(
+                                  padding: const EdgeInsets.only(left: 6),
+                                  child: _buildStatusBadge(
+                                    label: 'modified'.tr(),
+                                    color: AppColors.blue,
                                   ),
                                 ),
                             ],
                           ),
                           Text(
                             currentGame.location,
-                            style: AppTextStyles.cardTitle,
+                            style: AppTextStyles.cardTitle.copyWith(
+                              fontSize: 17,
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: 0.1,
+                            ),
                           ),
                           Text(
                             '${currentGame.getFormattedDateLocalized((key) => key.tr())} at ${currentGame.formattedTime}',
@@ -568,42 +572,17 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
                         ],
                       ),
                     ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: currentGame.hasSpace
-                            ? AppColors.green.withValues(alpha: 0.1)
-                            : AppColors.red.withValues(alpha: 0.1),
-                        borderRadius:
-                            BorderRadius.circular(AppRadius.smallCard),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            currentGame.isPublic ? Icons.lock_open : Icons.lock,
-                            size: 14,
-                            color: currentGame.hasSpace
-                                ? AppColors.green
-                                : AppColors.red,
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            currentGame.benchCount > 0
-                                ? '${currentGame.maxPlayers}/${currentGame.maxPlayers} + ${currentGame.benchCount} bench'
-                                : '${currentGame.currentPlayers}/${currentGame.maxPlayers}',
-                            style: AppTextStyles.small.copyWith(
-                              color: currentGame.hasSpace
-                                  ? AppColors.green
-                                  : AppColors.red,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
-                      ),
+                    _buildStatusBadge(
+                      label: currentGame.benchCount > 0
+                          ? '${currentGame.maxPlayers}/${currentGame.maxPlayers} + ${currentGame.benchCount} bench'
+                          : '${currentGame.currentPlayers}/${currentGame.maxPlayers}',
+                      color: currentGame.hasSpace
+                          ? AppColors.green
+                          : AppColors.red,
+                      icon: currentGame.isPublic
+                          ? Icons.lock_open
+                          : Icons.lock,
+                      showDot: false,
                     ),
                     const SizedBox(width: 6),
                   ],
@@ -757,12 +736,19 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
         style: ElevatedButton.styleFrom(
           backgroundColor: AppColors.red.withValues(alpha: 0.2),
           foregroundColor: Colors.white,
+          minimumSize: const Size(0, 40),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(AppRadius.card),
+            borderRadius: BorderRadius.circular(10),
           ),
           elevation: 0,
         ),
-        child: Text('Cancelled', style: AppTextStyles.cardTitle),
+        child: Text(
+          'Cancelled',
+          style: AppTextStyles.cardTitle.copyWith(
+            fontWeight: FontWeight.w600,
+          ),
+        ),
       );
     }
 
@@ -772,16 +758,18 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
         style: ElevatedButton.styleFrom(
           backgroundColor: AppColors.red,
           foregroundColor: Colors.white,
+          minimumSize: const Size(0, 40),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          textStyle: AppTextStyles.small.copyWith(
+            fontWeight: FontWeight.w600,
+          ),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(AppRadius.card),
+            borderRadius: BorderRadius.circular(10),
           ),
           elevation: 0,
         ),
         child: Text(
           'cancel_game'.tr(),
-          style: AppTextStyles.cardTitle.copyWith(
-            color: Colors.white,
-          ),
         ),
       );
     }
@@ -880,8 +868,13 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.green,
                 foregroundColor: Colors.white,
+                minimumSize: const Size(0, 40),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                textStyle: AppTextStyles.small.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(AppRadius.card),
+                  borderRadius: BorderRadius.circular(10),
                 ),
                 elevation: 0,
               ),
@@ -918,9 +911,14 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
               },
               style: OutlinedButton.styleFrom(
                 foregroundColor: AppColors.red,
-                side: const BorderSide(color: AppColors.red),
+                side: const BorderSide(color: AppColors.red, width: 1.5),
+                minimumSize: const Size(0, 40),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                textStyle: AppTextStyles.small.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(AppRadius.card),
+                  borderRadius: BorderRadius.circular(10),
                 ),
               ),
               child: Text('decline'.tr()),
@@ -961,8 +959,13 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
         style: ElevatedButton.styleFrom(
           backgroundColor: AppColors.red,
           foregroundColor: Colors.white,
+          minimumSize: const Size(0, 40),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          textStyle: AppTextStyles.small.copyWith(
+            fontWeight: FontWeight.w600,
+          ),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(AppRadius.card),
+            borderRadius: BorderRadius.circular(10),
           ),
           elevation: 0,
         ),
@@ -977,16 +980,18 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
         style: ElevatedButton.styleFrom(
           backgroundColor: game.hasSpace ? Colors.orange : AppColors.grey,
           foregroundColor: Colors.white,
+          minimumSize: const Size(0, 40),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          textStyle: AppTextStyles.small.copyWith(
+            fontWeight: FontWeight.w600,
+          ),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(AppRadius.card),
+            borderRadius: BorderRadius.circular(10),
           ),
           elevation: 0,
         ),
         child: Text(
           game.hasSpace ? 'rejoin_game'.tr() : 'game_full'.tr(),
-          style: AppTextStyles.cardTitle.copyWith(
-            color: Colors.white,
-          ),
         ),
       );
     }
@@ -1024,16 +1029,18 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
             style: ElevatedButton.styleFrom(
               backgroundColor: game.hasSpace ? AppColors.blue : AppColors.grey,
               foregroundColor: Colors.white,
+              minimumSize: const Size(0, 40),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              textStyle: AppTextStyles.small.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(AppRadius.card),
+                borderRadius: BorderRadius.circular(10),
               ),
               elevation: 0,
             ),
             child: Text(
               game.hasSpace ? 'join_game'.tr() : 'game_full'.tr(),
-              style: AppTextStyles.cardTitle.copyWith(
-                color: Colors.white,
-              ),
             ),
           ),
         ],
@@ -1074,16 +1081,18 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
       style: ElevatedButton.styleFrom(
         backgroundColor: game.hasSpace ? AppColors.blue : AppColors.grey,
         foregroundColor: Colors.white,
+        minimumSize: const Size(0, 40),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        textStyle: AppTextStyles.small.copyWith(
+          fontWeight: FontWeight.w600,
+        ),
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppRadius.card),
+          borderRadius: BorderRadius.circular(10),
         ),
         elevation: 0,
       ),
       child: Text(
         game.hasSpace ? 'join_game'.tr() : 'game_full'.tr(),
-        style: AppTextStyles.cardTitle.copyWith(
-          color: Colors.white,
-        ),
       ),
     );
   }

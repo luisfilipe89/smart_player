@@ -1124,30 +1124,102 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
     );
   }
 
+  /// Build a standardized badge widget
+  Widget _buildStatusBadge({
+    required String label,
+    required Color color,
+    IconData? icon,
+    bool showDot = true,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(12), // Pill shape
+        border: Border.all(
+          color: color.withValues(alpha: 0.3),
+          width: 1,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (showDot && icon == null)
+            Container(
+              width: 6,
+              height: 6,
+              margin: const EdgeInsets.only(right: 6),
+              decoration: BoxDecoration(
+                color: color,
+                shape: BoxShape.circle,
+              ),
+            )
+          else if (icon != null) ...[
+            Icon(icon, size: 12, color: color),
+            const SizedBox(width: 4),
+          ],
+          Text(
+            label,
+            style: AppTextStyles.small.copyWith(
+              color: color,
+              fontWeight: FontWeight.w600,
+              fontSize: 11,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   /// Build the content of a game tile (the inner container with border and column)
   Widget _buildGameTileContent(Game game) {
     final currentUserId = ref.watch(currentUserIdProvider);
     final isMine = currentUserId == game.organizerId;
+    final sportColor = _colorForSport(game.sport);
+    final accentColor = game.isActive ? AppColors.green : AppColors.red;
 
     return Container(
       decoration: BoxDecoration(
-        border: Border(
-          left: BorderSide(
-            color: game.isActive ? AppColors.green : AppColors.red,
-            width: 6,
-          ),
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        // Rounded accent bar on the left instead of straight border
+        gradient: LinearGradient(
+          begin: Alignment.centerLeft,
+          end: Alignment.centerRight,
+          colors: [
+            accentColor.withValues(alpha: 0.15),
+            accentColor.withValues(alpha: 0.0),
+          ],
+          stops: const [0.0, 0.08],
         ),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           ListTile(
+            contentPadding: const EdgeInsets.fromLTRB(20, 12, 16, 8),
             leading: Hero(
               tag: 'game-${game.id}-icon',
-              child: Icon(_iconForSport(game.sport),
-                  color: _colorForSport(game.sport)),
+              child: Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: sportColor.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  _iconForSport(game.sport),
+                  color: sportColor,
+                  size: 22,
+                ),
+              ),
             ),
-            title: Text(game.location, style: AppTextStyles.cardTitle),
+            title: Text(
+              game.location,
+              style: AppTextStyles.cardTitle.copyWith(
+                fontSize: 17,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0.1,
+              ),
+            ),
             subtitle: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -1162,96 +1234,27 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
                     ),
                   ],
                 ),
-                const SizedBox(height: 2),
+                const SizedBox(height: 6),
                 Wrap(
                   spacing: 6,
                   runSpacing: 6,
                   children: [
                     // Show "Cancelled" badge for cancelled games
                     if (!game.isActive) ...[
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: AppColors.red.withValues(alpha: 0.08),
-                          border: const Border.fromBorderSide(
-                              BorderSide(color: AppColors.lightgrey, width: 1)),
-                          borderRadius:
-                              BorderRadius.circular(AppRadius.smallCard),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Container(
-                                width: 6,
-                                height: 6,
-                                decoration: const BoxDecoration(
-                                    color: AppColors.red,
-                                    shape: BoxShape.circle)),
-                            const SizedBox(width: 6),
-                            Text('Canceled',
-                                style: AppTextStyles.small.copyWith(
-                                    color: AppColors.red,
-                                    fontWeight: FontWeight.bold)),
-                          ],
-                        ),
+                      _buildStatusBadge(
+                        label: 'Canceled',
+                        color: AppColors.red,
                       ),
                     ] else ...[
                       if (game.isFull)
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: AppColors.red.withValues(alpha: 0.1),
-                            border: const Border.fromBorderSide(BorderSide(
-                                color: AppColors.lightgrey, width: 1)),
-                            borderRadius:
-                                BorderRadius.circular(AppRadius.smallCard),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Container(
-                                  width: 6,
-                                  height: 6,
-                                  decoration: const BoxDecoration(
-                                      color: AppColors.red,
-                                      shape: BoxShape.circle)),
-                              const SizedBox(width: 6),
-                              Text('Full',
-                                  style: AppTextStyles.small.copyWith(
-                                      color: AppColors.red,
-                                      fontWeight: FontWeight.bold)),
-                            ],
-                          ),
+                        _buildStatusBadge(
+                          label: 'Full',
+                          color: AppColors.red,
                         ),
                       if (game.isModified)
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: AppColors.blue.withValues(alpha: 0.1),
-                            border: const Border.fromBorderSide(BorderSide(
-                                color: AppColors.lightgrey, width: 1)),
-                            borderRadius:
-                                BorderRadius.circular(AppRadius.smallCard),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Container(
-                                  width: 6,
-                                  height: 6,
-                                  decoration: const BoxDecoration(
-                                      color: AppColors.blue,
-                                      shape: BoxShape.circle)),
-                              const SizedBox(width: 6),
-                              Text('modified'.tr(),
-                                  style: AppTextStyles.small.copyWith(
-                                      color: AppColors.blue,
-                                      fontWeight: FontWeight.bold)),
-                            ],
-                          ),
+                        _buildStatusBadge(
+                          label: 'modified'.tr(),
+                          color: AppColors.blue,
                         ),
                       StreamBuilder<int>(
                         stream: Stream.periodic(
@@ -1268,24 +1271,10 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
                               remaining < const Duration(hours: 1);
                           final hours = remaining.inHours;
                           final minutes = remaining.inMinutes % 60;
-                          return Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: urgent
-                                  ? Colors.amber.withValues(alpha: 0.12)
-                                  : AppColors.blue.withValues(alpha: 0.1),
-                              border: const Border.fromBorderSide(BorderSide(
-                                  color: AppColors.lightgrey, width: 1)),
-                              borderRadius:
-                                  BorderRadius.circular(AppRadius.smallCard),
-                            ),
-                            child: Text('Starts in ${hours}h ${minutes}m',
-                                style: AppTextStyles.small.copyWith(
-                                    color: urgent
-                                        ? Colors.amber.shade800
-                                        : AppColors.blue,
-                                    fontWeight: FontWeight.bold)),
+                          return _buildStatusBadge(
+                            label: 'Starts in ${hours}h ${minutes}m',
+                            color:
+                                urgent ? Colors.amber.shade800 : AppColors.blue,
                           );
                         },
                       ),
@@ -1294,51 +1283,69 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
                 ),
               ],
             ),
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
+            trailing: _buildStatusBadge(
+              label: game.benchCount > 0
+                  ? '${game.maxPlayers}/${game.maxPlayers} + ${game.benchCount} bench'
+                  : '${game.currentPlayers}/${game.maxPlayers}',
+              color: game.hasSpace ? AppColors.green : AppColors.red,
+              icon: game.isPublic ? Icons.lock_open : Icons.lock,
+              showDot: false,
+            ),
+          ),
+          Container(
+            margin: const EdgeInsets.symmetric(horizontal: 16),
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            decoration: BoxDecoration(
+              border: Border(
+                top: BorderSide(
+                  color: AppColors.lightgrey.withValues(alpha: 0.5),
+                  width: 1,
+                ),
+              ),
+            ),
+            child: Row(
               children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 6,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: game.hasSpace
-                        ? AppColors.green.withValues(alpha: 0.1)
-                        : AppColors.red.withValues(alpha: 0.1),
-                    border: const Border.fromBorderSide(
-                        BorderSide(color: AppColors.lightgrey, width: 1)),
-                    borderRadius: BorderRadius.circular(AppRadius.smallCard),
-                  ),
-                  child: Row(
+                // Weather icon with a subtle divider to separate from avatars
+                Builder(builder: (context) {
+                  _ensureWeatherForGame(game);
+                  String time = game.formattedTime.padLeft(5, '0');
+                  if (!time.endsWith(':00')) {
+                    time = '${time.substring(0, 2)}:00';
+                  }
+                  final forecasts = _weatherByGameId[game.id];
+                  final weatherActions = ref.read(weatherActionsProvider);
+                  final String cond = forecasts?[time] ??
+                      weatherActions.getWeatherCondition(time);
+                  final IconData icon =
+                      weatherActions.getWeatherIcon(time, cond);
+                  final Color color = weatherActions.getWeatherColor(cond);
+                  return Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(
-                        game.isPublic ? Icons.lock_open : Icons.lock,
-                        size: 14,
-                        color: game.hasSpace ? AppColors.green : AppColors.red,
+                      Icon(icon, size: 18, color: color),
+                      const SizedBox(width: 10),
+                      Container(
+                        width: 1,
+                        height: 20,
+                        color: AppColors.lightgrey.withValues(alpha: 0.5),
                       ),
-                      const SizedBox(width: 4),
-                      Text(
-                        game.benchCount > 0
-                            ? '${game.maxPlayers}/${game.maxPlayers} + ${game.benchCount} bench'
-                            : '${game.currentPlayers}/${game.maxPlayers}',
-                        style: AppTextStyles.small.copyWith(
-                          color:
-                              game.hasSpace ? AppColors.green : AppColors.red,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
+                      const SizedBox(width: 10),
                     ],
-                  ),
+                  );
+                }),
+                Expanded(
+                  child: _buildParticipantsStrip(game),
                 ),
-                const SizedBox(width: 6),
-                if (isMine && !game.dateTime.isBefore(DateTime.now()))
+                // Edit button for organizer - placed next to participants
+                if (isMine && !game.dateTime.isBefore(DateTime.now())) ...[
+                  const SizedBox(width: 12),
                   IconButton(
-                    padding: const EdgeInsets.all(4),
-                    constraints:
-                        const BoxConstraints(minWidth: 32, minHeight: 32),
-                    tooltip: 'edit',
+                    padding: const EdgeInsets.all(8),
+                    constraints: const BoxConstraints(
+                      minWidth: 36,
+                      minHeight: 36,
+                    ),
+                    tooltip: 'edit'.tr(),
                     onPressed: () {
                       Navigator.of(context).push(
                         MaterialPageRoute(
@@ -1346,54 +1353,21 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
                         ),
                       );
                     },
-                    icon: const Icon(Icons.edit, size: 20),
+                    icon: const Icon(Icons.edit, size: 18),
+                    color: AppColors.primary,
+                    style: IconButton.styleFrom(
+                      backgroundColor: AppColors.primary.withValues(alpha: 0.1),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
                   ),
+                ],
               ],
             ),
           ),
           Padding(
-            padding: AppPaddings.allMedium,
-            child: Padding(
-              padding: const EdgeInsets.only(top: 2, bottom: 0),
-              child: Row(
-                children: [
-                  // Weather icon with a subtle divider to separate from avatars
-                  Builder(builder: (context) {
-                    _ensureWeatherForGame(game);
-                    String time = game.formattedTime.padLeft(5, '0');
-                    if (!time.endsWith(':00')) {
-                      time = '${time.substring(0, 2)}:00';
-                    }
-                    final forecasts = _weatherByGameId[game.id];
-                    final weatherActions = ref.read(weatherActionsProvider);
-                    final String cond = forecasts?[time] ??
-                        weatherActions.getWeatherCondition(time);
-                    final IconData icon =
-                        weatherActions.getWeatherIcon(time, cond);
-                    final Color color = weatherActions.getWeatherColor(cond);
-                    return Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(icon, size: 16, color: color),
-                        const SizedBox(width: 8),
-                        Container(
-                          width: 1,
-                          height: 16,
-                          color: AppColors.blue.withValues(alpha: 0.3),
-                        ),
-                        const SizedBox(width: 8),
-                      ],
-                    );
-                  }),
-                  Expanded(
-                    child: _buildParticipantsStrip(game),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 2, 16, 16),
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -1410,11 +1384,18 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
                             style: ElevatedButton.styleFrom(
                               backgroundColor: AppColors.red,
                               foregroundColor: Colors.white,
-                              minimumSize: const Size(0, 36),
+                              minimumSize: const Size(0, 40),
                               padding: const EdgeInsets.symmetric(
-                                  horizontal: 8, vertical: 6),
-                              textStyle: AppTextStyles.small,
+                                  horizontal: 8, vertical: 8),
+                              textStyle: AppTextStyles.small.copyWith(
+                                fontWeight: FontWeight.w600,
+                                fontSize: 11,
+                              ),
                               iconSize: 16,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              elevation: 0,
                             ),
                             icon: Icon(
                                 game.isActive
@@ -1425,7 +1406,7 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
                                 Text(game.isActive ? 'leave'.tr() : 'Remove'),
                           ),
                         ),
-                        const SizedBox(width: 6),
+                        const SizedBox(width: 8),
                       ],
                       if (isMine) ...[
                         Expanded(
@@ -1486,12 +1467,18 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
                             style: ElevatedButton.styleFrom(
                               backgroundColor: AppColors.red,
                               foregroundColor: Colors.white,
-                              minimumSize: const Size(0, 36),
+                              minimumSize: const Size(0, 40),
                               padding: const EdgeInsets.symmetric(
-                                  horizontal: 8, vertical: 6),
-                              textStyle: AppTextStyles.small,
+                                  horizontal: 8, vertical: 8),
+                              textStyle: AppTextStyles.small.copyWith(
+                                fontWeight: FontWeight.w600,
+                                fontSize: 11,
+                              ),
                               iconSize: 16,
                               elevation: 0,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
                             ),
                             icon: Icon(
                                 game.isActive
@@ -1502,25 +1489,32 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
                                 Text(game.isActive ? 'cancel'.tr() : 'Remove'),
                           ),
                         ),
-                        const SizedBox(width: 6),
+                        const SizedBox(width: 8),
                       ],
                       Expanded(
                         child: OutlinedButton.icon(
                           onPressed: () => _openDirections(game),
                           style: OutlinedButton.styleFrom(
-                            minimumSize: const Size(0, 36),
+                            minimumSize: const Size(0, 40),
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 6, vertical: 6),
-                            textStyle: AppTextStyles.small,
+                                horizontal: 8, vertical: 8),
+                            textStyle: AppTextStyles.small.copyWith(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 11,
+                            ),
                             iconSize: 16,
                             foregroundColor: AppColors.primary,
-                            side: const BorderSide(color: AppColors.primary),
+                            side: const BorderSide(
+                                color: AppColors.primary, width: 1.5),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
                           ),
                           icon: const Icon(Icons.directions, size: 16),
                           label: Text('directions'.tr()),
                         ),
                       ),
-                      const SizedBox(width: 6),
+                      const SizedBox(width: 8),
                       Expanded(
                         child: Builder(
                           builder: (context) {
@@ -1596,23 +1590,30 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
                                   ? null
                                   : () => _addToCalendar(game),
                               style: OutlinedButton.styleFrom(
-                                minimumSize: const Size(0, 36),
+                                minimumSize: const Size(0, 40),
                                 padding: const EdgeInsets.symmetric(
-                                    horizontal: 6, vertical: 6),
-                                textStyle: AppTextStyles.small,
+                                    horizontal: 8, vertical: 8),
+                                textStyle: AppTextStyles.small.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 11,
+                                ),
                                 iconSize: 16,
                                 foregroundColor: foregroundColor,
-                                side: BorderSide(color: borderColor),
+                                side:
+                                    BorderSide(color: borderColor, width: 1.5),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
                               ).copyWith(
                                 // Override disabled state styling
                                 foregroundColor: isActuallyLoading
                                     ? WidgetStateProperty.all(AppColors.grey)
                                     : WidgetStateProperty.all(foregroundColor),
                                 side: isActuallyLoading
-                                    ? WidgetStateProperty.all(
-                                        const BorderSide(color: AppColors.grey))
-                                    : WidgetStateProperty.all(
-                                        BorderSide(color: borderColor)),
+                                    ? WidgetStateProperty.all(const BorderSide(
+                                        color: AppColors.grey, width: 1.5))
+                                    : WidgetStateProperty.all(BorderSide(
+                                        color: borderColor, width: 1.5)),
                               ),
                               icon: isActuallyLoading
                                   ? const SizedBox(
@@ -1654,15 +1655,21 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
                         child: OutlinedButton.icon(
                           onPressed: () => _organizeSimilarGame(game),
                           style: OutlinedButton.styleFrom(
-                            minimumSize: const Size(0, 36),
+                            minimumSize: const Size(0, 40),
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 6, vertical: 6),
-                            textStyle: AppTextStyles.small,
-                            iconSize: 16,
+                                horizontal: 12, vertical: 8),
+                            textStyle: AppTextStyles.small.copyWith(
+                              fontWeight: FontWeight.w600,
+                            ),
+                            iconSize: 18,
                             foregroundColor: AppColors.primary,
-                            side: const BorderSide(color: AppColors.primary),
+                            side: const BorderSide(
+                                color: AppColors.primary, width: 1.5),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
                           ),
-                          icon: const Icon(Icons.repeat, size: 16),
+                          icon: const Icon(Icons.repeat, size: 18),
                           label: Text('organize_similar_game'.tr()),
                         ),
                       ),
@@ -1671,16 +1678,22 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
                         child: OutlinedButton.icon(
                           onPressed: () => _openReportSheet(game),
                           style: OutlinedButton.styleFrom(
-                            minimumSize: const Size(0, 36),
+                            minimumSize: const Size(0, 40),
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 6, vertical: 6),
-                            textStyle: AppTextStyles.small,
-                            iconSize: 16,
+                                horizontal: 12, vertical: 8),
+                            textStyle: AppTextStyles.small.copyWith(
+                              fontWeight: FontWeight.w600,
+                            ),
+                            iconSize: 18,
                             foregroundColor: AppColors.primary,
-                            side: const BorderSide(color: AppColors.primary),
+                            side: const BorderSide(
+                                color: AppColors.primary, width: 1.5),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
                           ),
                           icon: const Icon(Icons.report_problem_outlined,
-                              size: 16),
+                              size: 18),
                           label: Text('field_report_button'.tr()),
                         ),
                       ),
@@ -1698,14 +1711,23 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
   Widget _buildGameTile(Game game) {
     final key = _itemKeys.putIfAbsent(game.id, () => GlobalKey());
 
-    return KeyedSubtree(
+    // Build the game card (without margin) - matching Historic tab style
+    final gameCard = KeyedSubtree(
       key: key,
       child: Card(
         elevation: 2,
-        margin: const EdgeInsets.only(bottom: AppHeights.reg),
+        margin: EdgeInsets.zero, // No margin here - handled by Container
         color: AppColors.white,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadius.card),
+        ),
         child: _buildGameTileContent(game),
       ),
+    );
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: AppHeights.reg),
+      child: gameCard,
     );
   }
 
