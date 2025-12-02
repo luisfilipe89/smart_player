@@ -1,8 +1,8 @@
 import 'dart:developer' as developer;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:move_young/models/core/game.dart';
+import 'package:move_young/features/games/models/game.dart';
 import 'package:move_young/services/calendar/calendar_service.dart';
-import 'package:move_young/services/games/games_provider.dart';
+import 'package:move_young/features/games/services/games_provider.dart';
 
 /// Service to sync calendar events when games are updated or cancelled
 class CalendarSyncService {

@@ -4,7 +4,7 @@ import 'package:move_young/db/db_paths.dart';
 import 'package:move_young/models/core/field_report.dart';
 import 'package:move_young/services/firebase_error_handler.dart';
 import 'package:move_young/utils/logger.dart';
-import 'package:move_young/utils/service_error.dart';
+import 'package:move_young/models/infrastructure/service_error.dart';
 
 import 'field_report_service.dart';
 

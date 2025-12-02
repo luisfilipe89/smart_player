@@ -246,6 +246,8 @@
     "joined_successfully": "Joined successfully",
     "no_joined_games_yet": "You haven't joined any games yet",
     "go_join_a_game": "Go join a game",
+    "no_fitness_stations": "No fitness stations available",
+    "no_sport_containers": "No sport containers available",
     "registered_games": "Joining",
     "organized_games": "Organizing",
     "historic_games": "Historic",

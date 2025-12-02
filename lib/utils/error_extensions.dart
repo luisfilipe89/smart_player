@@ -1,5 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'service_error.dart';
+import 'package:move_young/models/infrastructure/service_error.dart';
 
 /// Extension methods for AsyncValue to provide consistent error handling
 extension AsyncValueX<T> on AsyncValue<T> {

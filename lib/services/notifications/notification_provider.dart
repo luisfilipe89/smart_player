@@ -1,11 +1,11 @@
 // lib/providers/services/notification_provider.dart
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'notification_service_instance.dart';
+import 'package:move_young/services/notifications/notification_service_instance.dart';
 import 'package:move_young/providers/infrastructure/firebase_providers.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:move_young/screens/main_scaffold.dart';
-import 'package:move_young/routes/deep_links.dart';
-import 'package:move_young/routes/route_registry.dart';
+import 'package:move_young/navigation/main_scaffold.dart';
+import 'package:move_young/navigation/deep_links.dart';
+import 'package:move_young/navigation/route_registry.dart';
 
 // Flutter Local Notifications plugin provider
 final flutterLocalNotificationsProvider =

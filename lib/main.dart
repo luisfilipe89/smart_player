@@ -7,18 +7,19 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'dart:async';
-import 'package:move_young/screens/welcome/welcome_screen.dart';
+import 'package:move_young/features/welcome/screens/welcome_screen.dart';
 import 'package:move_young/theme/_theme.dart';
 import 'package:move_young/services/system/accessibility_provider.dart';
 import 'package:move_young/providers/infrastructure/shared_preferences_provider.dart'
     show initializeSharedPreferencesEarly, sharedPreferencesProvider;
 import 'package:move_young/providers/locale_controller.dart';
-import 'package:move_young/widgets/common/sync_status_indicator.dart';
-import 'firebase_options.dart';
+import 'package:move_young/widgets/sync_status_indicator.dart';
+import 'package:move_young/firebase_options.dart';
 import 'package:move_young/config/app_bootstrap.dart';
 import 'package:move_young/utils/logger.dart';
 import 'package:move_young/services/notifications/notification_provider.dart';
 import 'package:move_young/services/calendar/calendar_sync_service.dart';
+import 'package:move_young/services/system/sync_provider.dart';
 
 // Global navigator key for navigation from notifications
 // Note: This is still needed for Firebase notification callbacks in background
@@ -153,6 +154,8 @@ class _MoveYoungAppState extends ConsumerState<MoveYoungApp>
   bool _isInitialized = false;
   bool _notificationServiceInitialized =
       false; // Guard to prevent multiple notification initializations
+  bool _syncServiceInitialized =
+      false; // Guard to prevent multiple sync service initializations
   ProviderSubscription? _prefsSubscription;
 
   @override
@@ -267,6 +270,25 @@ class _MoveYoungAppState extends ConsumerState<MoveYoungApp>
         // Watch calendar sync provider to automatically sync calendar events
         // This provider watches games and syncs calendar events when games change
         ref.watch(calendarSyncProvider);
+
+        // Initialize sync service after SharedPreferences is ready
+        // Only initialize once (build() can be called multiple times)
+        if (!_syncServiceInitialized) {
+          _syncServiceInitialized = true;
+          Future.delayed(const Duration(seconds: 1), () async {
+            if (!mounted) return;
+            try {
+              final syncActions = ref.read(syncActionsProvider);
+              if (syncActions != null) {
+                await syncActions.initialize();
+                debugPrint('Sync service initialized');
+              }
+            } catch (e) {
+              debugPrint(
+                  'Sync service initialization error (non-critical): $e');
+            }
+          });
+        }
 
         return MaterialApp(
           navigatorKey: navigatorKey,

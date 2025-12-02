@@ -3,9 +3,9 @@ import 'package:flutter/foundation.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:move_young/utils/logger.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
-import '../../utils/service_error.dart';
-import '../../utils/service_helpers.dart' show showFloatingSnack;
-import '../../theme/tokens.dart';
+import 'package:move_young/models/infrastructure/service_error.dart';
+import 'package:move_young/utils/service_helpers.dart' show showFloatingSnack;
+import 'package:move_young/theme/tokens.dart';
 
 /// Instance-based ErrorHandlerService for use with Riverpod dependency injection
 class ErrorHandlerServiceInstance {

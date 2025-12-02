@@ -4,8 +4,8 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:move_young/utils/logger.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../games/games_service.dart';
-import '../friends/friends_service.dart';
+import 'package:move_young/features/games/services/games_service.dart';
+import 'package:move_young/features/friends/services/friends_service.dart';
 
 /// Instance-based SyncService for use with Riverpod dependency injection
 class SyncServiceInstance {

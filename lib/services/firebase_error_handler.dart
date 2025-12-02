@@ -1,5 +1,5 @@
 import 'package:easy_localization/easy_localization.dart';
-import '../utils/service_error.dart';
+import 'package:move_young/models/infrastructure/service_error.dart';
 import 'package:firebase_core/firebase_core.dart';
 
 /// Centralized Firebase error handling service

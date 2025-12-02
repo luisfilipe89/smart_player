@@ -2,7 +2,7 @@ import 'dart:developer' as developer;
 import 'package:device_calendar/device_calendar.dart';
 import 'package:timezone/timezone.dart' as tz;
 import 'package:timezone/data/latest_all.dart' as tz_data;
-import 'package:move_young/models/core/game.dart';
+import 'package:move_young/features/games/models/game.dart';
 import 'package:move_young/db/calendar_events_db.dart';
 
 class CalendarService {

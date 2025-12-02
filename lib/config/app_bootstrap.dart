@@ -6,8 +6,8 @@ import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:firebase_analytics/firebase_analytics.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../firebase_options.dart';
-import '../services/calendar/calendar_service.dart';
+import 'package:move_young/firebase_options.dart';
+import 'package:move_young/services/calendar/calendar_service.dart';
 
 /// Centralized bootstrap utility to initialize platform services in order.
 class AppBootstrap {

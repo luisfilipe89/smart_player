@@ -1,9 +1,12 @@
 // lib/providers/services/sync_provider.dart
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'sync_service_instance.dart';
-import '../games/games_provider.dart';
-import '../friends/friends_provider.dart';
-import '../../providers/infrastructure/shared_preferences_provider.dart';
+import 'package:move_young/services/system/sync_service_instance.dart';
+import 'package:move_young/features/games/services/games_provider.dart';
+import 'package:move_young/features/friends/services/friends_provider.dart';
+import 'package:move_young/providers/infrastructure/shared_preferences_provider.dart';
+
+// Re-export SyncServiceInstance constants for convenience
+export 'sync_service_instance.dart' show SyncServiceInstance;
 
 // SyncService provider with dependency injection
 // Returns null if SharedPreferences is still loading or on error
@@ -90,12 +93,14 @@ class SyncActions {
     required Map<String, dynamic> data,
     required Future<bool> Function() operation,
     String? itemId,
+    int priority = SyncServiceInstance.priorityNormal,
   }) =>
       _syncService.addSyncOperation(
         type: type,
         data: data,
         operation: operation,
         itemId: itemId,
+        priority: priority,
       );
   Future<void> retryFailedOperations() => _syncService.retryFailedOperations();
   Future<void> markAsSynced(String operationId) =>
