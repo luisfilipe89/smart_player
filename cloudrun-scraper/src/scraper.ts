@@ -95,8 +95,8 @@ export async function scrapeEvents(): Promise<EventItem[]> {
 
         await page.waitForSelector('.activity', { timeout: 20000 });
 
-        const raw: RawEvent[] = await page.$$eval('.activity', (cards) => {
-            return cards.map((card) => {
+        const raw: RawEvent[] = await page.$$eval('.activity', (cards: Element[]) => {
+            return cards.map((card: Element) => {
                 const titleElem = card.querySelector<HTMLAnchorElement>('h2 a');
                 const imageElem = card.querySelector<HTMLImageElement>('img');
                 const organizerElem = card.querySelector<HTMLSpanElement>('span.location');

@@ -9,7 +9,7 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:move_young/models/external/event_model.dart';
-import 'package:move_young/services/load_events_from_json.dart';
+import 'package:move_young/services/load_events_from_firebase.dart';
 import 'package:move_young/theme/_theme.dart';
 
 class AgendaScreen extends ConsumerStatefulWidget {
@@ -59,7 +59,7 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
   // --------------------------------------------
   Future<void> loadEvents() async {
     final currentLang = context.locale.languageCode;
-    final loaded = await loadEventsFromJson(lang: currentLang);
+    final loaded = await loadEventsFromFirebase(lang: currentLang);
     if (!mounted) return;
 
     setState(() {

@@ -11,6 +11,8 @@
         "leisure": "pitch",
         "lit": "yes",
         "sport": "beachvolleyball",
+        "lat": 51.7245044,
+        "lon": 5.35477384,
         "address_display_name": "Annenburgerweg, Vlietdijk, Rosmalen, 's-Hertogenbosch, Noord-Brabant, Nederland, 5241 HR, Nederland",
         "address_short": "Annenburgerweg, 5241 HR, Rosmalen, Nederland",
         "address_super_short": "Annenburgerweg, 5241 HR",
@@ -56,10 +58,12 @@
         "leisure": "pitch",
         "sport": "beachvolleyball",
         "surface": "sand",
-        "address_display_name": "sv CHC, De Eendenkooi, De Schutskamp, West, 's-Hertogenbosch, Noord-Brabant, Nederland, 5223 KE, Nederland",
-        "address_short": "De Eendenkooi, 5223 KE, 's-Hertogenbosch, Nederland",
-        "address_super_short": "De Eendenkooi, 5223 KE",
-        "address_micro_short": "De Eendenkooi"
+        "lat": 51.693932450000005,
+        "lon": 5.2786259,
+        "address_display_name": "De Fuik, De Schutskamp, West, 's-Hertogenbosch, Noord-Brabant, Nederland, 5223 KT, Nederland",
+        "address_short": "De Fuik, 5223 KT, 's-Hertogenbosch, Nederland",
+        "address_super_short": "De Fuik, 5223 KT",
+        "address_micro_short": "De Fuik"
       },
       "geometry": {
         "type": "Polygon",

@@ -5,7 +5,6 @@ import { onDocumentCreated } from "firebase-functions/v2/firestore";
 import { onValueCreated, onValueDeleted, onValueWritten } from "firebase-functions/v2/database";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { onRequest } from "firebase-functions/v2/https";
-import * as puppeteer from "puppeteer";
 import { createHash } from "crypto";
 
 admin.initializeApp();
@@ -30,7 +29,7 @@ function renderFieldReportHtml(report: any, createdAt: Date) {
   const contactBlock =
     report.allowContact && report.contactEmail
       ? `<p><strong>Contact:</strong> ${report.contactName || report.contactEmail
-        } (${report.contactEmail})</p>`
+      } (${report.contactEmail})</p>`
       : "";
 
   const locationBlock = [
@@ -131,7 +130,7 @@ async function processFieldReport(report: any, reportId: string) {
 
   await mailRef.set(mailData);
   console.log(`Queued field report email for ${reportId} to ${targetEmail}`);
-  
+
   // Update the fieldReports document to mark it as queued
   await admin.firestore()
     .collection("fieldReports")
@@ -305,11 +304,11 @@ export const onMailNotificationCreate = onValueCreated(
           console.error(`[${type}] Game ${gameId} does not exist`);
           return;
         }
-        
+
         const game = gameSnap.val() || {};
         const organizerId = (game.organizerId || "").toString();
         console.log(`[${type}] Game ${gameId} found, organizer: ${organizerId}`);
-        
+
         // Get all players who have joined the game
         let players: string[] = [];
         if (Array.isArray(game.players)) {
@@ -318,7 +317,7 @@ export const onMailNotificationCreate = onValueCreated(
           players = Object.values(game.players).map((v: any) => String(v));
         }
         console.log(`[${type}] Found ${players.length} players: ${players.join(", ")}`);
-        
+
         // Get all users who have been invited (pending or accepted)
         const invitesSnap = await db.ref(`/games/${gameId}/invites`).once("value");
         const invitedUsers = new Set<string>();
@@ -340,23 +339,23 @@ export const onMailNotificationCreate = onValueCreated(
           }
         }
         console.log(`[${type}] Found ${invitedUsers.size} invited users: ${Array.from(invitedUsers).join(", ")}`);
-        
+
         // Combine players and invited users, filter out organizer
         const allUsersToNotify = new Set<string>([...players, ...invitedUsers]);
         allUsersToNotify.delete(organizerId);
-        
+
         console.log(`[${type}] Total users to notify: ${allUsersToNotify.size} (after excluding organizer)`);
-        
+
         if (allUsersToNotify.size === 0) {
           console.log(`[${type}] No users to notify for game ${gameId} (organizer: ${organizerId}, players: ${players.length}, invites: ${invitedUsers.size})`);
           return;
         }
-        
+
         // Get game details for notification
         const sport = (game.sport || "game").toString();
         const location = (game.location || "your location").toString();
         const organizerName = (game.organizerName || "Organizer").toString();
-        
+
         const updates: { [path: string]: any } = {};
         for (const uid of allUsersToNotify) {
           const path = `/users/${uid}/notifications/${notificationId}`;
@@ -376,7 +375,7 @@ export const onMailNotificationCreate = onValueCreated(
             };
           }
         }
-        
+
         if (Object.keys(updates).length > 0) {
           await db.ref().update(updates);
           console.log(`[${type}] Successfully sent ${Object.keys(updates).length} notifications for game ${gameId}`);
@@ -1120,244 +1119,6 @@ export const onInviteStatusChange = onValueWritten(
       }
     } catch (e) {
       console.error("Error processing invite status change:", e);
-    }
-  }
-);
-
-// Extract info from raw text block
-function extractInfoDict(rawText: string): {
-  location: string;
-  target_group: string;
-  cost: string;
-  date_time: string;
-} {
-  const lines = rawText.split("\n").map(line => line.trim()).filter(line => line);
-  const info = {
-    location: "-",
-    target_group: "-",
-    cost: "-",
-    date_time: "-"
-  };
-  let currentKey: string | null = null;
-
-  for (const line of lines) {
-    const lower = line.toLowerCase();
-    if (lower.startsWith("locatie") || lower.startsWith("location")) {
-      currentKey = "location";
-    } else if (lower.startsWith("doelgroep") || lower.startsWith("target group") || lower.startsWith("targetgroup")) {
-      currentKey = "target_group";
-    } else if (lower.startsWith("kosten") || lower.startsWith("cost")) {
-      currentKey = "cost";
-    } else if (lower.startsWith("datum") || lower.startsWith("date")) {
-      currentKey = "date_time";
-    } else if (currentKey) {
-      if (info[currentKey as keyof typeof info] === "-") {
-        info[currentKey as keyof typeof info] = line;
-      } else {
-        info[currentKey as keyof typeof info] += " | " + line;
-      }
-    }
-  }
-
-  // Clean up trailing junk from date_time
-  if (info.date_time !== "-") {
-    info.date_time = info.date_time.split("|")[0].trim();
-  }
-
-  return info;
-}
-
-// Determine if event is recurring
-function isRecurringDateTime(input: string): boolean {
-  const lower = input.toLowerCase();
-  return !(lower.includes("1x") || lower.includes("eenmalig") || lower.includes("op inschrijving"));
-}
-
-// Scrape sport events from s-port.nl for a given locale ('en' | 'nl')
-async function scrapeSportEvents(locale: 'en' | 'nl' = 'en'): Promise<any[]> {
-  let browser;
-  try {
-    browser = await puppeteer.launch({
-      headless: true,
-      args: [
-        "--no-sandbox",
-        "--disable-setuid-sandbox",
-        "--disable-dev-shm-usage",
-        "--disable-gpu",
-        "--single-process",
-        "--disable-software-rasterizer"
-      ],
-      executablePath: puppeteer.executablePath()
-    });
-
-    const page = await browser.newPage();
-
-    // Set language cookie for requested locale
-    await page.setCookie({
-      name: 'locale',
-      value: locale,
-      path: '/',
-      domain: 'www.aanbod.s-port.nl'
-    });
-
-    // Load activities page
-    await page.goto(
-      "https://www.aanbod.s-port.nl/activiteiten?gemeente%5B0%5D=40&projecten%5B0%5D=5395&sort=name&order=asc",
-      { waitUntil: "networkidle2" }
-    );
-
-    // Scroll to load all content
-    for (let i = 0; i < 10; i++) {
-      await page.evaluate(() => {
-        window.scrollTo(0, document.body.scrollHeight);
-      });
-      await page.waitForTimeout(2000);
-    }
-
-    // Wait for activity cards
-    await page.waitForSelector(".activity", { timeout: 15000 });
-
-    // Extract all events
-    const events = await page.evaluate(() => {
-      const cards = Array.from(document.querySelectorAll(".activity"));
-      const results: any[] = [];
-
-      for (const card of cards) {
-        try {
-          const titleElem = card.querySelector("h2 a");
-          const title = titleElem?.textContent?.trim() || "-";
-          const url = titleElem?.getAttribute("href") || "-";
-
-          const imageElem = card.querySelector("img");
-          const imageUrl = imageElem?.getAttribute("src") || "";
-
-          const organizerElem = card.querySelector("span.location");
-          const organizer = organizerElem?.textContent?.trim() || "-";
-
-          const infoElem = card.querySelector(".info");
-          const rawInfo = infoElem?.textContent?.trim() || "";
-
-          results.push({
-            title,
-            url,
-            organizer,
-            rawInfo,
-            imageUrl
-          });
-        } catch (err) {
-          console.error("Error extracting card:", err);
-        }
-      }
-
-      return results;
-    });
-
-    // Process events
-    const processedEvents = events.map((event: any) => {
-      const info = extractInfoDict(event.rawInfo || "");
-      const cost = info.cost.trim().replace(/^·\s*/, "").trim();
-      const isRecurring = isRecurringDateTime(info.date_time);
-
-      return {
-        title: event.title,
-        url: event.url,
-        organizer: event.organizer,
-        location: info.location,
-        target_group: info.target_group,
-        cost: cost,
-        date_time: info.date_time,
-        imageUrl: event.imageUrl,
-        isRecurring
-      };
-    });
-
-    console.log(`Scraped ${processedEvents.length} events for locale ${locale}`);
-    return processedEvents;
-
-  } catch (error) {
-    console.error("Error scraping events:", error);
-    throw error;
-  } finally {
-    if (browser) {
-      await browser.close();
-    }
-  }
-}
-
-// Scheduled function to fetch sport events daily
-export const fetchSportEvents = onSchedule(
-  {
-    schedule: "0 2 * * *", // Every day at 2 AM
-    timeZone: "Europe/Amsterdam",
-    memory: "1GiB",
-    timeoutSeconds: 540, // 9 minutes
-  },
-  async (event) => {
-    console.log("Starting daily event scrape...");
-
-    try {
-      const [eventsEn, eventsNl] = await Promise.all([
-        scrapeSportEvents('en'),
-        scrapeSportEvents('nl'),
-      ]);
-
-      // Save to Firebase Realtime Database
-      const db = admin.database();
-      await db.ref("events/latest").set({
-        events_en: eventsEn,
-        events_nl: eventsNl,
-        // Backward compatibility for older app versions
-        events: eventsEn,
-        lastUpdated: Date.now(),
-      });
-
-      console.log(`Stored EN:${eventsEn.length} NL:${eventsNl.length} events`);
-      return;
-    } catch (error) {
-      console.error("Error in fetchSportEvents:", error);
-      throw error;
-    }
-  }
-);
-
-// Manual HTTP trigger to fetch and store events on-demand
-export const manualFetchEvents = onRequest(
-  {
-    region: "europe-west1",
-    timeoutSeconds: 540,
-    memory: "1GiB",
-  },
-  async (req, res) => {
-    try {
-      const lang = (req.query.lang as string | undefined)?.toLowerCase();
-      if (lang === 'en' || lang === 'nl') {
-        const events = await scrapeSportEvents(lang);
-        const db = admin.database();
-        await db.ref("events/latest").update({
-          [lang === 'en' ? 'events_en' : 'events_nl']: events,
-          // Keep default events pointer to EN
-          ...(lang === 'en' ? { events } : {}),
-          lastUpdated: Date.now(),
-        });
-        res.json({ success: true, count: events.length, locale: lang });
-        return;
-      }
-
-      const [eventsEn, eventsNl] = await Promise.all([
-        scrapeSportEvents('en'),
-        scrapeSportEvents('nl'),
-      ]);
-      const db = admin.database();
-      await db.ref("events/latest").set({
-        events_en: eventsEn,
-        events_nl: eventsNl,
-        events: eventsEn,
-        lastUpdated: Date.now(),
-      });
-      res.json({ success: true, count_en: eventsEn.length, count_nl: eventsNl.length });
-    } catch (error: any) {
-      console.error("Error in manualFetchEvents:", error);
-      res.status(500).json({ error: error?.message || "Unknown error" });
     }
   }
 );

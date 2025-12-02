@@ -340,7 +340,6 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
 
       // Fetch fields first (this is the main data we need)
       final rawFields = await fieldsActions.fetchFields(
-        areaName: 's-Hertogenbosch',
         sportType: sportType,
         bypassCache: true, // Force fresh fetch to debug
       );

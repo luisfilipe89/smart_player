@@ -1,4 +1,4 @@
-import express from 'express';
+import express, { Request, Response } from 'express';
 import { scrapeEvents } from './scraper.js';
 import admin from 'firebase-admin';
 
@@ -18,11 +18,11 @@ if (!admin.apps.length && DATABASE_URL) {
 
 const app = express();
 
-app.get('/health', (_req, res) => {
+app.get('/health', (_req: Request, res: Response) => {
     res.json({ ok: true });
 });
 
-app.post('/scrape', async (_req, res) => {
+app.post('/scrape', async (_req: Request, res: Response) => {
     try {
         const events = await scrapeEvents();
 

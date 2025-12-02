@@ -2,7 +2,7 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:move_young/models/external/event_model.dart';
-import 'package:move_young/services/load_events_from_json.dart';
+import 'package:move_young/services/load_events_from_firebase.dart';
 import 'package:move_young/services/auth/auth_provider.dart';
 import 'package:move_young/screens/welcome/welcome_screen.dart';
 import 'package:move_young/theme/tokens.dart';
@@ -69,7 +69,7 @@ class _HomeScreenNewState extends ConsumerState<HomeScreenNew> {
   Future<void> _fetch() async {
     setState(() => _state = _LoadState.loading);
     try {
-      final loaded = await loadEventsFromJson(
+      final loaded = await loadEventsFromFirebase(
         lang: context.locale.languageCode,
       );
       if (!mounted) return;

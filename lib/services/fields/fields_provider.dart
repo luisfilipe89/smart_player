@@ -10,12 +10,11 @@ class FieldsActions {
   FieldsActions(this._local);
 
   Future<List<Map<String, dynamic>>> fetchFields({
-    required String areaName,
     required String sportType,
     bool bypassCache = false,
   }) async {
     final local =
-        await _local.loadFields(areaName: areaName, sportType: sportType);
+        await _local.loadFields(sportType: sportType);
     if (local != null && local.isNotEmpty) return local;
 
     return <Map<String, dynamic>>[];

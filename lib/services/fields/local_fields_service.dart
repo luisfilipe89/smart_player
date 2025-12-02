@@ -5,12 +5,8 @@ class LocalFieldsService {
   const LocalFieldsService();
 
   Future<List<Map<String, dynamic>>?> loadFields({
-    required String areaName,
     required String sportType,
   }) async {
-    // `areaName` kept for API compatibility; current GeoJSON is not area-specific.
-    // ignore: unused_local_variable
-    final _ = areaName;
     final assetCandidates = _resolveAssetCandidates(sportType);
 
     String? raw;
@@ -38,8 +34,26 @@ class LocalFieldsService {
           final properties =
               Map<String, dynamic>.from(map['properties'] as Map? ?? const {});
           final id = (map['id'] ?? properties['@id'])?.toString();
-          final coords = _extractLatLon(map['geometry']);
-          if (coords == null) {
+
+          // Prefer pre-calculated coordinates from properties (added by reverse geocoding script)
+          // Fallback to extracting from geometry for backward compatibility
+          double? lat;
+          double? lon;
+
+          if (properties['lat'] != null && properties['lon'] != null) {
+            // Use pre-calculated coordinates
+            lat = _toDouble(properties['lat']);
+            lon = _toDouble(properties['lon']);
+          } else {
+            // Fallback: extract from geometry (for files without pre-calculated coordinates)
+            final coords = _extractLatLon(map['geometry']);
+            if (coords != null) {
+              lat = coords.$1;
+              lon = coords.$2;
+            }
+          }
+
+          if (lat == null || lon == null) {
             return const <String, dynamic>{};
           }
 
@@ -56,8 +70,8 @@ class LocalFieldsService {
           return {
             'id': id,
             'name': resolvedName,
-            'lat': coords.$1,
-            'lon': coords.$2,
+            'lat': lat,
+            'lon': lon,
             'surface': properties['surface'],
             'lit': properties['lit'],
             'addr:street': properties['addr:street'],
@@ -183,29 +197,6 @@ class LocalFieldsService {
         }
         if (count > 0) {
           return (sumLat / count, sumLon / count);
-        }
-      }
-    }
-
-    if (type == 'MultiPolygon' &&
-        coordinates is List &&
-        coordinates.isNotEmpty) {
-      for (final polygon in coordinates) {
-        final result =
-            _extractLatLon({'type': 'Polygon', 'coordinates': polygon});
-        if (result != null) {
-          return result;
-        }
-      }
-    }
-
-    if (type == 'LineString' && coordinates is List && coordinates.isNotEmpty) {
-      final first = coordinates.first;
-      if (first is List && first.length >= 2) {
-        final lon = _toDouble(first[0]);
-        final lat = _toDouble(first[1]);
-        if (lat != null && lon != null) {
-          return (lat, lon);
         }
       }
     }

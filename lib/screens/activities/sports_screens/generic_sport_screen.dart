@@ -136,7 +136,6 @@ class _GenericSportScreenState extends ConsumerState<GenericSportScreen>
       final fieldsActions = ref.read(fieldsActionsProvider);
       final locations = await fieldsActions
           .fetchFields(
-            areaName: 's-Hertogenbosch',
             sportType: widget.sportType,
             bypassCache: bypassCache,
           )

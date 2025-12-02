@@ -9,20 +9,6 @@
   "firestore": {
     "rules": "firestore.rules"
   },
-  "hosting": {
-    "public": "public",
-    "ignore": [
-      "firebase.json",
-      "**/.*",
-      "**/node_modules/**"
-    ],
-    "rewrites": [
-      {
-        "source": "**",
-        "destination": "/index.html"
-      }
-    ]
-  },
   "emulators": {
     "auth": {
       "host": "0.0.0.0",

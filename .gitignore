@@ -18,6 +18,9 @@ migrate_working_dir/
 *.iws
 .idea/
 
+# Cursor IDE
+.cursor/
+
 # The .vscode folder contains launch configuration and tasks you configure in
 # VS Code which you may wish to be included in version control, so this line
 # is commented out by default.
@@ -32,6 +35,16 @@ migrate_working_dir/
 .pub-cache/
 .pub/
 /build/
+
+# Unused platforms (delete if not developing for these)
+windows/
+web/
+macos/
+linux/
+ios/
+
+# Firebase Hosting (not needed for mobile-only apps)
+public/
 
 # Symbolication related
 app.*.symbols
@@ -53,6 +66,8 @@ flutter_*.log
 flutter_*.png
 *_output*.txt
 analyzer_*.txt
+*-debug.log
+.logs/
 
 # Coverage reports
 coverage/
@@ -61,3 +76,14 @@ coverage/
 # Test outputs
 test/.test_coverage.dart.json
 test-results*.txt
+
+# Node.js / npm
+node_modules/
+package-lock.json
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# TypeScript build outputs
+**/dist/
+*.tsbuildinfo

@@ -11,9 +11,7 @@ Usage:
 from __future__ import annotations
 
 import json
-import math
 import pathlib
-import shutil
 import sys
 import time
 import typing as t
@@ -24,7 +22,6 @@ from urllib import parse, request
 NOMINATIM_ENDPOINT = "https://nominatim.openstreetmap.org/reverse"
 INPUT_DIR = pathlib.Path("assets/fields/input")
 OUTPUT_DIR = pathlib.Path("assets/fields/output")
-PROCESSED_DIR = pathlib.Path("assets/fields/processed")
 DELAY_SECONDS = 1.1  # Keep >=1s for public Nominatim
 
 
@@ -49,69 +46,42 @@ def _rate_limited_get(url: str, params: dict[str, t.Any], delay_seconds: float) 
     return payload
 
 
-def _centroid_of_polygon(ring: list[list[float]]) -> tuple[float, float]:
-    """Return the centroid of a polygon ring using the area-weighted method."""
+def _average_of_polygon(ring: list[list[float]]) -> tuple[float, float]:
+    """Return the average (arithmetic mean) of all coordinates in a polygon ring.
+    
+    This matches the coordinate extraction method used in the Flutter app.
+    For closed polygons, the last point (duplicate of first) is excluded.
+    """
     if len(ring) < 3:
         raise ValueError("Polygon ring must have at least three coordinates")
-
-    twice_area = 0.0
-    cx = 0.0
-    cy = 0.0
-
-    for i in range(len(ring) - 1):
-        x0, y0 = ring[i]
-        x1, y1 = ring[i + 1]
-        cross = x0 * y1 - x1 * y0
-        twice_area += cross
-        cx += (x0 + x1) * cross
-        cy += (y0 + y1) * cross
-
-    if math.isclose(twice_area, 0.0):
-        # Degenerate polygon; fall back to simple average.
-        avg_x = sum(coord[0] for coord in ring[:-1]) / (len(ring) - 1)
-        avg_y = sum(coord[1] for coord in ring[:-1]) / (len(ring) - 1)
-        return avg_x, avg_y
-
-    area = twice_area / 2.0
-    cx /= (6.0 * area)
-    cy /= (6.0 * area)
-    return cx, cy
+    
+    # For closed polygons, the last coordinate is typically a duplicate of the first
+    # Exclude it from the average calculation (matches Flutter app behavior)
+    coords_to_use = ring[:-1] if len(ring) > 1 and ring[0] == ring[-1] else ring
+    
+    sum_lon = sum(coord[0] for coord in coords_to_use)
+    sum_lat = sum(coord[1] for coord in coords_to_use)
+    count = len(coords_to_use)
+    
+    return sum_lon / count, sum_lat / count
 
 
 def feature_point(feature_geometry: dict[str, t.Any]) -> tuple[float, float]:
+    """Extract a single point from Point or Polygon geometry.
+    
+    For Point geometries, returns the coordinates directly.
+    For Polygon geometries, returns the average of all vertices.
+    """
     geom_type = feature_geometry["type"].lower()
     coords = feature_geometry["coordinates"]
 
     if geom_type == "point":
         return coords[0], coords[1]
-    if geom_type == "linestring":
-        lon = sum(pt[0] for pt in coords) / len(coords)
-        lat = sum(pt[1] for pt in coords) / len(coords)
-        return lon, lat
     if geom_type == "polygon":
         # Use the exterior ring (first ring). Assume coordinates are closed.
-        return _centroid_of_polygon(coords[0])
-    if geom_type == "multipolygon":
-        # Find the largest polygon by absolute area, use its centroid.
-        best = None
-        best_area = -1.0
-        for polygon in coords:
-            centroid = _centroid_of_polygon(polygon[0])
-            ring = polygon[0]
-            area = 0.0
-            for i in range(len(ring) - 1):
-                x0, y0 = ring[i]
-                x1, y1 = ring[i + 1]
-                area += x0 * y1 - x1 * y0
-            area = abs(area) / 2.0
-            if area > best_area:
-                best_area = area
-                best = centroid
-        if best is None:
-            raise ValueError("MultiPolygon had no valid polygons")
-        return best
+        return _average_of_polygon(coords[0])
 
-    raise NotImplementedError(f"Unsupported geometry type: {geom_type}")
+    raise NotImplementedError(f"Unsupported geometry type: {geom_type}. Only Point and Polygon are supported.")
 
 
 @dataclass
@@ -216,6 +186,9 @@ def process_geojson_file(input_path: pathlib.Path, output_path: pathlib.Path) ->
         micro_short_address = format_micro_short_address(address)
 
         properties = dict(feature.get("properties", {}))
+        # Store pre-calculated coordinates for efficient app loading
+        properties["lat"] = lat
+        properties["lon"] = lon
         if response.display_name:
             properties["address_display_name"] = response.display_name
         if short_address:
@@ -247,14 +220,6 @@ def process_geojson_file(input_path: pathlib.Path, output_path: pathlib.Path) ->
     return 0
 
 
-def move_to_processed(input_path: pathlib.Path) -> None:
-    """Move a processed input file to the processed directory."""
-    PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
-    processed_path = PROCESSED_DIR / input_path.name
-    shutil.move(str(input_path), str(processed_path))
-    print(f"  Moved {input_path.name} to {PROCESSED_DIR}", file=sys.stderr)
-
-
 def main() -> int:
     """Process all <sport>_overpass.geojson files from input directory."""
     if not INPUT_DIR.exists():
@@ -278,9 +243,6 @@ def main() -> int:
         result = process_geojson_file(input_file, output_file)
         if result != 0:
             return result
-
-        # Move processed file to processed directory
-        move_to_processed(input_file)
 
     print("All files processed successfully!", file=sys.stderr)
     return 0
