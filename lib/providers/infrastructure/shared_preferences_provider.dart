@@ -1,6 +1,6 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:move_young/utils/logger.dart';
 
 /// SharedPreferences instance initialized early in main()
 /// This ensures platform channels are ready before first access
@@ -20,7 +20,7 @@ Future<void> _waitForPlatformChannels() async {
   // Additional buffer for slow devices or plugin registration delays
   await Future.delayed(const Duration(milliseconds: 300));
 
-  debugPrint(
+  NumberedLogger.d(
       '[SharedPreferences] Platform channel wait complete (600ms total)');
 }
 
@@ -32,29 +32,29 @@ Future<SharedPreferences?> initializeSharedPreferencesEarly() async {
   }
 
   try {
-    debugPrint('[SharedPreferences] Early initialization in main()...');
+    NumberedLogger.d('[SharedPreferences] Early initialization in main()...');
 
     // Wait for platform channels to be fully ready
     await _waitForPlatformChannels();
 
     final prefs = await SharedPreferences.getInstance();
     _earlyInitializedPrefs = prefs;
-    debugPrint('[SharedPreferences] Early initialization successful');
+    NumberedLogger.i('[SharedPreferences] Early initialization successful');
     return prefs;
   } catch (e) {
-    debugPrint('[SharedPreferences] Early initialization failed: $e');
+    NumberedLogger.w('[SharedPreferences] Early initialization failed: $e');
     // Retry with longer wait
     try {
-      debugPrint('[SharedPreferences] Retrying after longer delay...');
+      NumberedLogger.d('[SharedPreferences] Retrying after longer delay...');
       await Future.delayed(const Duration(milliseconds: 2000));
       await _waitForPlatformChannels();
       final prefs = await SharedPreferences.getInstance();
       _earlyInitializedPrefs = prefs;
-      debugPrint(
+      NumberedLogger.i(
           '[SharedPreferences] Early initialization successful on retry');
       return prefs;
     } catch (e2) {
-      debugPrint(
+      NumberedLogger.e(
           '[SharedPreferences] Early initialization retry also failed: $e2');
       // Don't throw - let FutureProvider handle retry later
       return null;
@@ -69,29 +69,29 @@ final sharedPreferencesProvider =
     FutureProvider<SharedPreferences>((ref) async {
   // If already initialized early, use that
   if (_earlyInitializedPrefs != null) {
-    debugPrint('[SharedPreferences] Using early-initialized instance');
+    NumberedLogger.d('[SharedPreferences] Using early-initialized instance');
     return _earlyInitializedPrefs!;
   }
 
   // Otherwise, try to initialize now (shouldn't happen if early init worked)
   try {
-    debugPrint('[SharedPreferences] Lazy initialization...');
+    NumberedLogger.d('[SharedPreferences] Lazy initialization...');
     await Future.delayed(const Duration(milliseconds: 200));
     final prefs = await SharedPreferences.getInstance();
     _earlyInitializedPrefs = prefs;
-    debugPrint('[SharedPreferences] Lazy initialization successful');
+    NumberedLogger.i('[SharedPreferences] Lazy initialization successful');
     return prefs;
   } catch (e) {
-    debugPrint('[SharedPreferences] Lazy initialization failed: $e');
+    NumberedLogger.w('[SharedPreferences] Lazy initialization failed: $e');
     // Retry once
     try {
       await Future.delayed(const Duration(milliseconds: 1000));
       final prefs = await SharedPreferences.getInstance();
       _earlyInitializedPrefs = prefs;
-      debugPrint('[SharedPreferences] Lazy initialization successful on retry');
+      NumberedLogger.i('[SharedPreferences] Lazy initialization successful on retry');
       return prefs;
     } catch (e2) {
-      debugPrint(
+      NumberedLogger.e(
           '[SharedPreferences] Lazy initialization retry also failed: $e2');
       // Re-throw to let Riverpod handle the error state
       rethrow;

@@ -25,7 +25,7 @@ class _OfflineBannerState extends ConsumerState<OfflineBanner>
 
   bool _isOffline = false;
   bool _isVisible = false;
-  StreamSubscription<bool>? _connectivitySubscription;
+  ProviderSubscription<AsyncValue<bool>>? _connectivitySubscription;
 
   @override
   void initState() {
@@ -50,42 +50,46 @@ class _OfflineBannerState extends ConsumerState<OfflineBanner>
   }
 
   void _listenToConnectivity() {
-    ref.listenManual(connectivityStatusProvider, (previous, next) {
-      next.whenData((isConnected) {
-        if (mounted) {
-          setState(() {
-            final wasOffline = _isOffline;
-            _isOffline = !isConnected;
+    _connectivitySubscription?.close();
+    _connectivitySubscription = ref.listenManual(
+      connectivityStatusProvider,
+      (previous, next) {
+        next.whenData((isConnected) {
+          if (mounted) {
+            setState(() {
+              final wasOffline = _isOffline;
+              _isOffline = !isConnected;
 
-            // Show banner when going offline or coming back online
-            if (_isOffline != wasOffline) {
-              _isVisible = true;
-              if (_isOffline) {
-                _animationController.forward();
-              } else {
-                // When coming back online, show green banner briefly then hide
-                _animationController.reverse().then((_) {
-                  if (mounted) {
-                    Future.delayed(const Duration(seconds: 2), () {
-                      if (mounted) {
-                        setState(() {
-                          _isVisible = false;
-                        });
-                      }
-                    });
-                  }
-                });
+              // Show banner when going offline or coming back online
+              if (_isOffline != wasOffline) {
+                _isVisible = true;
+                if (_isOffline) {
+                  _animationController.forward();
+                } else {
+                  // When coming back online, show green banner briefly then hide
+                  _animationController.reverse().then((_) {
+                    if (mounted) {
+                      Future.delayed(const Duration(seconds: 2), () {
+                        if (mounted) {
+                          setState(() {
+                            _isVisible = false;
+                          });
+                        }
+                      });
+                    }
+                  });
+                }
               }
-            }
-          });
-        }
-      });
-    });
+            });
+          }
+        });
+      },
+    );
   }
 
   @override
   void dispose() {
-    _connectivitySubscription?.cancel();
+    _connectivitySubscription?.close();
     _animationController.dispose();
     super.dispose();
   }

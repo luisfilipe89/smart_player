@@ -2,7 +2,7 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:move_young/features/agenda/models/event_model.dart';
-import 'package:move_young/features/agenda/services/events_service.dart';
+import 'package:move_young/features/agenda/services/events_provider.dart';
 import 'package:move_young/features/auth/services/auth_provider.dart';
 import 'package:move_young/features/welcome/screens/welcome_screen.dart';
 import 'package:move_young/theme/tokens.dart';
@@ -16,6 +16,7 @@ import 'package:move_young/providers/locale_controller.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:move_young/features/games/services/cloud_games_provider.dart';
 import 'package:move_young/services/system/haptics_provider.dart';
+import 'package:move_young/utils/logger.dart';
 import 'dart:async';
 
 // Loading state for events
@@ -69,7 +70,8 @@ class _HomeScreenNewState extends ConsumerState<HomeScreenNew> {
   Future<void> _fetch() async {
     setState(() => _state = _LoadState.loading);
     try {
-      final loaded = await loadEventsFromFirebase(
+      final eventsService = ref.read(eventsServiceProvider);
+      final loaded = await eventsService.loadEvents(
         lang: context.locale.languageCode,
       );
       if (!mounted) return;
@@ -79,7 +81,7 @@ class _HomeScreenNewState extends ConsumerState<HomeScreenNew> {
       });
     } catch (e, st) {
       assert(() {
-        debugPrint('Events load failed: $e\n$st');
+        NumberedLogger.e('Events load failed: $e\n$st');
         return true;
       }());
       if (!mounted) return;
@@ -96,7 +98,10 @@ class _HomeScreenNewState extends ConsumerState<HomeScreenNew> {
       final invited = await cloudGamesService.getInvitedGamesForCurrentUser();
       if (!mounted) return;
       setState(() => _pendingInvites = invited.length);
-    } catch (_) {}
+    } catch (e, stack) {
+      NumberedLogger.e('Error refreshing invites: $e');
+      NumberedLogger.d('Stack trace: $stack');
+    }
   }
 
   void _watchPendingInvites() {
@@ -109,7 +114,7 @@ class _HomeScreenNewState extends ConsumerState<HomeScreenNew> {
           setState(() => _pendingInvites = n);
         },
         onError: (error) {
-          debugPrint('Error watching pending invites: $error');
+          NumberedLogger.e('Error watching pending invites: $error');
           // Optionally refresh on error
           if (mounted) {
             _refreshInvites();
@@ -117,7 +122,10 @@ class _HomeScreenNewState extends ConsumerState<HomeScreenNew> {
         },
         cancelOnError: true,
       );
-    } catch (_) {}
+    } catch (e, stack) {
+      NumberedLogger.e('Error setting up invite watcher: $e');
+      NumberedLogger.d('Stack trace: $stack');
+    }
   }
 
   @override
@@ -187,7 +195,9 @@ class _HomeScreenNewState extends ConsumerState<HomeScreenNew> {
               try {
                 final ctrl = ref.read(localeControllerProvider);
                 await ctrl.saveLocale(newLocale);
-              } catch (_) {}
+              } catch (e) {
+                NumberedLogger.e('Error saving locale: $e');
+              }
             },
             style: TextButton.styleFrom(foregroundColor: AppColors.blackIcon),
           ),
@@ -209,7 +219,9 @@ class _HomeScreenNewState extends ConsumerState<HomeScreenNew> {
               try {
                 final h = ref.read(hapticsServiceProvider);
                 await h?.mediumImpact();
-              } catch (_) {}
+              } catch (e) {
+                NumberedLogger.w('Error triggering haptic feedback: $e');
+              }
             }
           },
           child: ListView(

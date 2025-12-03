@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kReleaseMode;
 import 'package:flutter/services.dart';
 // No explicit DartPluginRegistrant import; rely on default plugin registration
 import 'package:easy_localization/easy_localization.dart';
@@ -49,13 +50,67 @@ void main() async {
       // The FutureProvider will use the early-initialized instance when ready
       initializeSharedPreferencesEarly();
 
+      // Set up global error widget builder for widget build-time errors
+      // This catches errors that occur during widget build, preventing app crashes
+      ErrorWidget.builder = (FlutterErrorDetails details) {
+        NumberedLogger.e('Widget build error: ${details.exception}');
+        NumberedLogger.d('Stack: ${details.stack}');
+
+        // Report to Crashlytics in production
+        if (kReleaseMode) {
+          try {
+            FirebaseCrashlytics.instance.recordError(
+              details.exception,
+              details.stack,
+              reason: 'Widget build error',
+              fatal: false,
+            );
+          } catch (_) {
+            // Crashlytics not ready; ignore
+          }
+        }
+
+        // Return a safe error widget instead of crashing
+        // Note: We can't use translations here as EasyLocalization may not be initialized
+        return Material(
+          child: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(
+                    Icons.error_outline,
+                    size: 64,
+                    color: Colors.red,
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Something went wrong while displaying this content.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 16),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Please restart the app.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 14, color: Colors.grey),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      };
+
       // Handle errors gracefully and report to Crashlytics when available
       FlutterError.onError = (FlutterErrorDetails details) {
         // Filter platform channel noise
         if (details.exception is PlatformException) {
           final error = details.exception as PlatformException;
           if (error.code == 'channel-error') {
-            debugPrint('Platform channel error (ignored): ${error.message}');
+            NumberedLogger.d(
+                'Platform channel error (ignored): ${error.message}');
             return;
           }
         }
@@ -97,7 +152,8 @@ void main() async {
 
       // Do not block startup on EasyLocalization internal init. We handle
       // locale persistence ourselves post-runApp to avoid channel races.
-      debugPrint('[Startup] Skipping EasyLocalization.ensureInitialized()');
+      NumberedLogger.d(
+          '[Startup] Skipping EasyLocalization.ensureInitialized()');
 
       // Render the first frame ASAP
       runApp(
@@ -119,16 +175,16 @@ void main() async {
     },
     (error, stack) {
       // Handle uncaught errors gracefully
-      debugPrint('Uncaught error in main: $error');
+      NumberedLogger.e('Uncaught error in main: $error');
       if (error is PlatformException && error.code == 'channel-error') {
-        debugPrint('Ignoring platform channel error during startup');
+        NumberedLogger.d('Ignoring platform channel error during startup');
         return;
       }
       // Ignore SQLite errors from calendar database (it's intentionally used for calendar tracking)
       // Only ignore if it's a missing plugin exception (package not installed yet)
       if (error.toString().contains('MissingPluginException') &&
           error.toString().contains('sqflite')) {
-        debugPrint(
+        NumberedLogger.d(
             'Ignoring SQLite plugin error (package may not be installed yet)');
         return;
       }
@@ -179,12 +235,12 @@ class _MoveYoungAppState extends ConsumerState<MoveYoungApp>
           final locale = ctrl.parseLocaleCode(saved);
           if (locale != null && mounted && context.mounted) {
             await context.setLocale(locale);
-            debugPrint(
+            NumberedLogger.i(
               '[Startup] Applied saved locale on prefs ready: ${locale.languageCode}',
             );
           }
         } catch (e) {
-          debugPrint('Failed to apply saved locale (late): $e');
+          NumberedLogger.w('Failed to apply saved locale (late): $e');
         }
       }
     });
@@ -196,12 +252,14 @@ class _MoveYoungAppState extends ConsumerState<MoveYoungApp>
 
       // Initialize non-critical Firebase services (AppCheck, Analytics)
       // This avoids blocking the first frame with non-critical initialization
-      unawaited(AppBootstrap.initializeDeferred());
+      unawaited(AppBootstrap.initializeDeferred().catchError((e) {
+        NumberedLogger.e('Deferred initialization failed: $e');
+      }));
 
       // After first frame, ensure SharedPreferences initialization is attempted
       // The early initialization started in main() should complete by now
       // FutureProvider will use that instance if available
-      debugPrint(
+      NumberedLogger.d(
           '[Startup] After first frame - SharedPreferences should be initializing');
 
       // Give SharedPreferences a moment to initialize after first frame
@@ -259,9 +317,12 @@ class _MoveYoungAppState extends ConsumerState<MoveYoungApp>
               // Initialize without blocking - permission requests are now non-blocking
               unawaited(ref
                   .read(notificationActionsProvider)
-                  .initialize(onDeepLinkNavigation: dispatcher.dispatch));
+                  .initialize(onDeepLinkNavigation: dispatcher.dispatch)
+                  .catchError((e) {
+                NumberedLogger.e('Notification initialization error: $e');
+              }));
             } catch (e) {
-              debugPrint(
+              NumberedLogger.e(
                   'Notification initialization error (non-critical): $e');
             }
           });
@@ -275,17 +336,25 @@ class _MoveYoungAppState extends ConsumerState<MoveYoungApp>
         // Only initialize once (build() can be called multiple times)
         if (!_syncServiceInitialized) {
           _syncServiceInitialized = true;
-          Future.delayed(const Duration(seconds: 1), () async {
+          // Use microtask to ensure initialization happens after first frame
+          // but before the delayed execution, giving SharedPreferences time to initialize
+          Future.microtask(() async {
+            // Small delay to ensure SharedPreferences is ready
+            await Future.delayed(const Duration(milliseconds: 500));
             if (!mounted) return;
             try {
               final syncActions = ref.read(syncActionsProvider);
               if (syncActions != null) {
                 await syncActions.initialize();
-                debugPrint('Sync service initialized');
+                NumberedLogger.i('Sync service initialized');
+              } else {
+                NumberedLogger.w(
+                    'Sync service not available (SharedPreferences may not be ready)');
               }
-            } catch (e) {
-              debugPrint(
+            } catch (e, stack) {
+              NumberedLogger.w(
                   'Sync service initialization error (non-critical): $e');
+              NumberedLogger.d('Stack trace: $stack');
             }
           });
         }
@@ -420,13 +489,6 @@ class _WelcomeScreenWrapperState extends State<WelcomeScreenWrapper> {
   }
 }
 
-// Removed unused notification handlers - kept for reference if needed later
-
-// Removed unused navigation methods - kept for reference if needed later
-
-// Global variables for pending navigation
-// String? _pendingGameId; // Removed unused variable
-
 // Background message handler for Firebase Messaging
 // Note: This runs in a separate isolate, so it can't access platform channels
 @pragma('vm:entry-point')
@@ -439,10 +501,10 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
       );
     } catch (_) {}
 
-    debugPrint('Background message received: ${message.messageId}');
+    NumberedLogger.d('Background message received: ${message.messageId}');
   } catch (e) {
     // Suppress errors from plugin initialization in background isolate
     // (SharedPreferences, SQLite, etc. aren't available in background threads)
-    debugPrint('Background message handler error (suppressed): $e');
+    NumberedLogger.e('Background message handler error (suppressed): $e');
   }
 }

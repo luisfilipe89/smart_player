@@ -1,17 +1,17 @@
-// lib/services/friends_service_instance.dart
 import 'dart:async';
 import 'package:crypto/crypto.dart' as crypto;
 import 'dart:convert' show utf8;
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_database/firebase_database.dart';
-// import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:move_young/utils/logger.dart';
 import 'package:move_young/db/db_paths.dart';
 import 'package:move_young/models/infrastructure/cached_data.dart';
 // Cache TTL can be added later if needed
 import 'package:move_young/services/firebase_error_handler.dart';
+import 'package:move_young/services/error_handler/service_error_handler_mixin.dart';
 import 'package:move_young/services/notifications/notification_interface.dart';
 import 'package:move_young/features/friends/services/friends_service.dart';
+import 'package:move_young/models/infrastructure/service_error.dart';
 
 class _ProfileAccess {
   final bool allowed;
@@ -20,8 +20,8 @@ class _ProfileAccess {
 }
 
 /// Instance-based FriendsService for use with Riverpod dependency injection
-/// Error handling uses direct try-catch patterns for clarity and flexibility
-class FriendsServiceInstance implements IFriendsService {
+/// Uses standardized error handling mixin for consistent error handling patterns
+class FriendsServiceInstance with ServiceErrorHandlerMixin implements IFriendsService {
   final FirebaseAuth _auth;
   final FirebaseDatabase _db;
   final INotificationService _notificationService;
@@ -107,7 +107,9 @@ class FriendsServiceInstance implements IFriendsService {
 
   String _deriveNameFromEmail(String? email) {
     if (email == null || email.isEmpty) return 'User';
-    final String prefix = email.split('@').first;
+    final emailParts = email.split('@');
+    if (emailParts.isEmpty) return 'User';
+    final String prefix = emailParts[0];
     final String cleaned = prefix.replaceAll(RegExp(r"[^A-Za-z]"), '');
     if (cleaned.isEmpty) return prefix;
     return cleaned[0].toUpperCase() + cleaned.substring(1);
@@ -124,250 +126,261 @@ class FriendsServiceInstance implements IFriendsService {
       return _friendsCache[cacheKey]!.data;
     }
 
-    try {
-      final snapshot = await _safeGet(DbPaths.userFriends(uid));
-      if (snapshot.exists) {
-        final friendsData = snapshot.value as Map<dynamic, dynamic>;
-        final friends = friendsData.keys.map((key) => key.toString()).toList();
+    return handleListQueryError(
+      () async {
+        final snapshot = await _safeGet(DbPaths.userFriends(uid));
+        if (snapshot.exists) {
+          final friendsData = snapshot.value as Map<dynamic, dynamic>;
+          final friends = friendsData.keys.map((key) => key.toString()).toList();
 
-        // Cache the result
-        _friendsCache[cacheKey] = CachedData(friends, DateTime.now());
-        return friends;
-      }
-      return [];
-    } catch (e) {
-      NumberedLogger.w('Error getting friends for $uid: $e');
-      return [];
-    }
+          // Cache the result
+          _friendsCache[cacheKey] = CachedData(friends, DateTime.now());
+          return friends;
+        }
+        return <String>[];
+      },
+      'getting friends for $uid',
+    );
   }
 
   // Get user's friend requests (sent)
   @override
   Future<List<String>> getUserFriendRequestsSent(String uid) async {
-    try {
-      final snapshot = await _safeGet(DbPaths.userFriendRequestsSent(uid));
-      if (snapshot.exists) {
-        final requestsData = snapshot.value as Map<dynamic, dynamic>;
-        return requestsData.keys.map((key) => key.toString()).toList();
-      }
-      return [];
-    } catch (e) {
-      NumberedLogger.w('Error getting sent friend requests for $uid: $e');
-      return [];
-    }
+    return handleListQueryError(
+      () async {
+        final snapshot = await _safeGet(DbPaths.userFriendRequestsSent(uid));
+        if (snapshot.exists) {
+          final requestsData = snapshot.value as Map<dynamic, dynamic>;
+          return requestsData.keys.map((key) => key.toString()).toList();
+        }
+        return <String>[];
+      },
+      'getting sent friend requests for $uid',
+    );
   }
 
   // Get user's friend requests (received)
   @override
   Future<List<String>> getUserFriendRequestsReceived(String uid) async {
-    try {
-      final snapshot = await _safeGet(DbPaths.userFriendRequestsReceived(uid));
-      if (snapshot.exists) {
-        final requestsData = snapshot.value as Map<dynamic, dynamic>;
-        return requestsData.keys.map((key) => key.toString()).toList();
-      }
-      return [];
-    } catch (e) {
-      NumberedLogger.w('Error getting received friend requests for $uid: $e');
-      return [];
-    }
+    return handleListQueryError(
+      () async {
+        final snapshot = await _safeGet(DbPaths.userFriendRequestsReceived(uid));
+        if (snapshot.exists) {
+          final requestsData = snapshot.value as Map<dynamic, dynamic>;
+          return requestsData.keys.map((key) => key.toString()).toList();
+        }
+        return <String>[];
+      },
+      'getting received friend requests for $uid',
+    );
   }
 
   // Send friend request
   @override
   Future<bool> sendFriendRequest(String toUid) async {
     final fromUid = _auth.currentUser?.uid;
-    if (fromUid == null) return false;
-
-    try {
-      // Check if already friends
-      final friends = await getUserFriends(fromUid);
-      if (friends.contains(toUid)) return false;
-
-      // Check if request already sent
-      final sentRequests = await getUserFriendRequestsSent(fromUid);
-      if (sentRequests.contains(toUid)) return false;
-
-      // Send request
-      await _db.ref().update({
-        '${DbPaths.userFriendRequestsSent(fromUid)}/$toUid': true,
-        '${DbPaths.userFriendRequestsReceived(toUid)}/$fromUid': true,
-      });
-
-      // Record the request for rate limiting
-      await _recordFriendRequest(fromUid);
-
-      // Send notification
-      await _notificationService.sendFriendRequestNotification(toUid, fromUid);
-
-      // Clear cache
-      _friendsCache.remove('friends_$fromUid');
-      _friendsCache.remove('friends_$toUid');
-
-      return true;
-    } catch (e) {
-      NumberedLogger.e('Error sending friend request: $e');
-      return false;
+    if (fromUid == null) {
+      throw const AuthException('User not authenticated');
     }
+
+    return handleBooleanError(
+      () async {
+        // Check if already friends
+        final friends = await getUserFriends(fromUid);
+        if (friends.contains(toUid)) return false;
+
+        // Check if request already sent
+        final sentRequests = await getUserFriendRequestsSent(fromUid);
+        if (sentRequests.contains(toUid)) return false;
+
+        // Send request
+        await _db.ref().update({
+          '${DbPaths.userFriendRequestsSent(fromUid)}/$toUid': true,
+          '${DbPaths.userFriendRequestsReceived(toUid)}/$fromUid': true,
+        });
+
+        // Record the request for rate limiting
+        await _recordFriendRequest(fromUid);
+
+        // Send notification
+        await _notificationService.sendFriendRequestNotification(toUid, fromUid);
+
+        // Clear cache
+        _friendsCache.remove('friends_$fromUid');
+        _friendsCache.remove('friends_$toUid');
+
+        return true;
+      },
+      'sending friend request',
+    );
   }
 
   // Accept friend request
   @override
   Future<bool> acceptFriendRequest(String fromUid) async {
     final toUid = _auth.currentUser?.uid;
-    if (toUid == null) return false;
-
-    try {
-      // Add to friends list for both users
-      await _db.ref().update({
-        '${DbPaths.userFriends(fromUid)}/$toUid': true,
-        '${DbPaths.userFriends(toUid)}/$fromUid': true,
-      });
-
-      // Remove from requests
-      await _db.ref().update({
-        '${DbPaths.userFriendRequestsSent(fromUid)}/$toUid': null,
-        '${DbPaths.userFriendRequestsReceived(toUid)}/$fromUid': null,
-      });
-
-      // Send notification
-      await _notificationService.sendFriendAcceptedNotification(
-        fromUid,
-        toUid,
-      );
-
-      // Clear cache
-      _friendsCache.remove('friends_$fromUid');
-      _friendsCache.remove('friends_$toUid');
-
-      return true;
-    } catch (e) {
-      NumberedLogger.e('Error accepting friend request: $e');
-      return false;
+    if (toUid == null) {
+      throw const AuthException('User not authenticated');
     }
+
+    return handleBooleanError(
+      () async {
+        // Add to friends list for both users
+        await _db.ref().update({
+          '${DbPaths.userFriends(fromUid)}/$toUid': true,
+          '${DbPaths.userFriends(toUid)}/$fromUid': true,
+        });
+
+        // Remove from requests
+        await _db.ref().update({
+          '${DbPaths.userFriendRequestsSent(fromUid)}/$toUid': null,
+          '${DbPaths.userFriendRequestsReceived(toUid)}/$fromUid': null,
+        });
+
+        // Send notification
+        await _notificationService.sendFriendAcceptedNotification(
+          fromUid,
+          toUid,
+        );
+
+        // Clear cache
+        _friendsCache.remove('friends_$fromUid');
+        _friendsCache.remove('friends_$toUid');
+
+        return true;
+      },
+      'accepting friend request',
+    );
   }
 
   // Decline friend request
   @override
   Future<bool> declineFriendRequest(String fromUid) async {
     final toUid = _auth.currentUser?.uid;
-    if (toUid == null) return false;
-
-    try {
-      // Remove the received request (allowed for current user)
-      await _db
-          .ref(DbPaths.userFriendRequestsReceived(toUid))
-          .child(fromUid)
-          .remove();
-
-      // Best-effort removal from sender's "sent" list (may fail due to rules)
-      try {
-        await _db
-            .ref(DbPaths.userFriendRequestsSent(fromUid))
-            .child(toUid)
-            .remove();
-      } catch (e) {
-        NumberedLogger.w(
-            'Unable to remove sent request entry for $fromUid -> $toUid: $e');
-      }
-
-      // Clear cache
-      _friendsCache.remove('friends_$fromUid');
-      _friendsCache.remove('friends_$toUid');
-
-      return true;
-    } catch (e) {
-      NumberedLogger.e('Error declining friend request: $e');
-      return false;
+    if (toUid == null) {
+      throw const AuthException('User not authenticated');
     }
+
+    return handleBooleanError(
+      () async {
+        // Remove the received request (allowed for current user)
+        await _db
+            .ref(DbPaths.userFriendRequestsReceived(toUid))
+            .child(fromUid)
+            .remove();
+
+        // Best-effort removal from sender's "sent" list (may fail due to rules)
+        // Use handleVoidError for this nested operation since failure is acceptable
+        await handleVoidError(
+          () => _db
+              .ref(DbPaths.userFriendRequestsSent(fromUid))
+              .child(toUid)
+              .remove(),
+          'removing sent request entry for $fromUid -> $toUid',
+        );
+
+        // Clear cache
+        _friendsCache.remove('friends_$fromUid');
+        _friendsCache.remove('friends_$toUid');
+
+        return true;
+      },
+      'declining friend request',
+    );
   }
 
   @override
   Future<bool> cancelFriendRequest(String toUid) async {
     final fromUid = _auth.currentUser?.uid;
-    if (fromUid == null) return false;
-
-    try {
-      await _db.ref().update({
-        '${DbPaths.userFriendRequestsSent(fromUid)}/$toUid': null,
-        '${DbPaths.userFriendRequestsReceived(toUid)}/$fromUid': null,
-      });
-
-      _friendsCache.remove('friends_$fromUid');
-      _friendsCache.remove('friends_$toUid');
-
-      return true;
-    } catch (e) {
-      NumberedLogger.e('Error cancelling friend request: $e');
-      return false;
+    if (fromUid == null) {
+      throw const AuthException('User not authenticated');
     }
+
+    return handleBooleanError(
+      () async {
+        await _db.ref().update({
+          '${DbPaths.userFriendRequestsSent(fromUid)}/$toUid': null,
+          '${DbPaths.userFriendRequestsReceived(toUid)}/$fromUid': null,
+        });
+
+        _friendsCache.remove('friends_$fromUid');
+        _friendsCache.remove('friends_$toUid');
+
+        return true;
+      },
+      'cancelling friend request',
+    );
   }
 
   // Remove friend
   @override
   Future<bool> removeFriend(String friendUid) async {
     final currentUid = _auth.currentUser?.uid;
-    if (currentUid == null) return false;
-
-    try {
-      // Remove from friends list for both users
-      await _db.ref().update({
-        '${DbPaths.userFriends(currentUid)}/$friendUid': null,
-        '${DbPaths.userFriends(friendUid)}/$currentUid': null,
-      });
-
-      // Notify the removed friend
-      await _notificationService.sendFriendRemovedNotification(
-        removedUserUid: friendUid,
-        removerUid: currentUid,
-      );
-
-      // Clear cache
-      _friendsCache.remove('friends_$currentUid');
-      _friendsCache.remove('friends_$friendUid');
-
-      return true;
-    } catch (e) {
-      NumberedLogger.e('Error removing friend: $e');
-      return false;
+    if (currentUid == null) {
+      throw const AuthException('User not authenticated');
     }
+
+    return handleBooleanError(
+      () async {
+        // Remove from friends list for both users
+        await _db.ref().update({
+          '${DbPaths.userFriends(currentUid)}/$friendUid': null,
+          '${DbPaths.userFriends(friendUid)}/$currentUid': null,
+        });
+
+        // Notify the removed friend
+        await _notificationService.sendFriendRemovedNotification(
+          removedUserUid: friendUid,
+          removerUid: currentUid,
+        );
+
+        // Clear cache
+        _friendsCache.remove('friends_$currentUid');
+        _friendsCache.remove('friends_$friendUid');
+
+        return true;
+      },
+      'removing friend',
+    );
   }
 
   // Block friend
   @override
   Future<bool> blockFriend(String friendUid) async {
     final currentUid = _auth.currentUser?.uid;
-    if (currentUid == null) return false;
-
-    try {
-      // Add to blocked users list
-      await _db.ref().update({
-        'users/$currentUid/blockedUsers/$friendUid': true,
-      });
-
-      // Remove from friends list if already friends
-      await _db.ref().update({
-        '${DbPaths.userFriends(currentUid)}/$friendUid': null,
-        '${DbPaths.userFriends(friendUid)}/$currentUid': null,
-      });
-
-      // Remove any pending friend requests
-      await _db.ref().update({
-        '${DbPaths.userFriendRequestsSent(currentUid)}/$friendUid': null,
-        '${DbPaths.userFriendRequestsReceived(currentUid)}/$friendUid': null,
-        '${DbPaths.userFriendRequestsSent(friendUid)}/$currentUid': null,
-        '${DbPaths.userFriendRequestsReceived(friendUid)}/$currentUid': null,
-      });
-
-      // Clear cache
-      _friendsCache.remove('friends_$currentUid');
-      _friendsCache.remove('friends_$friendUid');
-
-      return true;
-    } catch (e) {
-      NumberedLogger.e('Error blocking friend: $e');
-      return false;
+    if (currentUid == null) {
+      throw const AuthException('User not authenticated');
     }
+
+    return handleBooleanError(
+      () async {
+        // Add to blocked users list
+        await _db.ref().update({
+          'users/$currentUid/blockedUsers/$friendUid': true,
+        });
+
+        // Remove from friends list if already friends
+        await _db.ref().update({
+          '${DbPaths.userFriends(currentUid)}/$friendUid': null,
+          '${DbPaths.userFriends(friendUid)}/$currentUid': null,
+        });
+
+        // Remove any pending friend requests
+        await _db.ref().update({
+          '${DbPaths.userFriendRequestsSent(currentUid)}/$friendUid': null,
+          '${DbPaths.userFriendRequestsReceived(currentUid)}/$friendUid': null,
+          '${DbPaths.userFriendRequestsSent(friendUid)}/$currentUid': null,
+          '${DbPaths.userFriendRequestsReceived(friendUid)}/$currentUid': null,
+        });
+
+        // Clear cache
+        _friendsCache.remove('friends_$currentUid');
+        _friendsCache.remove('friends_$friendUid');
+
+        return true;
+      },
+      'blocking friend',
+    );
   }
 
   // Search users by email

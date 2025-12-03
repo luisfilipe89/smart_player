@@ -4,6 +4,7 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:move_young/services/system/sync_service_instance.dart';
 import 'package:move_young/services/system/sync_provider.dart';
 import 'package:move_young/theme/tokens.dart';
+import 'package:move_young/utils/logger.dart';
 
 /// Global sync status banner
 class GlobalSyncStatusBanner extends ConsumerStatefulWidget {
@@ -39,7 +40,7 @@ class _GlobalSyncStatusBannerState
     try {
       final syncService = ref.read(syncServiceProvider);
       if (syncService == null) {
-        debugPrint('Sync service not available yet');
+        NumberedLogger.d('Sync service not available yet');
         return;
       }
 
@@ -54,7 +55,7 @@ class _GlobalSyncStatusBannerState
         }
       });
     } catch (e) {
-      debugPrint('Failed to initialize sync listener: $e');
+      NumberedLogger.e('Failed to initialize sync listener: $e');
     }
   }
 
@@ -68,7 +69,7 @@ class _GlobalSyncStatusBannerState
         });
       }
     } catch (e) {
-      debugPrint('Failed to update sync status: $e');
+      NumberedLogger.e('Failed to update sync status: $e');
     }
   }
 

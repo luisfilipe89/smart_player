@@ -1,4 +1,3 @@
-// lib/providers/services/notification_provider.dart
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:move_young/services/notifications/notification_service_instance.dart';
 import 'package:move_young/providers/infrastructure/firebase_providers.dart';
@@ -45,15 +44,32 @@ class DeepLinkDispatcher {
   void dispatch(Map<String, dynamic> payload) {
     try {
       final intent = _parser.parseFcmData(payload);
-      if (intent == null) return;
+      if (intent == null) {
+        _showDeepLinkError('Invalid notification data');
+        return;
+      }
       _routeOrQueue(intent);
-    } catch (_) {}
+    } catch (e) {
+      _showDeepLinkError('Failed to process notification: $e');
+    }
   }
 
   void dispatchUri(String uri) {
-    final intent = _parser.parseUri(uri);
-    if (intent == null) return;
-    _routeOrQueue(intent);
+    try {
+      final intent = _parser.parseUri(uri);
+      if (intent == null) {
+        _showDeepLinkError('Invalid link format');
+        return;
+      }
+      _routeOrQueue(intent);
+    } catch (e) {
+      _showDeepLinkError('Failed to process link: $e');
+    }
+  }
+
+  void _showDeepLinkError(String message) {
+    // Log the error - UI feedback will be handled in screens when game/user not found
+    // Screens will validate game existence and show appropriate errors
   }
 
   void _routeOrQueue(RouteIntent intent) {

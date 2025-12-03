@@ -14,6 +14,8 @@ import 'package:move_young/features/profile/services/profile_settings_provider.d
 import 'package:move_young/utils/profanity.dart';
 import 'package:move_young/widgets/app_back_button.dart';
 import 'package:move_young/theme/tokens.dart';
+import 'package:move_young/services/firebase_error_handler.dart';
+import 'package:move_young/utils/logger.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
@@ -64,7 +66,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           _dateOfBirth = DateTime.fromMillisecondsSinceEpoch(dob);
         }
       }
-    } catch (_) {}
+    } catch (e, stack) {
+      NumberedLogger.e('Error loading user profile details: $e');
+      NumberedLogger.d('Stack trace: $stack');
+    }
     if (mounted) setState(() => _loadingDetails = false);
   }
 
@@ -104,9 +109,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       );
     } catch (e) {
       if (!mounted) return;
+      final errorMessage = FirebaseErrorHandler.getUserMessage(e);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-            content: Text('Error: ${e.toString()}'),
+            content: Text(errorMessage),
             backgroundColor: Colors.red),
       );
     } finally {
@@ -609,7 +615,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
       // Check file size (max 5MB)
       const int maxImageSizeBytes = 5 * 1024 * 1024; // 5MB
-      final fileSize = await File(picked.path).length();
+      final fileSize = await picked.length();
       if (fileSize > maxImageSizeBytes) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -680,9 +686,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       if (!mounted) return;
       setState(() => _uploading = false);
       final messenger = ScaffoldMessenger.of(context);
+      final errorMessage = FirebaseErrorHandler.getUserMessage(e);
       messenger.showSnackBar(
         SnackBar(
-            content: Text('Error: ${e.toString()}'),
+            content: Text(errorMessage),
             backgroundColor: Colors.red),
       );
     }
@@ -713,9 +720,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _uploading = false);
+      final errorMessage = FirebaseErrorHandler.getUserMessage(e);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-            content: Text('Error: ${e.toString()}'),
+            content: Text(errorMessage),
             backgroundColor: Colors.red),
       );
     }

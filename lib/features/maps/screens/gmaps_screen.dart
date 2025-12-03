@@ -10,6 +10,8 @@ import 'package:move_young/services/firebase_error_handler.dart';
 import 'package:move_young/services/reports/field_report_provider.dart';
 import 'package:move_young/theme/tokens.dart';
 import 'package:move_young/services/system/location_provider.dart';
+import 'package:move_young/utils/type_converters.dart';
+import 'package:move_young/utils/logger.dart';
 
 class GenericMapScreen extends ConsumerStatefulWidget {
   final String title;
@@ -73,20 +75,15 @@ class _GenericMapScreenState extends ConsumerState<GenericMapScreen> {
       setState(() {
         _locationError = ref.read(locationActionsProvider).mapError(e);
       });
-      debugPrint("Failed to get location: $e");
+      NumberedLogger.e("Failed to get location: $e");
     }
   }
 
   LatLng? _parseLatLng(Map<String, dynamic> loc) {
-    double? toDouble(dynamic value) {
-      if (value is num) return value.toDouble();
-      return double.tryParse(value?.toString() ?? '');
-    }
-
     final latValue = loc['lat'] ?? loc['latitude'];
     final lonValue = loc['lon'] ?? loc['longitude'];
-    final parsedLat = toDouble(latValue);
-    final parsedLon = toDouble(lonValue);
+    final parsedLat = safeToDouble(latValue);
+    final parsedLon = safeToDouble(lonValue);
 
     if (parsedLat == null || parsedLon == null) return null;
     return LatLng(parsedLat, parsedLon);

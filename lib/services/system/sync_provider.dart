@@ -1,26 +1,41 @@
-// lib/providers/services/sync_provider.dart
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:move_young/services/system/sync_service_instance.dart';
 import 'package:move_young/features/games/services/games_provider.dart';
 import 'package:move_young/features/friends/services/friends_provider.dart';
 import 'package:move_young/providers/infrastructure/shared_preferences_provider.dart';
 
-// Re-export SyncServiceInstance constants for convenience
+// Re-export SyncServiceInstance for convenience
+// Allows importing both syncServiceProvider and SyncServiceInstance from one place
+// Used by games_provider.dart and friends_provider.dart to access priority constants
 export 'sync_service_instance.dart' show SyncServiceInstance;
 
 // SyncService provider with dependency injection
 // Returns null if SharedPreferences is still loading or on error
+//
+// Uses ref.read() instead of ref.watch() to avoid circular dependency risks:
+// - syncServiceProvider depends on gamesServiceProvider and friendsServiceProvider
+// - gamesActionsProvider and friendsActionsProvider depend on syncActionsProvider
+// - syncActionsProvider depends on syncServiceProvider
+// By using ref.read(), we break the reactive dependency cycle while still
+// getting the required service instances for dependency injection.
 final syncServiceProvider = Provider<SyncServiceInstance?>((ref) {
-  final cloudGamesService = ref.watch(gamesServiceProvider);
-  final friendsService = ref.watch(friendsServiceProvider);
+  // Use ref.read() instead of ref.watch() since we don't need reactive updates
+  // The services are injected once and stored in SyncServiceInstance
+  final cloudGamesService = ref.read(gamesServiceProvider);
+  final friendsService = ref.read(friendsServiceProvider);
   final prefsAsync = ref.watch(sharedPreferencesProvider);
 
   return prefsAsync.when(
-    data: (prefs) => SyncServiceInstance(
-      cloudGamesService,
-      friendsService,
-      prefs,
-    ),
+    data: (prefs) {
+      final service = SyncServiceInstance(
+        cloudGamesService,
+        friendsService,
+        prefs,
+      );
+      // Dispose service when provider is disposed to prevent memory leaks
+      ref.onDispose(() => service.dispose());
+      return service;
+    },
     loading: () => null,
     error: (_, __) => null,
   );

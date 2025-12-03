@@ -1,8 +1,6 @@
-// lib/providers/services/cloud_games_provider.dart
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:move_young/features/games/services/cloud_games_service_instance.dart';
 import 'package:move_young/features/games/models/game.dart';
-// import 'package:move_young/features/auth/services/auth_provider.dart';
 import 'package:move_young/services/notifications/notification_provider.dart';
 import 'package:move_young/providers/infrastructure/firebase_providers.dart';
 
@@ -22,18 +20,6 @@ final cloudGamesServiceProvider = Provider<CloudGamesServiceInstance>((ref) {
     notificationService,
   );
 });
-
-// My games provider (reactive)
-// Moved to games_provider.dart
-
-// Joinable games provider (reactive)
-// Moved to games_provider.dart
-
-// Invited games provider (reactive)
-// Moved to games_provider.dart
-
-// Pending invites count provider (reactive stream)
-// Moved to games_provider.dart
 
 /// Provider for CloudGamesActions, a helper class for game operations.
 ///

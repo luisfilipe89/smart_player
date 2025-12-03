@@ -52,7 +52,7 @@ class CalendarEventsDb {
 
       _database = await openDatabase(
         path,
-        version: 1,
+        version: 2,
         onCreate: (db, version) async {
           await db.execute('''
             CREATE TABLE calendar_events (
@@ -61,8 +61,22 @@ class CalendarEventsDb {
               calendarId TEXT NOT NULL
             )
           ''');
+          // Create index on gameId for faster queries (gameId is already PRIMARY KEY, but explicit index helps)
+          await db.execute('''
+            CREATE INDEX IF NOT EXISTS idx_gameId ON calendar_events(gameId)
+          ''');
           developer.log('Calendar events table created',
               name: 'CalendarEventsDb');
+        },
+        onUpgrade: (db, oldVersion, newVersion) async {
+          if (oldVersion < 2) {
+            // Add index for existing databases
+            await db.execute('''
+              CREATE INDEX IF NOT EXISTS idx_gameId ON calendar_events(gameId)
+            ''');
+            developer.log('Calendar events database upgraded to version 2',
+                name: 'CalendarEventsDb');
+          }
         },
       );
       developer.log('Calendar events database initialized',

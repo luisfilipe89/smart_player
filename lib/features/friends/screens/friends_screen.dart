@@ -1,4 +1,3 @@
-// lib/features/friends/screens/friends_screen.dart
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -13,6 +12,7 @@ import 'package:move_young/theme/tokens.dart';
 import 'package:move_young/utils/service_helpers.dart' show showFloatingSnack;
 import 'package:move_young/widgets/app_back_button.dart';
 import 'package:move_young/widgets/tab_with_count.dart';
+import 'package:move_young/widgets/cached_data_indicator.dart';
 import 'package:shimmer/shimmer.dart';
 
 // Helper moved to utils/service_helpers.dart and imported above
@@ -148,11 +148,15 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen>
         leading: const AppBackButton(goHome: true),
         title: Text('friends'.tr()),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.person_add),
-            color: AppColors.primary,
-            onPressed: _showAddFriendSheet,
-            tooltip: 'friends_add_title'.tr(),
+          Semantics(
+            label: 'Add friend',
+            button: true,
+            child: IconButton(
+              icon: const Icon(Icons.person_add),
+              color: AppColors.primary,
+              onPressed: _showAddFriendSheet,
+              tooltip: 'friends_add_title'.tr(),
+            ),
           ),
         ],
         centerTitle: true,
@@ -170,15 +174,22 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen>
             else
               Consumer(
                 builder: (context, ref, child) {
+                  // Use select() to only rebuild when count changes, not on any list change
+                  final count = ref.watch(
+                    watchFriendsListProvider.select(
+                      (asyncValue) => asyncValue.maybeWhen(
+                        data: (friends) => friends.length,
+                        orElse: () => 0,
+                      ),
+                    ),
+                  );
+                  // Still need to check loading/error state for proper UI
                   final friendsAsync = ref.watch(watchFriendsListProvider);
                   return friendsAsync.when(
-                    data: (friends) {
-                      final count = friends.length;
-                      return TabWithCount(
-                        label: 'friends_tab_friends'.tr(),
-                        count: count,
-                      );
-                    },
+                    data: (_) => TabWithCount(
+                      label: 'friends_tab_friends'.tr(),
+                      count: count,
+                    ),
                     loading: () => Tab(text: 'friends_tab_friends'.tr()),
                     error: (_, __) => Tab(text: 'friends_tab_friends'.tr()),
                   );
@@ -189,17 +200,23 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen>
             else
               Consumer(
                 builder: (context, ref, child) {
-                  final requestsAsync = ref.watch(
-                    watchFriendRequestsReceivedProvider,
+                  // Use select() to only rebuild when count changes, not on any list change
+                  final requestsCount = ref.watch(
+                    watchFriendRequestsReceivedProvider.select(
+                      (asyncValue) => asyncValue.maybeWhen(
+                        data: (requests) => requests.length,
+                        orElse: () => 0,
+                      ),
+                    ),
                   );
+                  // Still need to check loading/error state for proper UI
+                  final requestsAsync =
+                      ref.watch(watchFriendRequestsReceivedProvider);
                   return requestsAsync.when(
-                    data: (requests) {
-                      final count = requests.length;
-                      return TabWithCount(
-                        label: 'friends_tab_requests'.tr(),
-                        count: count,
-                      );
-                    },
+                    data: (_) => TabWithCount(
+                      label: 'friends_tab_requests'.tr(),
+                      count: requestsCount,
+                    ),
                     loading: () => Tab(text: 'friends_tab_requests'.tr()),
                     error: (_, __) => Tab(text: 'friends_tab_requests'.tr()),
                   );
@@ -208,57 +225,59 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen>
           ],
         ),
       ),
-      body: SafeArea(
-        child: Padding(
-          padding: AppPaddings.symmHorizontalReg,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const SizedBox(height: 12),
-              // Suggestions section
-              if (uid != null) ...[
-                _SuggestionsSection(uid: uid),
+      body: CachedDataIndicator(
+        child: SafeArea(
+          child: Padding(
+            padding: AppPaddings.symmHorizontalReg,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
                 const SizedBox(height: 12),
-              ],
-              Expanded(
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: AppColors.white,
-                    borderRadius: BorderRadius.circular(AppRadius.container),
-                    boxShadow: AppShadows.md,
-                  ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(AppRadius.container),
-                    child: uid == null
-                        ? const SizedBox.shrink()
-                        : TabBarView(
-                            controller: _tabController,
-                            key: ValueKey(currentLocale.languageCode),
-                            children: [
-                              RefreshIndicator(
-                                onRefresh: () async {
-                                  // Refresh data immediately
-                                  ref.invalidate(watchFriendsListProvider);
-                                },
-                                child: _FriendsList(
-                                  uid: uid,
-                                  onAddFriend: _showAddFriendSheet,
+                // Suggestions section
+                if (uid != null) ...[
+                  _SuggestionsSection(uid: uid),
+                  const SizedBox(height: 12),
+                ],
+                Expanded(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: AppColors.white,
+                      borderRadius: BorderRadius.circular(AppRadius.container),
+                      boxShadow: AppShadows.md,
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(AppRadius.container),
+                      child: uid == null
+                          ? const SizedBox.shrink()
+                          : TabBarView(
+                              controller: _tabController,
+                              key: ValueKey(currentLocale.languageCode),
+                              children: [
+                                RefreshIndicator(
+                                  onRefresh: () async {
+                                    // Refresh data immediately
+                                    ref.invalidate(watchFriendsListProvider);
+                                  },
+                                  child: _FriendsList(
+                                    uid: uid,
+                                    onAddFriend: _showAddFriendSheet,
+                                  ),
                                 ),
-                              ),
-                              RefreshIndicator(
-                                onRefresh: () async {
-                                  ref.invalidate(
-                                    watchFriendRequestsReceivedProvider,
-                                  );
-                                },
-                                child: _RequestsList(uid: uid),
-                              ),
-                            ],
-                          ),
+                                RefreshIndicator(
+                                  onRefresh: () async {
+                                    ref.invalidate(
+                                      watchFriendRequestsReceivedProvider,
+                                    );
+                                  },
+                                  child: _RequestsList(uid: uid),
+                                ),
+                              ],
+                            ),
+                    ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

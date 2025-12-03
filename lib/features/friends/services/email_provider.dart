@@ -6,7 +6,8 @@ import 'package:move_young/providers/infrastructure/firebase_providers.dart';
 final emailServiceProvider = Provider<EmailServiceInstance>((ref) {
   final database = ref.watch(firebaseDatabaseProvider);
   final auth = ref.watch(firebaseAuthProvider);
-  return EmailServiceInstance(database, auth);
+  final firestore = ref.watch(firebaseFirestoreProvider);
+  return EmailServiceInstance(database, auth, firestore);
 });
 
 // Email actions provider

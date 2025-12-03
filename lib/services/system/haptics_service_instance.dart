@@ -1,4 +1,3 @@
-// lib/services/haptics_service_instance.dart
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:async';
@@ -20,12 +19,16 @@ class HapticsServiceInstance {
     try {
       _enabledCache = _prefs.getBool(_prefsKey) ?? true;
       _loaded = true;
-      _enabledController.add(_enabledCache);
+      if (!_enabledController.isClosed) {
+        _enabledController.add(_enabledCache);
+      }
     } catch (e) {
       // If SharedPreferences fails to initialize, use default value
       _enabledCache = true;
       _loaded = true;
-      _enabledController.add(_enabledCache);
+      if (!_enabledController.isClosed) {
+        _enabledController.add(_enabledCache);
+      }
     }
   }
 
@@ -44,10 +47,14 @@ class HapticsServiceInstance {
     _enabledCache = value;
     try {
       await _prefs.setBool(_prefsKey, value);
-      _enabledController.add(value);
+      if (!_enabledController.isClosed) {
+        _enabledController.add(value);
+      }
     } catch (e) {
       // If SharedPreferences fails, just update the cache and stream
-      _enabledController.add(value);
+      if (!_enabledController.isClosed) {
+        _enabledController.add(value);
+      }
     }
   }
 

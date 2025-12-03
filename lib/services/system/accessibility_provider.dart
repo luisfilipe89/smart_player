@@ -1,5 +1,3 @@
-// lib/providers/services/accessibility_provider.dart
-// import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:move_young/providers/infrastructure/shared_preferences_provider.dart';
 import 'accessibility_service_instance.dart';
@@ -18,6 +16,8 @@ final accessibilityServiceProvider =
       service.initialize().catchError((error) {
         NumberedLogger.w('Accessibility service initialization error: $error');
       });
+      // Dispose service when provider is disposed to prevent memory leaks
+      ref.onDispose(() => service.dispose());
       return service;
     },
     loading: () => null,

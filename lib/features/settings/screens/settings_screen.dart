@@ -8,6 +8,7 @@ import 'package:move_young/services/system/haptics_provider.dart';
 import 'package:move_young/services/system/accessibility_provider.dart';
 import 'package:move_young/features/settings/screens/notification_settings_screen.dart';
 import 'package:move_young/models/infrastructure/service_error.dart';
+import 'package:move_young/services/firebase_error_handler.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -63,8 +64,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       );
     } catch (e) {
       if (!mounted) return;
+      final errorMessage = FirebaseErrorHandler.getUserMessage(e);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString()), backgroundColor: Colors.red),
+        SnackBar(content: Text(errorMessage), backgroundColor: Colors.red),
       );
     } finally {
       if (mounted) setState(() => _submitting = false);

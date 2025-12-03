@@ -1,4 +1,3 @@
-// lib/features/games/screens/games_join_screen.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:easy_localization/easy_localization.dart';
@@ -13,6 +12,10 @@ import 'package:move_young/features/games/screens/game_detail_screen.dart';
 import 'dart:async';
 import 'package:move_young/navigation/main_scaffold.dart';
 import 'package:move_young/widgets/app_back_button.dart';
+import 'package:move_young/widgets/error_retry_widget.dart';
+import 'package:move_young/services/firebase_error_handler.dart';
+import 'package:move_young/widgets/cached_data_indicator.dart';
+import 'package:move_young/utils/logger.dart';
 
 class GamesJoinScreen extends ConsumerStatefulWidget {
   final String? highlightGameId;
@@ -25,6 +28,8 @@ class GamesJoinScreen extends ConsumerStatefulWidget {
 class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
   List<Game> _games = [];
   bool _isLoading = true;
+  bool _hasError = false;
+  String? _errorMessage;
   String _selectedSport = 'all';
   String _searchQuery = '';
   late final TextEditingController _searchController;
@@ -89,6 +94,8 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
     if (!mounted) return;
     setState(() {
       _isLoading = true;
+      _hasError = false;
+      _errorMessage = null;
     });
 
     try {
@@ -141,26 +148,22 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
       setState(() {
         _games = games;
         _isLoading = false;
+        _hasError = false;
       });
 
       // Scroll to and highlight the created game if requested
       if (_highlightId != null) {
         _scrollToHighlightedGame();
       }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('loading_error'.tr()),
-            backgroundColor: AppColors.red,
-          ),
-        );
-      }
+    } catch (e, stack) {
+      NumberedLogger.e('Error loading games: $e\n$stack');
+      if (!mounted) return;
+      final errorMsg = FirebaseErrorHandler.getUserMessage(e);
+      setState(() {
+        _isLoading = false;
+        _hasError = true;
+        _errorMessage = errorMsg;
+      });
     }
   }
 
@@ -311,10 +314,12 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
         elevation: 0,
       ),
       backgroundColor: AppColors.white,
-      body: SafeArea(
-        child: Padding(
-          padding: AppPaddings.symmHorizontalReg,
-          child: _buildBrowseTab(),
+      body: CachedDataIndicator(
+        child: SafeArea(
+          child: Padding(
+            padding: AppPaddings.symmHorizontalReg,
+            child: _buildBrowseTab(),
+          ),
         ),
       ),
     );
@@ -580,9 +585,7 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
                       color: currentGame.hasSpace
                           ? AppColors.green
                           : AppColors.red,
-                      icon: currentGame.isPublic
-                          ? Icons.lock_open
-                          : Icons.lock,
+                      icon: currentGame.isPublic ? Icons.lock_open : Icons.lock,
                       showDot: false,
                     ),
                     const SizedBox(width: 6),
@@ -820,8 +823,8 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
     final bool hasDeclinedInvite =
         myUid != null && finalInviteStatuses[myUid] == 'declined';
 
-    debugPrint(
-        '🎮 Game ${game.id}: isInvitedPending=$finalIsInvitedPending, isJoined=$isJoined, hasLeftGame=$hasLeftGame, hasDeclinedInvite=$hasDeclinedInvite');
+    NumberedLogger.d(
+        'Game ${game.id}: isInvitedPending=$finalIsInvitedPending, isJoined=$isJoined, hasLeftGame=$hasLeftGame, hasDeclinedInvite=$hasDeclinedInvite');
 
     if (finalIsInvitedPending && !isJoined) {
       return Row(
@@ -870,7 +873,8 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
                 backgroundColor: AppColors.green,
                 foregroundColor: Colors.white,
                 minimumSize: const Size(0, 40),
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 textStyle: AppTextStyles.small.copyWith(
                   fontWeight: FontWeight.w600,
                 ),
@@ -914,7 +918,8 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
                 foregroundColor: AppColors.red,
                 side: const BorderSide(color: AppColors.red, width: 1.5),
                 minimumSize: const Size(0, 40),
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 textStyle: AppTextStyles.small.copyWith(
                   fontWeight: FontWeight.w600,
                 ),
@@ -1212,67 +1217,78 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
 
                         return _isLoading
                             ? const _GamesSkeleton()
-                            : (_games.isEmpty && filteredInvited.isEmpty)
-                                ? Center(
-                                    child: Column(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.center,
-                                      children: [
-                                        const Icon(Icons.sports_soccer,
-                                            size: 64, color: AppColors.grey),
-                                        const SizedBox(height: AppHeights.reg),
-                                        Text(
-                                          'no_games_found'.tr(),
-                                          style: AppTextStyles.title.copyWith(
-                                            color: AppColors.grey,
-                                          ),
-                                        ),
-                                        const SizedBox(
-                                            height: AppHeights.small),
-                                        Text(
-                                          'no_games_found_description'.tr(),
-                                          style: AppTextStyles.body.copyWith(
-                                            color: AppColors.grey,
-                                          ),
-                                          textAlign: TextAlign.center,
-                                        ),
-                                      ],
-                                    ),
+                            : _hasError
+                                ? ErrorRetryWidget(
+                                    message:
+                                        _errorMessage ?? 'loading_error'.tr(),
+                                    onRetry: _loadGames,
+                                    icon: Icons.error_outline,
                                   )
-                                : RefreshIndicator(
-                                    onRefresh: () async {
-                                      await _loadGames();
-                                      // Invited games will update automatically via stream provider
-                                    },
-                                    child: Builder(builder: (context) {
-                                      // Merge lists with invited first, then sort non-invited games chronologically
-                                      final List<Game> nonInvited = _games
-                                          .where((g) => !filteredInvited
-                                              .any((i) => i.id == g.id))
-                                          .toList();
-                                      // Sort non-invited games by date (earliest first)
-                                      nonInvited.sort((a, b) =>
-                                          a.dateTime.compareTo(b.dateTime));
-                                      final List<Game> merged = [
-                                        ...filteredInvited,
-                                        ...nonInvited,
-                                      ];
-                                      return ListView.builder(
-                                        controller: _listController,
-                                        padding: EdgeInsets.zero,
-                                        itemCount: merged.length,
-                                        itemBuilder: (context, index) {
-                                          final game = merged[index];
-                                          final key = _itemKeys.putIfAbsent(
-                                              game.id, () => GlobalKey());
-                                          return KeyedSubtree(
-                                            key: key,
-                                            child: _buildGameCard(game),
-                                          );
+                                : (_games.isEmpty && filteredInvited.isEmpty)
+                                    ? Center(
+                                        child: Column(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.center,
+                                          children: [
+                                            const Icon(Icons.sports_soccer,
+                                                size: 64,
+                                                color: AppColors.grey),
+                                            const SizedBox(
+                                                height: AppHeights.reg),
+                                            Text(
+                                              'no_games_found'.tr(),
+                                              style:
+                                                  AppTextStyles.title.copyWith(
+                                                color: AppColors.grey,
+                                              ),
+                                            ),
+                                            const SizedBox(
+                                                height: AppHeights.small),
+                                            Text(
+                                              'no_games_found_description'.tr(),
+                                              style:
+                                                  AppTextStyles.body.copyWith(
+                                                color: AppColors.grey,
+                                              ),
+                                              textAlign: TextAlign.center,
+                                            ),
+                                          ],
+                                        ),
+                                      )
+                                    : RefreshIndicator(
+                                        onRefresh: () async {
+                                          await _loadGames();
+                                          // Invited games will update automatically via stream provider
                                         },
+                                        child: Builder(builder: (context) {
+                                          // Merge lists with invited first, then sort non-invited games chronologically
+                                          final List<Game> nonInvited = _games
+                                              .where((g) => !filteredInvited
+                                                  .any((i) => i.id == g.id))
+                                              .toList();
+                                          // Sort non-invited games by date (earliest first)
+                                          nonInvited.sort((a, b) =>
+                                              a.dateTime.compareTo(b.dateTime));
+                                          final List<Game> merged = [
+                                            ...filteredInvited,
+                                            ...nonInvited,
+                                          ];
+                                          return ListView.builder(
+                                            controller: _listController,
+                                            padding: EdgeInsets.zero,
+                                            itemCount: merged.length,
+                                            itemBuilder: (context, index) {
+                                              final game = merged[index];
+                                              final key = _itemKeys.putIfAbsent(
+                                                  game.id, () => GlobalKey());
+                                              return KeyedSubtree(
+                                                key: key,
+                                                child: _buildGameCard(game),
+                                              );
+                                            },
+                                          );
+                                        }),
                                       );
-                                    }),
-                                  );
                       }),
                     ),
                   ),

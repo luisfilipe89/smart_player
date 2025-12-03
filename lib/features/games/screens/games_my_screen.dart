@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:easy_localization/easy_localization.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:move_young/features/games/models/game.dart';
 import 'package:move_young/features/auth/services/auth_provider.dart';
 import 'package:move_young/features/games/services/games_provider.dart';
@@ -17,9 +18,13 @@ import 'package:move_young/utils/error_extensions.dart';
 import 'package:move_young/widgets/error_retry_widget.dart';
 import 'package:move_young/widgets/tab_with_count.dart';
 import 'package:move_young/widgets/app_back_button.dart';
+import 'package:move_young/widgets/cached_data_indicator.dart';
 import 'package:move_young/features/maps/screens/gmaps_screen.dart';
 import 'package:move_young/services/calendar/calendar_service.dart';
 import 'package:move_young/services/system/haptics_provider.dart';
+import 'package:move_young/models/infrastructure/cached_data.dart';
+import 'package:move_young/utils/logger.dart';
+import 'dart:async';
 
 class GamesMyScreen extends ConsumerStatefulWidget {
   final String? highlightGameId;
@@ -34,9 +39,11 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
     with SingleTickerProviderStateMixin {
   final Map<String, GlobalKey> _itemKeys = {};
   late final TabController _tab;
-  // Weather forecast cache per gameId: time("HH:00") -> condition
-  final Map<String, Map<String, String>> _weatherByGameId = {};
+  // Weather forecast cache per gameId with TTL (1 hour expiry)
+  // Cache expires after 1 hour to ensure fresh weather data
+  final Map<String, CachedData<Map<String, String>>> _weatherByGameId = {};
   final Set<String> _weatherLoading = <String>{};
+  static const Duration _weatherCacheTTL = Duration(hours: 1);
   // Calendar status cache per gameId: true = in calendar, false = not in calendar, null = checking
   final Map<String, bool?> _calendarStatusByGameId = {};
   final Set<String> _calendarLoading = <String>{};
@@ -46,6 +53,8 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
   // Track which profiles are currently loading to avoid duplicate requests
   final Set<String> _profileLoading = <String>{};
   String? _highlightId;
+  // Periodic stream for time countdown - created once to avoid memory leaks
+  late final Stream<int> _periodicMinuteStream;
 
   @override
   void initState() {
@@ -53,6 +62,11 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
     _tab =
         TabController(length: 3, vsync: this, initialIndex: widget.initialTab);
     _highlightId = widget.highlightGameId;
+    // Create periodic stream once in initState to avoid creating new streams on every rebuild
+    _periodicMinuteStream = Stream.periodic(
+      const Duration(minutes: 1),
+      (i) => i,
+    );
 
     // Auto-refresh when user switches to the Joining tab (index 0)
     _tab.addListener(() {
@@ -72,72 +86,80 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
   }
 
   /// Pre-load calendar statuses for all games from database
+  /// Moved to isolate to avoid blocking main thread
   Future<void> _preloadCalendarStatuses() async {
     if (!mounted || _calendarPreloadInProgress) return;
 
     _calendarPreloadInProgress = true;
 
-    try {
-      // Ensure CalendarService is initialized
-      await CalendarService.initialize();
+    // Defer heavy operation to avoid blocking UI
+    Future.microtask(() async {
+      try {
+        // Ensure CalendarService is initialized
+        await CalendarService.initialize();
 
-      // Get all games from providers
-      final myGamesAsync = ref.read(myGamesProvider);
-      final historicGamesAsync = ref.read(historicGamesProvider);
+        // Get all games from providers
+        final myGamesAsync = ref.read(myGamesProvider);
+        final historicGamesAsync = ref.read(historicGamesProvider);
 
-      // Collect all game IDs from all tabs
-      final allGameIds = <String>{};
+        // Collect all game IDs from all tabs
+        final allGameIds = <String>{};
 
-      // Get games from myGamesAsync if available
-      final myGames = myGamesAsync.valueOrNull;
-      if (myGames != null) {
-        for (final game in myGames) {
-          allGameIds.add(game.id);
-        }
-      }
-
-      // Get games from historicGamesAsync if available
-      final historicGames = historicGamesAsync.valueOrNull;
-      if (historicGames != null) {
-        for (final game in historicGames) {
-          allGameIds.add(game.id);
-        }
-      }
-
-      // Batch check calendar status for all games
-      if (allGameIds.isEmpty) {
-        _calendarPreloadInProgress = false;
-        return;
-      }
-
-      // Get all games that are in calendar from database
-      final gamesInCalendar = await CalendarService.getAllGamesInCalendar();
-      final gamesInCalendarSet = gamesInCalendar.toSet();
-
-      // Update cache for all games
-      if (mounted) {
-        setState(() {
-          for (final gameId in allGameIds) {
-            _calendarStatusByGameId[gameId] =
-                gamesInCalendarSet.contains(gameId);
+        // Get games from myGamesAsync if available
+        final myGames = myGamesAsync.valueOrNull;
+        if (myGames != null) {
+          for (final game in myGames) {
+            allGameIds.add(game.id);
           }
+        }
+
+        // Get games from historicGamesAsync if available
+        final historicGames = historicGamesAsync.valueOrNull;
+        if (historicGames != null) {
+          for (final game in historicGames) {
+            allGameIds.add(game.id);
+          }
+        }
+
+        // Batch check calendar status for all games
+        if (allGameIds.isEmpty) {
+          if (mounted) {
+            setState(() {
+              _calendarPreloadInProgress = false;
+            });
+          }
+          return;
+        }
+
+        // Get all games that are in calendar from database
+        final gamesInCalendar = await CalendarService.getAllGamesInCalendar();
+        final gamesInCalendarSet = gamesInCalendar.toSet();
+
+        // Update cache for all games
+        if (mounted) {
+          setState(() {
+            for (final gameId in allGameIds) {
+              _calendarStatusByGameId[gameId] =
+                  gamesInCalendarSet.contains(gameId);
+            }
+            _calendarPreloadInProgress = false;
+          });
+          NumberedLogger.i(
+              'Preloaded calendar statuses for ${allGameIds.length} games (${gamesInCalendarSet.length} in calendar)');
+        } else {
           _calendarPreloadInProgress = false;
-        });
-        debugPrint(
-            'Preloaded calendar statuses for ${allGameIds.length} games (${gamesInCalendarSet.length} in calendar)');
-      } else {
-        _calendarPreloadInProgress = false;
+        }
+      } catch (e, stackTrace) {
+        NumberedLogger.e('Error preloading calendar statuses: $e');
+        NumberedLogger.d('Stack trace: $stackTrace');
+        // Non-critical, continue without cache
+        if (mounted) {
+          setState(() {
+            _calendarPreloadInProgress = false;
+          });
+        }
       }
-    } catch (e, stackTrace) {
-      debugPrint('Error preloading calendar statuses: $e');
-      debugPrint('Stack trace: $stackTrace');
-      // Non-critical, continue without cache
-      if (mounted) {
-        setState(() {
-          _calendarPreloadInProgress = false;
-        });
-      }
-    }
+    });
   }
 
   @override
@@ -263,7 +285,7 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
                           radius: radius,
                           backgroundColor: AppColors.superlightgrey,
                           backgroundImage: (photo != null && photo.isNotEmpty)
-                              ? NetworkImage(photo)
+                              ? CachedNetworkImageProvider(photo)
                               : null,
                           child: (photo == null || photo.isEmpty)
                               ? (initials == '?'
@@ -420,15 +442,23 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
     final parts =
         name.split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
     if (parts.isEmpty) return '?';
-    final first = parts.first[0];
-    final second = parts.length > 1 ? parts[1][0] : '';
+    final firstPart = parts.first;
+    if (firstPart.isEmpty) return '?';
+    final first = firstPart[0];
+    final second = parts.length > 1 && parts[1].isNotEmpty ? parts[1][0] : '';
     return (first + second).toUpperCase();
   }
 
   Future<String?> _ensureWeatherForGame(Game game) async {
     if (game.latitude == null || game.longitude == null) return null;
     final key = game.id;
-    if (_weatherByGameId.containsKey(key)) return null;
+
+    // Check if we have valid cached data (not expired)
+    final cached = _weatherByGameId[key];
+    if (cached != null && !cached.isExpired) {
+      return null; // Already have fresh data
+    }
+
     if (_weatherLoading.contains(key)) return null;
     _weatherLoading.add(key);
     try {
@@ -438,9 +468,16 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
         latitude: game.latitude!,
         longitude: game.longitude!,
       );
-      _weatherByGameId[key] = map;
+      // Cache with TTL
+      _weatherByGameId[key] = CachedData(
+        map,
+        DateTime.now(),
+        expiry: _weatherCacheTTL,
+      );
       if (mounted) setState(() {});
-    } catch (_) {}
+    } catch (e) {
+      NumberedLogger.e('Error fetching weather for game ${game.id}: $e');
+    }
     _weatherLoading.remove(key);
     return null;
   }
@@ -639,8 +676,8 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
       }
       return isInCalendar;
     } catch (e, stackTrace) {
-      debugPrint('Error checking calendar status: $e');
-      debugPrint('Stack trace: $stackTrace');
+      NumberedLogger.e('Error checking calendar status: $e');
+      NumberedLogger.d('Stack trace: $stackTrace');
       if (mounted) {
         setState(() {
           _calendarStatusByGameId[gameId] = false; // Default to false on error
@@ -708,7 +745,7 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
         }
       }
     } catch (e) {
-      debugPrint('Error adding game to calendar: $e');
+      NumberedLogger.e('Error adding game to calendar: $e');
       if (mounted) {
         setState(() {
           _calendarLoading.remove(game.id);
@@ -822,17 +859,17 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
         final launched =
             await launchUrl(uri, mode: LaunchMode.externalApplication);
         if (!launched && mounted) {
-          debugPrint('launchUrl returned false for: $uri');
+          NumberedLogger.w('launchUrl returned false for: $uri');
           _openUrlViaAndroidIntent(uri.toString());
         }
       } catch (launchError) {
-        debugPrint('Error launching URL via url_launcher: $launchError');
-        debugPrint('URI was: $uri');
+        NumberedLogger.e('Error launching URL via url_launcher: $launchError');
+        NumberedLogger.d('URI was: $uri');
         // Fallback: Use direct Android intent
         _openUrlViaAndroidIntent(uri.toString());
       }
     } catch (e) {
-      debugPrint('Error opening directions: $e');
+      NumberedLogger.e('Error opening directions: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -846,18 +883,18 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
 
   /// Fallback method to open URL when url_launcher fails
   Future<void> _openUrlViaAndroidIntent(String url) async {
-    debugPrint('Using fallback method to open URL: $url');
+    NumberedLogger.d('Using fallback method to open URL: $url');
     try {
       const platform = MethodChannel('app.sportappdenbosch/intent');
       await platform.invokeMethod('launchUrl', {'url': url});
-      debugPrint('Successfully launched URL via Android intent: $url');
+      NumberedLogger.i('Successfully launched URL via Android intent: $url');
     } catch (e) {
-      debugPrint('Error launching URL via Android intent: $e');
+      NumberedLogger.e('Error launching URL via Android intent: $e');
       // Last resort: try share_plus (user can select Google Maps from share menu)
       try {
         await Share.share(url);
       } catch (shareError) {
-        debugPrint('Error sharing URL: $shareError');
+        NumberedLogger.e('Error sharing URL: $shareError');
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -954,96 +991,101 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
         ),
       ),
       backgroundColor: AppColors.white,
-      body: SafeArea(
-        child: Padding(
-          padding: AppPaddings.symmHorizontalReg,
-          child: myGamesAsync.when(
-            loading: () => const Center(child: CircularProgressIndicator()),
-            error: (error, stack) => ErrorRetryWidget(
-              message: myGamesAsync.errorMessage ?? 'Failed to load games',
-              onRetry: _refreshData,
-            ),
-            data: (games) => Container(
-              decoration: BoxDecoration(
-                color: AppColors.white,
-                borderRadius: BorderRadius.circular(AppRadius.container),
-                boxShadow: AppShadows.md,
+      body: CachedDataIndicator(
+        child: SafeArea(
+          child: Padding(
+            padding: AppPaddings.symmHorizontalReg,
+            child: myGamesAsync.when(
+              loading: () => const Center(child: CircularProgressIndicator()),
+              error: (error, stack) => ErrorRetryWidget(
+                message: myGamesAsync.errorMessage ?? 'Failed to load games',
+                onRetry: _refreshData,
               ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(AppRadius.container),
-                child: TabBarView(
-                  controller: _tab,
-                  children: [
-                    // Registered Games (joined)
-                    RefreshIndicator(
-                      onRefresh: () async => _refreshData(),
-                      child: (joinedGames.isEmpty)
-                          ? ListView(
-                              physics: const AlwaysScrollableScrollPhysics(),
-                              padding:
-                                  const EdgeInsets.only(bottom: AppHeights.reg),
-                              children: [_emptyStateRegistered(context)],
-                            )
-                          : ListView.builder(
-                              physics: const AlwaysScrollableScrollPhysics(),
-                              padding: AppPaddings.allMedium.add(
-                                const EdgeInsets.only(bottom: AppHeights.reg),
-                              ),
-                              itemCount: joinedGames.length,
-                              itemBuilder: (_, i) =>
-                                  _buildGameTile(joinedGames[i]),
-                            ),
-                    ),
-                    // Organized Games (created)
-                    RefreshIndicator(
-                      onRefresh: () async => _refreshData(),
-                      child: (createdGames.isEmpty)
-                          ? ListView(
-                              physics: const AlwaysScrollableScrollPhysics(),
-                              padding:
-                                  const EdgeInsets.only(bottom: AppHeights.reg),
-                              children: [_emptyStateOrganized(context)],
-                            )
-                          : ListView.builder(
-                              physics: const AlwaysScrollableScrollPhysics(),
-                              padding: AppPaddings.allMedium.add(
-                                const EdgeInsets.only(bottom: AppHeights.reg),
-                              ),
-                              itemCount: createdGames.length,
-                              itemBuilder: (_, i) =>
-                                  _buildGameTile(createdGames[i]),
-                            ),
-                    ),
-                    // Historic Games (past games where user participated)
-                    RefreshIndicator(
-                      onRefresh: () async => _refreshData(),
-                      child: historicGamesAsync.when(
-                        loading: () =>
-                            const Center(child: CircularProgressIndicator()),
-                        error: (error, stack) => ErrorRetryWidget(
-                          message: historicGamesAsync.errorMessage ??
-                              'Failed to load historic games',
-                          onRetry: _refreshData,
-                        ),
-                        data: (games) => (games.isEmpty)
+              data: (games) => Container(
+                decoration: BoxDecoration(
+                  color: AppColors.white,
+                  borderRadius: BorderRadius.circular(AppRadius.container),
+                  boxShadow: AppShadows.md,
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(AppRadius.container),
+                  child: TabBarView(
+                    controller: _tab,
+                    children: [
+                      // Registered Games (joined)
+                      RefreshIndicator(
+                        onRefresh: () async => _refreshData(),
+                        child: (joinedGames.isEmpty)
                             ? ListView(
                                 physics: const AlwaysScrollableScrollPhysics(),
                                 padding: const EdgeInsets.only(
                                     bottom: AppHeights.reg),
-                                children: [_emptyStateHistoric(context)],
+                                children: [_emptyStateRegistered(context)],
                               )
                             : ListView.builder(
                                 physics: const AlwaysScrollableScrollPhysics(),
                                 padding: AppPaddings.allMedium.add(
                                   const EdgeInsets.only(bottom: AppHeights.reg),
                                 ),
-                                itemCount: games.length,
+                                itemCount: joinedGames.length,
                                 itemBuilder: (_, i) =>
-                                    _buildHistoricGameTile(games[i]),
+                                    _buildGameTile(joinedGames[i]),
                               ),
                       ),
-                    ),
-                  ],
+                      // Organized Games (created)
+                      RefreshIndicator(
+                        onRefresh: () async => _refreshData(),
+                        child: (createdGames.isEmpty)
+                            ? ListView(
+                                physics: const AlwaysScrollableScrollPhysics(),
+                                padding: const EdgeInsets.only(
+                                    bottom: AppHeights.reg),
+                                children: [_emptyStateOrganized(context)],
+                              )
+                            : ListView.builder(
+                                physics: const AlwaysScrollableScrollPhysics(),
+                                padding: AppPaddings.allMedium.add(
+                                  const EdgeInsets.only(bottom: AppHeights.reg),
+                                ),
+                                itemCount: createdGames.length,
+                                itemBuilder: (_, i) =>
+                                    _buildGameTile(createdGames[i]),
+                              ),
+                      ),
+                      // Historic Games (past games where user participated)
+                      RefreshIndicator(
+                        onRefresh: () async => _refreshData(),
+                        child: historicGamesAsync.when(
+                          loading: () =>
+                              const Center(child: CircularProgressIndicator()),
+                          error: (error, stack) => ErrorRetryWidget(
+                            message: historicGamesAsync.errorMessage ??
+                                'Failed to load historic games',
+                            onRetry: _refreshData,
+                          ),
+                          data: (games) => (games.isEmpty)
+                              ? ListView(
+                                  physics:
+                                      const AlwaysScrollableScrollPhysics(),
+                                  padding: const EdgeInsets.only(
+                                      bottom: AppHeights.reg),
+                                  children: [_emptyStateHistoric(context)],
+                                )
+                              : ListView.builder(
+                                  physics:
+                                      const AlwaysScrollableScrollPhysics(),
+                                  padding: AppPaddings.allMedium.add(
+                                    const EdgeInsets.only(
+                                        bottom: AppHeights.reg),
+                                  ),
+                                  itemCount: games.length,
+                                  itemBuilder: (_, i) =>
+                                      _buildHistoricGameTile(games[i]),
+                                ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -1258,8 +1300,7 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
                           color: AppColors.blue,
                         ),
                       StreamBuilder<int>(
-                        stream: Stream.periodic(
-                            const Duration(minutes: 1), (i) => i),
+                        stream: _periodicMinuteStream,
                         initialData: 0,
                         builder: (context, snapshot) {
                           final remaining = game.timeUntilGame;
@@ -1313,7 +1354,10 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
                   if (!time.endsWith(':00')) {
                     time = '${time.substring(0, 2)}:00';
                   }
-                  final forecasts = _weatherByGameId[game.id];
+                  final cachedWeather = _weatherByGameId[game.id];
+                  final forecasts = cachedWeather?.isExpired == false
+                      ? cachedWeather!.data
+                      : null;
                   final weatherActions = ref.read(weatherActionsProvider);
                   final String cond = forecasts?[time] ??
                       weatherActions.getWeatherCondition(time);
@@ -1544,7 +1588,7 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
                                     !_calendarPreloadInProgress) {
                                   // Trigger async check but don't wait
                                   _getCalendarStatus(game.id).catchError((e) {
-                                    debugPrint(
+                                    NumberedLogger.e(
                                         'Error in _getCalendarStatus for ${game.id}: $e');
                                     // Ensure loading state is cleared on error
                                     if (mounted) {

@@ -1,4 +1,3 @@
-// lib/providers/services/profile_settings_provider.dart
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'profile_settings_service_instance.dart';
 import 'package:move_young/providers/infrastructure/firebase_providers.dart';

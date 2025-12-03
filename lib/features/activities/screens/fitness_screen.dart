@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:easy_localization/easy_localization.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:move_young/theme/_theme.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:move_young/widgets/tab_with_count.dart';
 import 'package:move_young/widgets/app_back_button.dart';
+import 'package:move_young/utils/logger.dart';
 
 // Simple model for fitness items
 class FitnessItem {
@@ -111,7 +113,7 @@ class _ActivitiesScreenState extends ConsumerState<ActivitiesScreen>
 
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     } catch (e) {
-      debugPrint('Error opening directions: $e');
+      NumberedLogger.e('Error opening directions: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -192,10 +194,13 @@ class _ActivitiesScreenState extends ConsumerState<ActivitiesScreen>
                     ? ClipRRect(
                         borderRadius:
                             BorderRadius.circular(AppRadius.smallCard),
-                        child: Image.network(
-                          item.imageUrl!,
+                        child: CachedNetworkImage(
+                          imageUrl: item.imageUrl!,
                           fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) {
+                          memCacheWidth: 400,
+                          memCacheHeight: 300,
+                          placeholder: (context, url) => _buildPlaceholderImage(),
+                          errorWidget: (context, url, error) {
                             return _buildPlaceholderImage();
                           },
                         ),

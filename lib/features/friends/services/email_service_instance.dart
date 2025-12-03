@@ -8,8 +8,9 @@ import 'package:uuid/uuid.dart';
 class EmailServiceInstance {
   final FirebaseDatabase _db;
   final FirebaseAuth _auth;
+  final FirebaseFirestore _firestore;
 
-  EmailServiceInstance(this._db, this._auth);
+  EmailServiceInstance(this._db, this._auth, this._firestore);
 
   /// Send a friend invite email using a Firebase-triggered email mechanism.
   /// This writes to the `mail` collection in Realtime Database which should be
@@ -100,7 +101,7 @@ class EmailServiceInstance {
         firestoreEmailData['replyTo'] = inviterEmail;
       }
 
-      await FirebaseFirestore.instance
+      await _firestore
           .collection(DbPaths.mail)
           .doc(emailId)
           .set(firestoreEmailData);
@@ -133,7 +134,9 @@ class EmailServiceInstance {
 
   String? _deriveNameFromEmail(String? email) {
     if (email == null || email.isEmpty) return null;
-    final String prefix = email.split('@').first;
+    final emailParts = email.split('@');
+    if (emailParts.isEmpty) return null;
+    final String prefix = emailParts[0];
     final String cleaned = prefix.replaceAll(RegExp(r"[^A-Za-z]"), '');
     if (cleaned.isEmpty) return prefix;
     return cleaned[0].toUpperCase() + cleaned.substring(1);

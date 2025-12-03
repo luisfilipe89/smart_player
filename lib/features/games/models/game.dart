@@ -285,7 +285,10 @@ class Game {
         if (decoded is List) {
           playersParsed = decoded.map((e) => e.toString()).toList();
         }
-      } catch (_) {}
+      } catch (e) {
+        // Silently ignore JSON decode errors for players - use empty list as fallback
+        // This can happen with corrupted data, but we don't want to crash the app
+      }
     }
 
     // Skill levels can be List (cloud) or encoded string (local)
@@ -299,16 +302,23 @@ class Game {
         if (decoded is List) {
           skillsParsed = decoded.map((e) => e.toString()).toList();
         }
-      } catch (_) {}
+      } catch (e) {
+        // Silently ignore JSON decode errors for skillLevels - use empty list as fallback
+        // This can happen with corrupted data, but we don't want to crash the app
+      }
     }
 
     // Prefer UTC field if present to avoid cross-timezone shifts
     final String? dtUtcStr = json['dateTimeUtc']?.toString();
-    final DateTime dtParsed = dtUtcStr != null && dtUtcStr.isNotEmpty
-        ? DateTime.parse(dtUtcStr).toLocal()
-        : (DateTime.tryParse(json['dateTime']?.toString() ??
-                DateTime.now().toIso8601String()) ??
-            DateTime.now());
+    final DateTime dtParsed;
+    if (dtUtcStr != null && dtUtcStr.isNotEmpty) {
+      final parsed = DateTime.tryParse(dtUtcStr);
+      dtParsed = parsed != null ? parsed.toLocal() : DateTime.now();
+    } else {
+      dtParsed = DateTime.tryParse(json['dateTime']?.toString() ??
+              DateTime.now().toIso8601String()) ??
+          DateTime.now();
+    }
 
     return Game(
       id: json['id']?.toString() ?? '',

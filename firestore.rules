@@ -2,6 +2,12 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // SECURITY NOTE: This app primarily uses Firebase Realtime Database for data storage.
+    // Firestore is intentionally limited to only fieldReports and mail collections.
+    // The deny-all default rule is intentional - if you need to add Firestore collections,
+    // you must explicitly add rules for them here. This prevents accidental data exposure.
+
+    // Field reports - only authenticated users can create, no read/update/delete
     match /fieldReports/{reportId} {
       allow create: if request.auth != null
         && request.resource.data.fieldId is string
@@ -14,6 +20,20 @@ service cloud.firestore {
         && request.resource.data.allowContact is bool;
 
       allow read, update, delete: if false;
+    }
+
+    // Mail collection - for email trigger extension
+    // Only authenticated users can write, no reads (emails are processed by backend)
+    match /mail/{emailId} {
+      allow write: if request.auth != null
+        && request.resource.data.keys().hasAll(['to', 'message', 'fromUid'])
+        && request.resource.data.to is string
+        && request.resource.data.fromUid is string
+        && request.resource.data.fromUid == request.auth.uid
+        && request.resource.data.message is map
+        && request.resource.data.message.keys().hasAll(['subject', 'html', 'text']);
+
+      allow read: if false; // Emails are processed by backend, no client reads
     }
 
     // Deny all other access by default.

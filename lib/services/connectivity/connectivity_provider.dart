@@ -11,6 +11,8 @@ final connectivityServiceProvider =
   service.initialize().catchError((error) {
     NumberedLogger.w('Connectivity service initialization error: $error');
   });
+  // Dispose service when provider is disposed to prevent memory leaks
+  ref.onDispose(() => service.dispose());
   return service;
 });
 

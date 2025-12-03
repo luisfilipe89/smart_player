@@ -3,6 +3,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:animations/animations.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:easy_localization/easy_localization.dart';
+import 'package:move_young/utils/logger.dart';
 
 class NavigationUtils {
   static Future<void> shareLocation(String name, String lat, String lon) async {
@@ -11,9 +12,9 @@ class NavigationUtils {
 
     try {
       await Share.share(message);
-      debugPrint('user_shared_location'.tr());
+      NumberedLogger.i('user_shared_location'.tr());
     } catch (e) {
-      debugPrint('user_dismissed_sharing'.tr());
+      NumberedLogger.d('user_dismissed_sharing'.tr());
     }
   }
 

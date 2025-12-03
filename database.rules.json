@@ -5,8 +5,8 @@
             ".write": false
         },
         "games": {
-            ".read": "auth != null",
-            ".write": "auth != null",
+            ".read": false,
+            ".write": false,
             ".indexOn": [
                 "createdAt",
                 "isActive",
@@ -17,6 +17,11 @@
                 "dateTime"
             ],
             "$gameId": {
+                ".read": "auth != null && (data.child('isPublic').val() == true || data.child('organizerId').val() == auth.uid || data.child('players').hasChild(auth.uid))",
+                ".write": "auth != null && (data.child('organizerId').val() == auth.uid || (!data.exists() && newData.child('organizerId').val() == auth.uid))",
+                "organizerId": {
+                    ".validate": "newData.val() == auth.uid || (!data.exists() && newData.val() == auth.uid)"
+                },
                 "invites": {
                     ".indexOn": [
                         "status"
@@ -53,14 +58,8 @@
             }
         },
         "slots": {
-            ".read": "auth != null",
-            ".write": "auth != null",
             "$date": {
-                ".read": "auth != null",
-                ".write": "auth != null",
                 "$field": {
-                    ".read": "auth != null",
-                    ".write": "auth != null",
                     "$hhmm": {
                         ".read": "auth != null",
                         ".write": "auth != null",
@@ -116,7 +115,7 @@
             "$uid": {
                 ".read": "auth != null",
                 ".write": "auth != null && auth.uid == $uid",
-                ".validate": "newData.hasChildren(['displayName'])"
+                ".validate": "newData.hasChildren(['displayName']) && newData.child('displayName').isString() && newData.child('displayName').val().length() >= 2 && newData.child('displayName').val().length() <= 50 && (!newData.hasChild('photoURL') || newData.child('photoURL').isString()) && (!newData.hasChild('photoURL') || newData.child('photoURL').val().length() <= 500)"
             }
         },
         "usersByEmailHash": {

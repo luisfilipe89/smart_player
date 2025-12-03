@@ -1,7 +1,7 @@
-// lib/services/profile_settings_service_instance.dart
 import 'package:firebase_database/firebase_database.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:move_young/db/db_paths.dart';
+import 'package:move_young/models/infrastructure/service_error.dart';
 
 /// Instance-based ProfileSettingsService with dependency injection
 class ProfileSettingsServiceInstance {
@@ -28,7 +28,9 @@ class ProfileSettingsServiceInstance {
   /// Set visibility setting
   Future<bool> setVisibility(String visibility) async {
     final uid = _auth.currentUser?.uid;
-    if (uid == null) return false;
+    if (uid == null) {
+      throw const AuthException('User not authenticated');
+    }
     await _database.ref(DbPaths.userVisibility(uid)).set(visibility);
     return true;
   }
@@ -51,7 +53,9 @@ class ProfileSettingsServiceInstance {
   /// Set show online setting
   Future<bool> setShowOnline(bool showOnline) async {
     final uid = _auth.currentUser?.uid;
-    if (uid == null) return false;
+    if (uid == null) {
+      throw const AuthException('User not authenticated');
+    }
     await _database.ref(DbPaths.userShowOnline(uid)).set(showOnline);
     return true;
   }
@@ -75,7 +79,9 @@ class ProfileSettingsServiceInstance {
   /// Set allow friend requests setting
   Future<bool> setAllowFriendRequests(bool allow) async {
     final uid = _auth.currentUser?.uid;
-    if (uid == null) return false;
+    if (uid == null) {
+      throw const AuthException('User not authenticated');
+    }
     await _database.ref(DbPaths.userAllowFriendRequests(uid)).set(allow);
     return true;
   }
@@ -98,7 +104,9 @@ class ProfileSettingsServiceInstance {
   /// Set share email setting
   Future<bool> setShareEmail(bool share) async {
     final uid = _auth.currentUser?.uid;
-    if (uid == null) return false;
+    if (uid == null) {
+      throw const AuthException('User not authenticated');
+    }
     await _database.ref(DbPaths.userShareEmail(uid)).set(share);
     return true;
   }

@@ -1,4 +1,3 @@
-// lib/services/notification_service_instance.dart
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io' show Platform;
@@ -16,6 +15,8 @@ class NotificationServiceInstance implements INotificationService {
   final FlutterLocalNotificationsPlugin _local;
 
   StreamSubscription? _authStateSubscription;
+  StreamSubscription<RemoteMessage>? _onMessageSubscription;
+  StreamSubscription<RemoteMessage>? _onMessageOpenedAppSubscription;
   bool _isRequestingPermissions =
       false; // Guard to prevent concurrent permission requests
   bool _isInitialized = false; // Guard to prevent multiple initializations
@@ -225,38 +226,50 @@ class NotificationServiceInstance implements INotificationService {
 
   Future<void> _setupFirebaseMessaging() async {
     // Handle foreground messages
-    FirebaseMessaging.onMessage.listen((RemoteMessage message) async {
-      NumberedLogger.i('Got a message whilst in the foreground!');
-      NumberedLogger.d('Message data: ${message.data}');
+    _onMessageSubscription = FirebaseMessaging.onMessage.listen(
+      (RemoteMessage message) async {
+        NumberedLogger.i('Got a message whilst in the foreground!');
+        NumberedLogger.d('Message data: ${message.data}');
 
-      if (message.notification != null) {
-        NumberedLogger.d(
-            'Message also contained a notification: ${message.notification}');
+        if (message.notification != null) {
+          NumberedLogger.d(
+              'Message also contained a notification: ${message.notification}');
 
-        // Show local notification when app is in foreground
-        // This ensures users see the notification even when app is open
-        // Store the message data as JSON payload so we can handle tap later
-        final payload = jsonEncode(message.data);
-        await showLocalNotification(
-          id: message.hashCode
-              .abs(), // Use absolute value to ensure positive ID
-          title: message.notification?.title ?? 'SMARTPLAYER',
-          body: message.notification?.body ?? 'You have a new notification',
-          payload: payload,
-          channel: _channelGames, // Use games channel for game invites
-        );
-      }
-      // DO NOT navigate automatically - only navigate when user taps the notification
-    });
+          // Show local notification when app is in foreground
+          // This ensures users see the notification even when app is open
+          // Store the message data as JSON payload so we can handle tap later
+          final payload = jsonEncode(message.data);
+          await showLocalNotification(
+            id: message.hashCode
+                .abs(), // Use absolute value to ensure positive ID
+            title: message.notification?.title ?? 'SMARTPLAYER',
+            body: message.notification?.body ?? 'You have a new notification',
+            payload: payload,
+            channel: _channelGames, // Use games channel for game invites
+          );
+        }
+        // DO NOT navigate automatically - only navigate when user taps the notification
+      },
+      onError: (error) {
+        NumberedLogger.e('Error in Firebase Messaging onMessage stream: $error');
+      },
+    );
 
     // Handle background messages
     FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
 
     // Handle notification taps when app is in background
-    FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
-      NumberedLogger.i('A new onMessageOpenedApp event was published!');
-      _handleNotificationTap(message);
-    });
+    _onMessageOpenedAppSubscription =
+        FirebaseMessaging.onMessageOpenedApp.listen(
+      (RemoteMessage message) {
+        NumberedLogger.i('A new onMessageOpenedApp event was published!');
+        _handleNotificationTap(message);
+      },
+      onError: (error) {
+        NumberedLogger.e(
+            'Error in Firebase Messaging onMessageOpenedApp stream: $error');
+      },
+    );
 
     // Handle notification taps when app is terminated
     RemoteMessage? initialMessage = await _messaging.getInitialMessage();
@@ -453,6 +466,8 @@ class NotificationServiceInstance implements INotificationService {
 
   Future<void> dispose() async {
     await _authStateSubscription?.cancel();
+    await _onMessageSubscription?.cancel();
+    await _onMessageOpenedAppSubscription?.cancel();
   }
 }
 

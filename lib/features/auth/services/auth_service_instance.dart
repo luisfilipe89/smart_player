@@ -1,4 +1,3 @@
-// lib/features/auth/services/auth_service_instance.dart
 import 'package:firebase_auth/firebase_auth.dart';
 import 'dart:async';
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -37,12 +36,16 @@ class AuthServiceInstance implements IAuthService {
     final rawDisplayName = user.displayName?.trim() ?? '';
     if (rawDisplayName.isNotEmpty) {
       // Use only the nickname for greeting
-      final nickname = rawDisplayName.split(RegExp(r"\s+")).first;
-      return _capitalize(nickname);
+      final parts = rawDisplayName.split(RegExp(r"\s+"));
+      if (parts.isNotEmpty) {
+        final nickname = parts.first;
+        return _capitalize(nickname);
+      }
     }
 
     if (user.email != null && user.email!.isNotEmpty) {
-      final emailPrefix = user.email!.split('@')[0];
+      final emailParts = user.email!.split('@');
+      final emailPrefix = emailParts.isNotEmpty ? emailParts[0] : '';
       // Strip non-letters and capitalize best-effort
       final cleaned = emailPrefix.replaceAll(RegExp(r"[^A-Za-z]"), '');
       if (cleaned.isNotEmpty) return _capitalize(cleaned);

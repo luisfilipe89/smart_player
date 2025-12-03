@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 // Firebase Auth
 final firebaseAuthProvider = Provider<FirebaseAuth>((ref) {
@@ -30,4 +31,9 @@ final firebaseDatabaseProvider = Provider<FirebaseDatabase>((ref) {
 // Firebase Messaging
 final firebaseMessagingProvider = Provider<FirebaseMessaging>((ref) {
   return FirebaseMessaging.instance;
+});
+
+// Firebase Firestore
+final firebaseFirestoreProvider = Provider<FirebaseFirestore>((ref) {
+  return FirebaseFirestore.instance;
 });

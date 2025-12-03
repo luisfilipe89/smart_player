@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'package:connectivity_plus/connectivity_plus.dart';
-// import 'package:flutter/foundation.dart';
 import 'package:move_young/utils/logger.dart';
 
 /// Instance-based ConnectivityService for use with Riverpod dependency injection
@@ -9,6 +8,7 @@ class ConnectivityServiceInstance {
   bool _hasConnection = true;
   final StreamController<bool> _connectionController =
       StreamController<bool>.broadcast();
+  StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
 
   /// Stream that emits true when connected, false when disconnected
   Stream<bool> get isConnected => _connectionController.stream;
@@ -22,17 +22,26 @@ class ConnectivityServiceInstance {
     await checkConnectivity();
 
     // Listen to connectivity changes
-    _connectivity.onConnectivityChanged
-        .listen((List<ConnectivityResult> results) {
-      _updateConnectionStatus(results.first);
-    });
+    _connectivitySubscription = _connectivity.onConnectivityChanged.listen(
+      (List<ConnectivityResult> results) {
+        if (results.isNotEmpty) {
+          _updateConnectionStatus(results.first);
+        }
+      },
+      onError: (error) {
+        NumberedLogger.w('ConnectivityService: Error in connectivity stream: $error');
+      },
+    );
   }
 
   /// One-time connectivity check
   Future<bool> checkConnectivity() async {
     try {
       final results = await _connectivity.checkConnectivity();
-      return _updateConnectionStatus(results.first);
+      if (results.isNotEmpty) {
+        return _updateConnectionStatus(results.first);
+      }
+      return false;
     } catch (e) {
       NumberedLogger.w('ConnectivityService: Error checking connectivity: $e');
       return false;
@@ -46,7 +55,9 @@ class ConnectivityServiceInstance {
 
     // Only emit if status changed
     if (wasConnected != _hasConnection) {
-      _connectionController.add(_hasConnection);
+      if (!_connectionController.isClosed) {
+        _connectionController.add(_hasConnection);
+      }
       NumberedLogger.d(
           'ConnectivityService: Connection status changed to ${_hasConnection ? "connected" : "disconnected"}');
     }
@@ -69,6 +80,7 @@ class ConnectivityServiceInstance {
 
   /// Dispose resources
   void dispose() {
+    _connectivitySubscription?.cancel();
     _connectionController.close();
   }
 }

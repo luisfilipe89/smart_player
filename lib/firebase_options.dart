@@ -31,8 +31,8 @@ class DefaultFirebaseOptions {
     appId: '1:822195810915:android:465910113a9069b1f1fe56',
     messagingSenderId: '822195810915',
     projectId: 'sportappdenbosch',
-    databaseURL:
-        'https://sportappdenbosch-default-rtdb.europe-west1.firebasedatabase.app',
+    databaseURL: 'https://sportappdenbosch-default-rtdb.europe-west1.firebasedatabase.app',
     storageBucket: 'sportappdenbosch.firebasestorage.app',
   );
+
 }

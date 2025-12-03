@@ -9,6 +9,7 @@ import 'package:move_young/services/connectivity/connectivity_provider.dart';
 import 'package:move_young/features/auth/screens/auth_screen.dart';
 import 'package:move_young/navigation/main_scaffold.dart';
 import 'package:move_young/theme/tokens.dart';
+import 'package:move_young/services/firebase_error_handler.dart';
 
 class WelcomeScreen extends ConsumerStatefulWidget {
   const WelcomeScreen({super.key});
@@ -262,9 +263,10 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> {
       }
     } catch (e) {
       if (context.mounted) {
+        final errorMessage = FirebaseErrorHandler.getUserMessage(e);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error: ${e.toString()}'),
+            content: Text(errorMessage),
             backgroundColor: Colors.red,
           ),
         );

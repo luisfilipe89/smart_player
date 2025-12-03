@@ -1,4 +1,3 @@
-// lib/services/weather_service_instance.dart
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:move_young/utils/logger.dart';
@@ -39,8 +38,10 @@ class WeatherServiceInstance {
     required double temperature,
     required bool isDaytime,
   }) {
-    final hour = int.parse(time.split(':')[0]);
-    final isNight = !isDaytime || hour >= 19 || hour < 7;
+    final timeParts = time.split(':');
+    final hour = timeParts.isNotEmpty ? int.tryParse(timeParts[0]) : null;
+    final parsedHour = hour ?? 12; // Default to noon if parsing fails
+    final isNight = !isDaytime || parsedHour >= 19 || parsedHour < 7;
 
     String condition;
     IconData icon;
@@ -117,8 +118,10 @@ class WeatherServiceInstance {
 
   // Get weather icon for a specific time and condition (iOS-style)
   IconData getWeatherIcon(String time, [String? condition]) {
-    final hour = int.parse(time.split(':')[0]);
-    final isNight = hour >= 19 || hour < 7;
+    final timeParts = time.split(':');
+    final hour = timeParts.isNotEmpty ? int.tryParse(timeParts[0]) : null;
+    final parsedHour = hour ?? 12; // Default to noon if parsing fails
+    final isNight = parsedHour >= 19 || parsedHour < 7;
 
     // If condition is provided, use it; otherwise fall back to time-based logic
     if (condition != null) {
@@ -156,13 +159,13 @@ class WeatherServiceInstance {
       return Icons.nightlight_round;
     }
 
-    if (hour >= 9 && hour <= 11) {
+    if (parsedHour >= 9 && parsedHour <= 11) {
       return Icons.wb_sunny; // Morning sun
-    } else if (hour >= 12 && hour <= 14) {
+    } else if (parsedHour >= 12 && parsedHour <= 14) {
       return Icons.wb_sunny; // Midday sun
-    } else if (hour >= 15 && hour <= 16) {
+    } else if (parsedHour >= 15 && parsedHour <= 16) {
       return Icons.cloud; // Afternoon clouds
-    } else if (hour >= 17 && hour <= 18) {
+    } else if (parsedHour >= 17 && parsedHour <= 18) {
       return Icons.grain; // Rain icon for evening
     } else {
       return Icons.wb_sunny; // Default to sunny
@@ -171,17 +174,19 @@ class WeatherServiceInstance {
 
   // Get weather condition for a specific time
   String getWeatherCondition(String time) {
-    final hour = int.parse(time.split(':')[0]);
+    final timeParts = time.split(':');
+    final hour = timeParts.isNotEmpty ? int.tryParse(timeParts[0]) : null;
+    final parsedHour = hour ?? 12; // Default to noon if parsing fails
 
-    if (hour >= 19 || hour < 7) {
+    if (parsedHour >= 19 || parsedHour < 7) {
       return night;
-    } else if (hour >= 9 && hour <= 11) {
+    } else if (parsedHour >= 9 && parsedHour <= 11) {
       return sunny; // Morning sun
-    } else if (hour >= 12 && hour <= 14) {
+    } else if (parsedHour >= 12 && parsedHour <= 14) {
       return sunny; // Midday sun
-    } else if (hour >= 15 && hour <= 16) {
+    } else if (parsedHour >= 15 && parsedHour <= 16) {
       return cloudy; // Afternoon clouds
-    } else if (hour >= 17 && hour <= 18) {
+    } else if (parsedHour >= 17 && parsedHour <= 18) {
       return rainy; // Evening rain
     } else {
       return sunny;
@@ -271,7 +276,8 @@ class WeatherServiceInstance {
         // Find data for our target date
         for (int i = 0; i < times.length; i++) {
           final timeString = times[i] as String;
-          final hourDateTime = DateTime.parse(timeString);
+          final hourDateTime = DateTime.tryParse(timeString);
+          if (hourDateTime == null) continue;
 
           // Check if this hour is on our target date and within our time range (9-21)
           if (hourDateTime.year == date.year &&
@@ -311,7 +317,8 @@ class WeatherServiceInstance {
             // Find the day that matches our target date
             for (int i = 0; i < dailyTimes.length; i++) {
               final dayTimeString = dailyTimes[i] as String;
-              final dayDateTime = DateTime.parse(dayTimeString);
+              final dayDateTime = DateTime.tryParse(dayTimeString);
+              if (dayDateTime == null) continue;
 
               if (dayDateTime.year == date.year &&
                   dayDateTime.month == date.month &&

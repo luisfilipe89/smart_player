@@ -2,6 +2,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:move_young/providers/infrastructure/shared_preferences_provider.dart';
+import 'package:move_young/utils/logger.dart';
 
 const String _kLocalePrefKey = 'app_locale_code';
 
@@ -14,7 +15,7 @@ class LocaleController {
     try {
       return _prefs?.getString(_kLocalePrefKey);
     } catch (e) {
-      debugPrint('LocaleController: loadSavedLocaleCode error: $e');
+      NumberedLogger.e('LocaleController: loadSavedLocaleCode error: $e');
       return null;
     }
   }
@@ -23,7 +24,7 @@ class LocaleController {
     try {
       await _prefs?.setString(_kLocalePrefKey, locale.languageCode);
     } catch (e) {
-      debugPrint('LocaleController: saveLocale error: $e');
+      NumberedLogger.e('LocaleController: saveLocale error: $e');
     }
   }
 

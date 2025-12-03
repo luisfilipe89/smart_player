@@ -1,17 +1,18 @@
-// lib/services/cloud_games_service_instance.dart
 import 'dart:async';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:move_young/features/games/models/game.dart';
 import 'package:move_young/db/db_paths.dart';
-// import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:move_young/utils/logger.dart';
 import 'package:move_young/services/notifications/notification_interface.dart';
 import 'package:move_young/models/infrastructure/service_error.dart';
 import 'package:move_young/utils/crashlytics_helper.dart';
 import 'package:move_young/services/calendar/calendar_service.dart';
-
-// Background processing will be added when needed
+import 'package:move_young/models/infrastructure/cached_data.dart';
+import 'package:move_young/utils/time_slot_utils.dart';
+import 'package:move_young/utils/type_converters.dart';
+import 'package:move_young/utils/geolocation_utils.dart';
 
 /// Instance-based CloudGamesService for use with Riverpod dependency injection
 class CloudGamesServiceInstance {
@@ -24,8 +25,24 @@ class CloudGamesServiceInstance {
   static const int _maxJoinableGames = 50;
   static const int _maxMyGames = 100;
 
+  // Cache for game lists with TTL (short-term cache for performance)
+  final Map<String, CachedData<List<Game>>> _gamesCache = {};
+  static const Duration _defaultCacheTTL =
+      Duration(seconds: 30); // 30 second cache
+
   CloudGamesServiceInstance(
       this._database, this._auth, this._notificationService);
+
+  /// Invalidate cache for a specific user or all users
+  void _invalidateCache({String? userId}) {
+    if (userId != null) {
+      _gamesCache.remove('myGames_$userId');
+      _gamesCache.remove('invitedGames_$userId');
+    } else {
+      // Invalidate all caches
+      _gamesCache.clear();
+    }
+  }
 
   // Database references
   DatabaseReference get _gamesRef => _database.ref(DbPaths.games);
@@ -33,6 +50,15 @@ class CloudGamesServiceInstance {
 
   // Get current user ID
   String? get _currentUserId => _auth.currentUser?.uid;
+
+  // Require current user ID (throws if not authenticated)
+  String _requireCurrentUserId() {
+    final uid = _currentUserId;
+    if (uid == null) {
+      throw AuthException('User not authenticated');
+    }
+    return uid;
+  }
 
   // --- Helpers for slot keys ---
   // Format yyyy-MM-dd in local time for date partitioning
@@ -52,51 +78,91 @@ class CloudGamesServiceInstance {
     return '$h$m';
   }
 
-  // Helper function to convert timeKey (HHmm) to minutes since midnight
-  int _timeKeyToMinutes(String timeKey) {
-    // timeKey format is HHmm (e.g., "1030" for 10:30)
-    if (timeKey.length == 4) {
-      final hourStr = timeKey.substring(0, 2);
-      final minuteStr = timeKey.substring(2, 4);
-      final hour = int.tryParse(hourStr);
-      final minute = int.tryParse(minuteStr);
-      if (hour != null &&
-          minute != null &&
-          hour >= 0 &&
-          hour < 24 &&
-          minute >= 0 &&
-          minute < 60) {
-        return hour * 60 + minute;
-      }
-      NumberedLogger.w(
-          'Invalid timeKey format: $timeKey (hour=$hour, minute=$minute)');
-    }
-    // Fallback: assume it's already in minutes or handle error
-    return 0;
+  // Helper function to check if two 1-hour time slots overlap
+  // Uses shared utility for consistency
+  // Keep as private method to maintain encapsulation and allow for future logging/validation
+  bool _timeSlotsOverlap(String timeKey1, String timeKey2) {
+    return timeSlotsOverlap(timeKey1, timeKey2);
   }
 
-  // Helper function to check if two 1-hour time slots overlap
-  // Games always last 1 hour, so we need to check if the 1-hour windows overlap
-  bool _timeSlotsOverlap(String timeKey1, String timeKey2) {
-    final minutes1 = _timeKeyToMinutes(timeKey1);
-    final minutes2 = _timeKeyToMinutes(timeKey2);
+  // Validate game data before creating/updating
+  void _validateGameData(Game game) {
+    // Validate location
+    if (game.location.trim().isEmpty) {
+      throw ValidationException('Location is required');
+    }
+    if (game.location.length > 200) {
+      throw ValidationException(
+          'Location name is too long (max 200 characters)');
+    }
 
-    // Each slot is a 1-hour window: [start, start+60)
-    final start1 = minutes1;
-    final end1 = minutes1 + 60;
-    final start2 = minutes2;
-    final end2 = minutes2 + 60;
+    // Validate description
+    if (game.description.length > 1000) {
+      throw ValidationException(
+          'Description is too long (max 1000 characters)');
+    }
 
-    // Two intervals overlap if: start1 < end2 && start2 < end1
-    return start1 < end2 && start2 < end1;
+    // Validate contactInfo if provided
+    if (game.contactInfo != null && game.contactInfo!.isNotEmpty) {
+      final contact = game.contactInfo!.trim();
+      if (contact.length > 100) {
+        throw ValidationException(
+            'Contact information is too long (max 100 characters)');
+      }
+      // Basic validation: should be email or phone-like
+      final isEmail = contact.contains('@') && contact.contains('.');
+      final isPhone = RegExp(r'^[\d\s\+\-\(\)]+$').hasMatch(contact);
+      if (!isEmail && !isPhone) {
+        throw ValidationException(
+            'Contact information must be a valid email or phone number');
+      }
+    }
+
+    // Validate equipment if provided
+    if (game.equipment != null && game.equipment!.isNotEmpty) {
+      if (game.equipment!.length > 500) {
+        throw ValidationException(
+            'Equipment notes are too long (max 500 characters)');
+      }
+    }
+
+    // Validate organizer name
+    if (game.organizerName.trim().isEmpty) {
+      throw ValidationException('Organizer name is required');
+    }
+    if (game.organizerName.length > 50) {
+      throw ValidationException(
+          'Organizer name is too long (max 50 characters)');
+    }
+
+    // Validate maxPlayers
+    if (game.maxPlayers < 2 || game.maxPlayers > 100) {
+      throw ValidationException('Max players must be between 2 and 100');
+    }
+
+    // Validate sport
+    if (game.sport.trim().isEmpty) {
+      throw ValidationException('Sport is required');
+    }
+    if (game.sport.length > 50) {
+      throw ValidationException('Sport name is too long (max 50 characters)');
+    }
+
+    // Validate cost if provided
+    if (game.cost != null && (game.cost! < 0 || game.cost! > 10000)) {
+      throw ValidationException('Cost must be between 0 and 10000');
+    }
   }
 
   // Compute a stable field key. Prefer explicit fieldId; else lat,lon; else sanitized name
   String _fieldKeyForGame(Game game) {
-    if ((game.fieldId ?? '').toString().trim().isNotEmpty) {
+    // Safely check and use fieldId
+    final fieldId = game.fieldId?.trim();
+    if (fieldId != null && fieldId.isNotEmpty) {
       // Sanitize fieldId to remove slashes and other problematic characters for Firebase paths
-      return game.fieldId!.trim().replaceAll('/', '_').replaceAll('\\', '_');
+      return fieldId.replaceAll('/', '_').replaceAll('\\', '_');
     }
+    // Use coordinates if available
     if (game.latitude != null && game.longitude != null) {
       final lat = game.latitude!.toStringAsFixed(5).replaceAll('.', '_');
       final lon = game.longitude!.toStringAsFixed(5).replaceAll('.', '_');
@@ -126,7 +192,9 @@ class CloudGamesServiceInstance {
       final data = Map<dynamic, dynamic>.from(snapshot.value as Map);
       for (final entry in data.values) {
         try {
+          if (entry == null) continue;
           final gameData = Map<String, dynamic>.from(entry);
+          if (gameData.isEmpty) continue;
           final game = Game.fromJson(gameData);
 
           // Check if this game uses the same slot
@@ -165,10 +233,10 @@ class CloudGamesServiceInstance {
   // Create a new game in the cloud
   Future<String> createGame(Game game) async {
     try {
-      final userId = _currentUserId;
-      if (userId == null) {
-        throw AuthException('User not authenticated');
-      }
+      final userId = _requireCurrentUserId();
+
+      // Validate game data
+      _validateGameData(game);
 
       // Ensure the user has a profile
       await _ensureUserProfile(userId);
@@ -178,30 +246,66 @@ class CloudGamesServiceInstance {
       final timeKey = _timeKey(game.dateTime);
       final fieldKey = _fieldKeyForGame(game);
 
-      // Check if slot exists and is occupied by an active game
+      // Check slot availability first (before transaction)
+      final isOccupied =
+          await _isSlotOccupiedByActiveGame(dateKey, fieldKey, timeKey);
+      if (isOccupied) {
+        NumberedLogger.w(
+            'Slot $dateKey/$fieldKey/$timeKey is occupied by an active game');
+        throw ValidationException('new_slot_unavailable');
+      }
+
+      // Use transaction to atomically claim the slot (prevents race conditions)
+      // Note: We check slot availability before transaction, then use transaction
+      // to atomically claim it, preventing race conditions
       final slotRef = _database.ref('slots/$dateKey/$fieldKey/$timeKey');
-      final slotSnapshot = await slotRef.get();
-
-      if (slotSnapshot.exists && slotSnapshot.value == true) {
-        // Slot exists, check if it's actually occupied by an active game
-        final isOccupied =
-            await _isSlotOccupiedByActiveGame(dateKey, fieldKey, timeKey);
-
-        if (isOccupied) {
-          NumberedLogger.w(
-              'Slot $dateKey/$fieldKey/$timeKey is occupied by an active game');
-          throw ValidationException('new_slot_unavailable');
-        } else {
-          // Stale slot - clean it up before creating new game
-          NumberedLogger.i(
-              'Cleaning up stale slot $dateKey/$fieldKey/$timeKey before creating game');
-          await slotRef.set(null);
+      final transactionResult = await slotRef.runTransaction((current) {
+        // Check if slot is already claimed (race condition check)
+        // If current value is true, another process claimed it
+        try {
+          final slotValue = (current as dynamic)?.value;
+          if (slotValue == true) {
+            // Another process claimed it between our check and transaction
+            return Transaction.abort();
+          }
+        } catch (_) {
+          // If we can't read the value, abort to be safe
+          return Transaction.abort();
         }
+        // Claim the slot atomically
+        return Transaction.success(true);
+      });
+
+      if (!transactionResult.committed) {
+        // Slot was claimed by another process between our check and transaction
+        // Double-check if it's actually occupied by an active game
+        final isOccupiedNow =
+            await _isSlotOccupiedByActiveGame(dateKey, fieldKey, timeKey);
+        if (isOccupiedNow) {
+          NumberedLogger.w(
+              'Slot $dateKey/$fieldKey/$timeKey is occupied (transaction aborted)');
+          throw ValidationException('new_slot_unavailable');
+        }
+        // If not occupied, it was a race condition with another transaction
+        // This is rare but can happen - treat as unavailable
+        NumberedLogger.w(
+            'Slot $dateKey/$fieldKey/$timeKey transaction failed (race condition)');
+        throw ValidationException('new_slot_unavailable');
       }
 
       // Create the game id now for an atomic multi-location update
       final gameRef = _gamesRef.push();
-      final gameId = gameRef.key!;
+      final gameId = gameRef.key;
+      if (gameId == null) {
+        // Rollback slot claim if game ID generation fails
+        try {
+          await slotRef.set(null);
+        } catch (rollbackError) {
+          NumberedLogger.w(
+              'Failed to rollback slot after game ID generation failure: $rollbackError');
+        }
+        throw ServiceException('Failed to generate game ID');
+      }
 
       // Update game with the generated ID and initialize updatedAt to createdAt
       final gameWithId = game.copyWith(
@@ -221,11 +325,10 @@ class CloudGamesServiceInstance {
       // Write each path individually (update() has issues with nested validation rules)
       // - games/{id}
       // - users/{uid}/createdGames/{id}
-      // - slots/{dateKey}/{fieldKey}/{timeKey} = true
+      // - slots/{dateKey}/{fieldKey}/{timeKey} = true (already claimed in transaction)
       // Track what was written for rollback if any write fails
       bool gameWritten = false;
       bool indexWritten = false;
-      bool slotWritten = false;
 
       try {
         await _database.ref('${DbPaths.games}/$gameId').set(gameData);
@@ -238,31 +341,39 @@ class CloudGamesServiceInstance {
           'maxPlayers': gameWithId.maxPlayers,
         });
         indexWritten = true;
-
-        await _database.ref('slots/$dateKey/$fieldKey/$timeKey').set(true);
-        slotWritten = true;
       } catch (e) {
         // Rollback any writes that succeeded
-        if (slotWritten) {
-          try {
-            await _database.ref('slots/$dateKey/$fieldKey/$timeKey').remove();
-          } catch (_) {}
-        }
-
         if (indexWritten) {
           try {
             await _database.ref('users/$userId/createdGames/$gameId').remove();
-          } catch (_) {}
+          } catch (rollbackError) {
+            NumberedLogger.w(
+                'Failed to rollback createdGames index during game creation: $rollbackError');
+          }
         }
 
         if (gameWritten) {
           try {
             await _database.ref('${DbPaths.games}/$gameId').remove();
-          } catch (_) {}
+          } catch (rollbackError) {
+            NumberedLogger.w(
+                'Failed to rollback game during game creation: $rollbackError');
+          }
+        }
+
+        // Rollback slot claim
+        try {
+          await slotRef.set(null);
+        } catch (rollbackError) {
+          NumberedLogger.w(
+              'Failed to rollback slot during game creation: $rollbackError');
         }
 
         rethrow;
       }
+
+      // Invalidate cache for the organizer
+      _invalidateCache(userId: userId);
 
       // Send notifications to invited friends
       // This will be implemented when we add friend invites functionality
@@ -278,22 +389,26 @@ class CloudGamesServiceInstance {
       if (e is ValidationException) {
         rethrow;
       }
-      // For permission errors, check if it's actually a slot conflict
-      if (e.toString().toLowerCase().contains('permission') ||
-          e.toString().toLowerCase().contains('denied')) {
-        // Double-check: query active games to see if slot is truly occupied
-        try {
-          final dateKey = _dateKey(game.dateTime);
-          final timeKey = _timeKey(game.dateTime);
-          final fieldKey = _fieldKeyForGame(game);
-          final isOccupied =
-              await _isSlotOccupiedByActiveGame(dateKey, fieldKey, timeKey);
-          if (isOccupied) {
+      // Check if it's a permission error (could indicate slot conflict)
+      if (e is FirebaseException) {
+        if (e.code == 'permission-denied') {
+          // Double-check: query active games to see if slot is truly occupied
+          try {
+            final dateKey = _dateKey(game.dateTime);
+            final timeKey = _timeKey(game.dateTime);
+            final fieldKey = _fieldKeyForGame(game);
+            final isOccupied =
+                await _isSlotOccupiedByActiveGame(dateKey, fieldKey, timeKey);
+            if (isOccupied) {
+              throw ValidationException('new_slot_unavailable');
+            }
+          } catch (checkError) {
+            // If check fails or slot is occupied, assume it's a slot conflict
+            if (checkError is ValidationException) {
+              rethrow;
+            }
             throw ValidationException('new_slot_unavailable');
           }
-        } catch (_) {
-          // If check fails, assume it's a slot conflict
-          throw ValidationException('new_slot_unavailable');
         }
       }
       rethrow;
@@ -319,6 +434,8 @@ class CloudGamesServiceInstance {
 
   // Update a game (atomically move slot if date/field/time changed)
   Future<void> updateGame(Game game) async {
+    // Validate game data
+    _validateGameData(game);
     // Declare variables outside try block for catch block access
     bool slotChanged = false;
     String? newDateKey;
@@ -481,29 +598,38 @@ class CloudGamesServiceInstance {
       if (e is ValidationException) {
         rethrow;
       }
-      // For permission errors, check if it's actually a slot conflict
-      if (e.toString().toLowerCase().contains('permission') ||
-          e.toString().toLowerCase().contains('denied')) {
-        // Check if it's related to slot change
-        if (slotChanged &&
-            newDateKey != null &&
-            newFieldKey != null &&
-            newTimeKey != null) {
-          try {
-            // Exclude the current game from the check to avoid false conflicts when updating
-            final isOccupied = await _isSlotOccupiedByActiveGame(
-                newDateKey, newFieldKey, newTimeKey,
-                excludeGameId: game.id);
-            if (isOccupied) {
+      // Check if it's a permission error (could indicate slot conflict)
+      if (e is FirebaseException) {
+        if (e.code == 'permission-denied') {
+          // Check if it's related to slot change
+          if (slotChanged &&
+              newDateKey != null &&
+              newFieldKey != null &&
+              newTimeKey != null) {
+            try {
+              // Exclude the current game from the check to avoid false conflicts when updating
+              final isOccupied = await _isSlotOccupiedByActiveGame(
+                  newDateKey, newFieldKey, newTimeKey,
+                  excludeGameId: game.id);
+              if (isOccupied) {
+                throw ValidationException('new_slot_unavailable');
+              }
+            } catch (checkError) {
+              // If check fails or slot is occupied, assume it's a slot conflict
+              if (checkError is ValidationException) {
+                rethrow;
+              }
               throw ValidationException('new_slot_unavailable');
             }
-          } catch (_) {
-            // If check fails, assume it's a slot conflict
-            throw ValidationException('new_slot_unavailable');
           }
         }
       }
       rethrow;
+    } finally {
+      // Invalidate cache for the organizer
+      if (game.organizerId == _currentUserId) {
+        _invalidateCache(userId: game.organizerId);
+      }
     }
   }
 
@@ -512,10 +638,7 @@ class CloudGamesServiceInstance {
   // Step 2: Each user can use Remove to hide it from their My Games
   Future<void> deleteGame(String gameId) async {
     try {
-      final userId = _currentUserId;
-      if (userId == null) {
-        throw AuthException('User not authenticated');
-      }
+      final userId = _requireCurrentUserId();
 
       // Load existing game for slot
       final existingSnap = await _gamesRef.child(gameId).get();
@@ -525,6 +648,8 @@ class CloudGamesServiceInstance {
             .child(DbPaths.userCreatedGames(userId))
             .child(gameId)
             .remove();
+        // Invalidate cache for the user
+        _invalidateCache(userId: userId);
         // Streams will update automatically - no cache clearing needed
         return;
       }
@@ -548,6 +673,9 @@ class CloudGamesServiceInstance {
       // - Shows "Cancelled" badge to everyone (invited users)
       // - Hides from "Join a Game" screen (isActive=false filter)
       // - Stays in My Games lists so users can see it was cancelled
+      // Invalidate cache for the organizer
+      _invalidateCache(userId: userId);
+
       // DO NOT remove from createdGames/joinedGames yet - let users decide when to remove
       final Map<String, Object?> updates = {
         // Mark game inactive instead of deleting so invitees see "Cancelled"
@@ -600,10 +728,7 @@ class CloudGamesServiceInstance {
   // Remove game from user's createdGames index (hides it from organizer view)
   Future<void> removeFromMyCreated(String gameId) async {
     try {
-      final userId = _currentUserId;
-      if (userId == null) {
-        throw AuthException('User not authenticated');
-      }
+      final userId = _requireCurrentUserId();
 
       await _usersRef
           .child(DbPaths.userCreatedGames(userId))
@@ -622,10 +747,7 @@ class CloudGamesServiceInstance {
   // Remove game from user's joinedGames index (hides it from joined games list)
   Future<void> removeFromMyJoined(String gameId) async {
     try {
-      final userId = _currentUserId;
-      if (userId == null) {
-        throw AuthException('User not authenticated');
-      }
+      final userId = _requireCurrentUserId();
 
       await _usersRef
           .child(DbPaths.userJoinedGames(userId))
@@ -642,12 +764,19 @@ class CloudGamesServiceInstance {
   }
 
   // Get games for the current user (both organized and joined)
-  // Note: No caching - direct Firebase query for real-time consistency (matches old behavior)
+  // Short-term caching for performance (30s default) while maintaining real-time consistency
   Future<List<Game>> getMyGames({Duration? ttl}) async {
     try {
       final userId = _currentUserId;
       if (userId == null) {
         return [];
+      }
+
+      // Check cache first
+      final cacheKey = 'myGames_$userId';
+      final cached = _gamesCache[cacheKey];
+      if (cached != null && !cached.isExpired) {
+        return cached.data;
       }
 
       final gamesMap = <String, Game>{};
@@ -707,6 +836,13 @@ class CloudGamesServiceInstance {
       // Convert to list and sort by date (earliest first)
       final gamesList = gamesMap.values.toList();
       gamesList.sort((a, b) => a.dateTime.compareTo(b.dateTime));
+
+      // Cache the result
+      _gamesCache[cacheKey] = CachedData(
+        gamesList,
+        DateTime.now(),
+        expiry: ttl ?? _defaultCacheTTL,
+      );
 
       return gamesList;
     } catch (e) {
@@ -832,7 +968,9 @@ class CloudGamesServiceInstance {
           }
 
           list.add(g);
-        } catch (_) {}
+        } catch (e) {
+          NumberedLogger.w('Error parsing game in watchJoinableGames: $e');
+        }
       }
       list.sort((a, b) => a.dateTime.compareTo(b.dateTime));
       return list;
@@ -840,7 +978,7 @@ class CloudGamesServiceInstance {
   }
 
   // Get invited games for the current user
-  // Note: No caching - direct Firebase query for real-time consistency
+  // Short-term caching for performance (30s default) while maintaining real-time consistency
   Future<List<Game>> getInvitedGamesForCurrentUser({Duration? ttl}) async {
     try {
       final userId = _currentUserId;
@@ -848,7 +986,14 @@ class CloudGamesServiceInstance {
         return [];
       }
 
-      // Fetch from Firebase - no cache to match old fast behavior
+      // Check cache first
+      final cacheKey = 'invitedGames_$userId';
+      final cached = _gamesCache[cacheKey];
+      if (cached != null && !cached.isExpired) {
+        return cached.data;
+      }
+
+      // Fetch from Firebase
       final snapshot =
           await _usersRef.child(DbPaths.userGameInvites(userId)).get();
 
@@ -908,6 +1053,14 @@ class CloudGamesServiceInstance {
       }
 
       NumberedLogger.i('Fetched ${games.length} invited games for $userId');
+
+      // Cache the result
+      _gamesCache[cacheKey] = CachedData(
+        games,
+        DateTime.now(),
+        expiry: ttl ?? _defaultCacheTTL,
+      );
+
       return games;
     } catch (e) {
       NumberedLogger.e('Error getting invited games: $e');
@@ -954,7 +1107,8 @@ class CloudGamesServiceInstance {
               issues
                   .add('joinedGames mismatch: $gameId missing user in players');
             }
-          } catch (_) {
+          } catch (e) {
+            NumberedLogger.w('Corrupt game json for $gameId: $e');
             issues.add('Corrupt game json for $gameId');
           }
         }
@@ -1198,7 +1352,9 @@ class CloudGamesServiceInstance {
             emitGames();
           },
           onError: (error) {
-            NumberedLogger.e('Error watching invited game $gameId: $error');
+            NumberedLogger.e('Stream error for invited game $gameId: $error');
+            gamesCache.remove(gameId);
+            emitGames();
           },
         );
 
@@ -1214,7 +1370,9 @@ class CloudGamesServiceInstance {
         controller.add(<Game>[]);
         indexSubscription = pendingIndexRef.onValue.listen(
           (event) {
-            unawaited(handleIndexEvent(event));
+            unawaited(handleIndexEvent(event).catchError((error) {
+              NumberedLogger.e('Error handling index event: $error');
+            }));
           },
           onError: (error) {
             NumberedLogger.e('Error watching pending invite index: $error');
@@ -1222,11 +1380,16 @@ class CloudGamesServiceInstance {
         );
       },
       onCancel: () async {
+        // Cancel index subscription
         await indexSubscription?.cancel();
         indexSubscription = null;
+
+        // Cancel all game subscriptions in parallel
+        final subscriptionFutures = <Future>[];
         for (final sub in gameSubscriptions.values) {
-          await sub.cancel();
+          subscriptionFutures.add(sub.cancel());
         }
+        await Future.wait(subscriptionFutures);
         gameSubscriptions.clear();
         gamesCache.clear();
       },
@@ -1376,7 +1539,7 @@ class CloudGamesServiceInstance {
       for (final gameId in joinedIds) {
         try {
           final gameSnapshot = await _gamesRef.child(gameId).get();
-          if (!gameSnapshot.exists) continue;
+          if (!gameSnapshot.exists || gameSnapshot.value == null) continue;
           final game = Game.fromJson(
               Map<String, dynamic>.from(gameSnapshot.value as Map));
           // Include upcoming games (active or cancelled), and ensure user is actually in players list
@@ -1413,23 +1576,30 @@ class CloudGamesServiceInstance {
       // Add subscriptions for new games
       for (final gameId in gameIds) {
         if (!joinedGameSubscriptions.containsKey(gameId)) {
-          final sub = watchGame(gameId).listen((game) {
-            if (game != null &&
-                game.dateTime.isAfter(now) &&
-                game.players.contains(userId)) {
-              joinedGamesDataCache[gameId] = game;
-            } else {
-              joinedGamesDataCache.remove(gameId);
-            }
-            if (!joinedGamesDataStreamController.isClosed) {
-              joinedGamesDataStreamController
-                  .add(Map<String, Game>.from(joinedGamesDataCache));
-            }
-          }, onError: (e) {
-            if (!joinedGamesDataStreamController.isClosed) {
-              joinedGamesDataStreamController.addError(e);
-            }
-          });
+          final sub = watchGame(gameId).listen(
+            (game) {
+              if (game != null &&
+                  game.dateTime.isAfter(now) &&
+                  game.players.contains(userId)) {
+                joinedGamesDataCache[gameId] = game;
+              } else {
+                joinedGamesDataCache.remove(gameId);
+              }
+              if (!joinedGamesDataStreamController.isClosed) {
+                joinedGamesDataStreamController
+                    .add(Map<String, Game>.from(joinedGamesDataCache));
+              }
+            },
+            onError: (e) {
+              NumberedLogger.w('Error in game stream for $gameId: $e');
+              // For transient errors, log and emit to stream
+              // The stream will be recreated when updateWatchedJoinedGames is called again
+              // This handles network errors and other transient failures gracefully
+              if (!joinedGamesDataStreamController.isClosed) {
+                joinedGamesDataStreamController.addError(e);
+              }
+            },
+          );
           joinedGameSubscriptions[gameId] = sub;
         }
       }
@@ -1525,6 +1695,10 @@ class CloudGamesServiceInstance {
           Map<dynamic, dynamic>.from(event.snapshot.value as Map);
       final gameIds = joinedData.keys.map((k) => k.toString()).toSet();
       updateWatchedJoinedGames(gameIds);
+    }, onError: (error) {
+      NumberedLogger.e('Error watching joined games index: $error');
+      // On error, try to update with empty set to clear cache
+      updateWatchedJoinedGames({});
     });
 
     // Initial fetch to populate data
@@ -1583,17 +1757,31 @@ class CloudGamesServiceInstance {
       emitCombined();
     });
 
-    controller.onCancel = () {
-      organizedSub?.cancel();
-      organizedIndexSub?.cancel();
-      joinedIndexSub?.cancel();
-      joinedDataSub?.cancel();
-      joinedIndexWatchSubRef?.cancel();
+    controller.onCancel = () async {
+      // Cancel all subscriptions to prevent memory leaks
+      await organizedSub?.cancel();
+      organizedSub = null;
+      await organizedIndexSub?.cancel();
+      organizedIndexSub = null;
+      await joinedIndexSub?.cancel();
+      joinedIndexSub = null;
+      await joinedDataSub?.cancel();
+      joinedDataSub = null;
+      await joinedIndexWatchSubRef?.cancel();
+      joinedIndexWatchSubRef = null;
+
+      // Cancel all individual game subscriptions
+      final subscriptionFutures = <Future>[];
       for (final sub in joinedGameSubscriptions.values) {
-        sub.cancel();
+        subscriptionFutures.add(sub.cancel());
       }
+      await Future.wait(subscriptionFutures);
       joinedGameSubscriptions.clear();
-      joinedGamesDataStreamController.close();
+
+      // Close stream controller if not already closed
+      if (!joinedGamesDataStreamController.isClosed) {
+        joinedGamesDataStreamController.close();
+      }
     };
 
     // Use a more lenient distinct that only checks for meaningful changes
@@ -1845,10 +2033,7 @@ class CloudGamesServiceInstance {
   // Join a game
   Future<void> joinGame(String gameId) async {
     try {
-      final userId = _currentUserId;
-      if (userId == null) {
-        throw AuthException('User not authenticated');
-      }
+      final userId = _requireCurrentUserId();
 
       // Get the game
       final gameSnapshot = await _gamesRef.child(gameId).get();
@@ -1901,6 +2086,13 @@ class CloudGamesServiceInstance {
       // Commit all updates atomically
       await _database.ref().update(updates);
 
+      // Invalidate cache for the user who joined
+      _invalidateCache(userId: userId);
+      // Also invalidate organizer's cache if different
+      if (game.organizerId != userId) {
+        _invalidateCache(userId: game.organizerId);
+      }
+
       // Streams will update automatically - no cache clearing needed
     } catch (e, st) {
       NumberedLogger.e('Error joining game: $e');
@@ -1912,10 +2104,7 @@ class CloudGamesServiceInstance {
   // Leave a game
   Future<void> leaveGame(String gameId) async {
     try {
-      final userId = _currentUserId;
-      if (userId == null) {
-        throw AuthException('User not authenticated');
-      }
+      final userId = _requireCurrentUserId();
 
       // Get the game
       final gameSnapshot = await _gamesRef.child(gameId).get();
@@ -1970,10 +2159,7 @@ class CloudGamesServiceInstance {
   // Accept game invite
   Future<void> acceptGameInvite(String gameId) async {
     try {
-      final userId = _currentUserId;
-      if (userId == null) {
-        throw AuthException('User not authenticated');
-      }
+      final userId = _requireCurrentUserId();
 
       // Check if user has a pending invite for this game
       final inviteSnapshot = await _usersRef
@@ -2001,10 +2187,7 @@ class CloudGamesServiceInstance {
   // Decline game invite
   Future<void> declineGameInvite(String gameId) async {
     try {
-      final userId = _currentUserId;
-      if (userId == null) {
-        throw AuthException('User not authenticated');
-      }
+      final userId = _requireCurrentUserId();
 
       // Prepare atomic updates
       final Map<String, Object?> updates = {};
@@ -2107,10 +2290,7 @@ class CloudGamesServiceInstance {
     try {
       if (friendUids.isEmpty) return;
 
-      final userId = _currentUserId;
-      if (userId == null) {
-        throw AuthException('User not authenticated');
-      }
+      final userId = _requireCurrentUserId();
 
       NumberedLogger.d(
           'Sending invites for game $gameId to ${friendUids.length} friends');
@@ -2120,6 +2300,11 @@ class CloudGamesServiceInstance {
       if (game == null) {
         NumberedLogger.e('Game not found when sending invites: $gameId');
         throw NotFoundException('Game not found: $gameId');
+      }
+
+      // Verify user is the organizer
+      if (game.organizerId != userId) {
+        throw AuthException('Only the game organizer can send invites');
       }
 
       final timestamp = DateTime.now().millisecondsSinceEpoch;
@@ -2195,6 +2380,189 @@ class CloudGamesServiceInstance {
     } catch (e) {
       NumberedLogger.e('Error ensuring user profile: $e');
     }
+  }
+
+  /// Get booked time slots for a specific date and field
+  ///
+  /// Returns a set of booked times in "HH:mm" format.
+  /// Verifies slots against active games to filter out cancelled games.
+  Future<Set<String>> getBookedSlots({
+    required DateTime date,
+    required Map<String, dynamic>? field,
+  }) async {
+    if (field == null) return <String>{};
+
+    // Compute dateKey = yyyy-MM-dd
+    final dateKey = _dateKey(date);
+
+    // Compute fieldKey (prefer id, else lat_lon with underscores, else sanitized name)
+    // SECURITY: Sanitize all inputs to prevent path injection
+    String fieldKey = _fieldKeyFromMap(field);
+
+    final path = 'slots/$dateKey/$fieldKey';
+    NumberedLogger.d(
+        '🔍 Loading booked slots: dateKey=$dateKey, fieldKey=$fieldKey, path=$path');
+
+    final times = <String>{};
+
+    // Try to read from Firebase slots
+    try {
+      final snapshot = await _database.ref(path).get();
+
+      if (snapshot.exists && snapshot.value is Map) {
+        final map = Map<dynamic, dynamic>.from(snapshot.value as Map);
+        NumberedLogger.d(
+            '🔍 Found ${map.keys.length} booked slots in Firebase');
+        for (final k in map.keys) {
+          var t = k.toString();
+          if (t.length == 4) {
+            t = '${t.substring(0, 2)}:${t.substring(2)}';
+          }
+          final normalizedTime = t.trim();
+          times.add(normalizedTime);
+        }
+      }
+    } catch (e) {
+      NumberedLogger.w('🔍 Firebase slots read failed: $e');
+      // Continue to verification/fallback
+    }
+
+    // Verify slots against active games to filter out cancelled games
+    try {
+      final myGames = await getMyGames();
+      final joinable = await getJoinableGames();
+      final all = <Game>[...myGames, ...joinable];
+
+      final activeGameTimes = <String>{};
+      for (final g in all) {
+        // Skip cancelled games - they've freed their slots
+        if (!g.isActive) continue;
+
+        final gDateKey = _dateKey(g.dateTime);
+        if (gDateKey != dateKey) continue;
+
+        if (!_isSameField(g, field, fieldKey)) continue;
+
+        final hh = g.dateTime.hour.toString().padLeft(2, '0');
+        final mm = g.dateTime.minute.toString().padLeft(2, '0');
+        final timeStr = '$hh:$mm';
+        activeGameTimes.add(timeStr);
+      }
+
+      // Use active games as the authoritative source
+      times.clear();
+      times.addAll(activeGameTimes);
+      NumberedLogger.d(
+          '🔍 After verification: ${times.length} valid booked times');
+    } catch (e) {
+      NumberedLogger.w('🔍 Verification error: $e');
+      // If verification fails, keep original times from Firebase
+    }
+
+    // Fallback: infer from games if slots node is empty
+    if (times.isEmpty) {
+      NumberedLogger.d('🔍 Slots empty, trying fallback from games...');
+      try {
+        final myGames = await getMyGames();
+        final joinable = await getJoinableGames();
+        final all = <Game>[...myGames, ...joinable];
+
+        for (final g in all) {
+          if (!g.isActive) continue;
+
+          final gDateKey = _dateKey(g.dateTime);
+          if (gDateKey != dateKey) continue;
+
+          if (!_isSameField(g, field, fieldKey)) continue;
+
+          final hh = g.dateTime.hour.toString().padLeft(2, '0');
+          final mm = g.dateTime.minute.toString().padLeft(2, '0');
+          final timeStr = '$hh:$mm';
+          times.add(timeStr);
+        }
+        NumberedLogger.d('🔍 Fallback found ${times.length} booked times');
+      } catch (e) {
+        NumberedLogger.w('🔍 Fallback error: $e');
+      }
+    }
+
+    return times;
+  }
+
+  /// Compute fieldKey from field map (same logic as in screen)
+  String _fieldKeyFromMap(Map<String, dynamic> field) {
+    final id = field['id']?.toString();
+    if (id != null && id.trim().isNotEmpty) {
+      // Sanitize field ID to prevent path injection
+      var fieldKey = id
+          .trim()
+          .replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '_')
+          .replaceAll(RegExp(r'_+'), '_');
+      // Limit length to prevent issues
+      if (fieldKey.length > 100) {
+        fieldKey = fieldKey.substring(0, 100);
+      }
+      return fieldKey;
+    } else if (field['latitude'] != null && field['longitude'] != null) {
+      final lat = safeToDouble(field['latitude']);
+      final lon = safeToDouble(field['longitude']);
+      if (lat == null || lon == null) {
+        final name = (field['name']?.toString() ?? '').toLowerCase();
+        final sanitized = name
+            .replaceAll(RegExp(r'[^a-z0-9]+'), '_')
+            .replaceAll(RegExp(r'_+'), '_')
+            .trim();
+        return sanitized.isEmpty ? 'unknown_field' : sanitized;
+      }
+      final latFixed = lat.toStringAsFixed(5).replaceAll('.', '_');
+      final lonFixed = lon.toStringAsFixed(5).replaceAll('.', '_');
+      return '${latFixed}_${lonFixed}';
+    } else {
+      final name = (field['name']?.toString() ?? '').toLowerCase();
+      final sanitized = name
+          .replaceAll(RegExp(r'[^a-z0-9]+'), '_')
+          .replaceAll(RegExp(r'_+'), '_')
+          .trim();
+      return sanitized.isEmpty ? 'unknown_field' : sanitized;
+    }
+  }
+
+  /// Check if a game matches the given field
+  bool _isSameField(Game game, Map<String, dynamic> field, String fieldKey) {
+    String sanitizeName(String s) => s
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9]+'), '_')
+        .replaceAll(RegExp(r'_+'), '_')
+        .trim();
+
+    final gLat = game.latitude;
+    final gLon = game.longitude;
+    final hasCoords = gLat != null && gLon != null;
+    final gKey = hasCoords
+        ? '${gLat.toStringAsFixed(5).replaceAll('.', '_')}_${gLon.toStringAsFixed(5).replaceAll('.', '_')}'
+        : sanitizeName(game.location);
+
+    if (gKey == fieldKey) return true;
+
+    if (hasCoords && field['latitude'] != null && field['longitude'] != null) {
+      final sLat = safeToDouble(field['latitude']);
+      final sLon = safeToDouble(field['longitude']);
+      if (sLat == null || sLon == null) {
+        return sanitizeName(game.location) ==
+            sanitizeName(field['name']?.toString() ?? '');
+      }
+      if (areCoordinatesVeryClose(
+        lat1: gLat,
+        lon1: gLon,
+        lat2: sLat,
+        lon2: sLon,
+      )) {
+        return true;
+      }
+    }
+
+    return sanitizeName(game.location) ==
+        sanitizeName(field['name']?.toString() ?? '');
   }
 
   // Cache invalidation methods (no-op - no caching to match old fast behavior)

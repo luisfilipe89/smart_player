@@ -1,4 +1,3 @@
-// lib/providers/services/friends_provider.dart
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:move_young/features/friends/services/friends_service_instance.dart';
 import 'package:move_young/features/friends/services/friends_service.dart';
@@ -8,15 +7,6 @@ import 'package:move_young/providers/infrastructure/firebase_providers.dart';
 import 'package:move_young/services/system/sync_provider.dart';
 import 'package:move_young/utils/logger.dart';
 import 'package:move_young/services/firebase_error_handler.dart';
-
-// NotificationService provider will be added when needed
-// final notificationServiceProvider = Provider<NotificationService>((ref) {
-//   return NotificationService();
-// });
-
-// Use the centralized connectivity service provider
-
-// Use the centralized cache service provider
 
 /// Provider for IFriendsService with dependency injection.
 ///

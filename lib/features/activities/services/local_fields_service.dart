@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/services.dart' show rootBundle;
+import 'package:move_young/utils/type_converters.dart';
 
 class LocalFieldsService {
   const LocalFieldsService();
@@ -42,8 +43,8 @@ class LocalFieldsService {
 
           if (properties['lat'] != null && properties['lon'] != null) {
             // Use pre-calculated coordinates
-            lat = _toDouble(properties['lat']);
-            lon = _toDouble(properties['lon']);
+            lat = safeToDouble(properties['lat']);
+            lon = safeToDouble(properties['lon']);
           } else {
             // Fallback: extract from geometry (for files without pre-calculated coordinates)
             final coords = _extractLatLon(map['geometry']);
@@ -170,8 +171,8 @@ class LocalFieldsService {
     final coordinates = geometry['coordinates'];
 
     if (type == 'Point' && coordinates is List && coordinates.length >= 2) {
-      final lon = _toDouble(coordinates[0]);
-      final lat = _toDouble(coordinates[1]);
+      final lon = safeToDouble(coordinates[0]);
+      final lat = safeToDouble(coordinates[1]);
       if (lat != null && lon != null) {
         return (lat, lon);
       }
@@ -186,8 +187,8 @@ class LocalFieldsService {
         int count = 0;
         for (final point in firstRing) {
           if (point is List && point.length >= 2) {
-            final lon = _toDouble(point[0]);
-            final lat = _toDouble(point[1]);
+            final lon = safeToDouble(point[0]);
+            final lat = safeToDouble(point[1]);
             if (lat != null && lon != null) {
               sumLat += lat;
               sumLon += lon;
@@ -201,16 +202,6 @@ class LocalFieldsService {
       }
     }
 
-    return null;
-  }
-
-  double? _toDouble(dynamic value) {
-    if (value is num) {
-      return value.toDouble();
-    }
-    if (value is String) {
-      return double.tryParse(value);
-    }
     return null;
   }
 }

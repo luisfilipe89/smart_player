@@ -237,7 +237,12 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                     if (value == null || value.trim().isEmpty) {
                       return 'auth_email_required'.tr();
                     }
-                    if (!value.contains('@')) {
+                    // Basic email format validation (Firebase Auth will perform stricter validation)
+                    // Pattern: local@domain.tld (allows common email formats)
+                    final emailRegex = RegExp(
+                      r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$',
+                    );
+                    if (!emailRegex.hasMatch(value.trim())) {
                       return 'auth_email_invalid'.tr();
                     }
                     return null;

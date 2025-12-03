@@ -14,12 +14,19 @@ import 'package:move_young/services/system/haptics_provider.dart';
 import 'package:move_young/features/friends/services/friends_provider.dart';
 import 'package:move_young/navigation/main_scaffold.dart';
 import 'package:move_young/widgets/success_checkmark_overlay.dart';
-import 'package:move_young/providers/infrastructure/firebase_providers.dart';
 import 'package:move_young/services/system/location_provider.dart';
 import 'package:move_young/features/maps/screens/gmaps_screen.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:move_young/services/calendar/calendar_service.dart';
 import 'package:move_young/widgets/app_back_button.dart';
+import 'package:move_young/utils/time_slot_utils.dart';
+import 'package:move_young/features/games/services/field_data_processor.dart';
+import 'package:move_young/features/games/services/game_form_validator.dart';
+import 'package:move_young/utils/snackbar_helper.dart';
+import 'package:move_young/utils/date_formatter.dart';
+import 'package:move_young/utils/type_converters.dart';
+import 'package:move_young/utils/geolocation_utils.dart';
+import 'package:move_young/utils/logger.dart';
 
 class GameOrganizeScreen extends ConsumerStatefulWidget {
   final Game? initialGame;
@@ -75,13 +82,7 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
 
   void _showSignInInlinePrompt() {
     if (!mounted) return;
-    final messenger = ScaffoldMessenger.of(context);
-    messenger.showSnackBar(
-      SnackBar(
-        content: Text('please_sign_in'.tr()),
-        backgroundColor: AppColors.red,
-      ),
-    );
+    SnackBarHelper.showError(context, 'please_sign_in');
   }
 
   @override
@@ -198,20 +199,8 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
 
     if (selectedDate == today) {
       // Filter out past times for today
-      final currentHour = now.hour;
-      final currentMinute = now.minute;
-
       return allTimes.where((time) {
-        final timeParts = time.split(':');
-        final hour = int.parse(timeParts[0]);
-        final minute = int.parse(timeParts[1]);
-
-        // If the time is in the future, include it
-        if (hour > currentHour ||
-            (hour == currentHour && minute > currentMinute)) {
-          return true;
-        }
-        return false;
+        return isTimeInFuture(time, now);
       }).toList();
     }
 
@@ -219,38 +208,10 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
     return allTimes;
   }
 
-  // Helper function to convert time string (HH:mm) to minutes since midnight
-  int _timeStringToMinutes(String timeStr) {
-    final parts = timeStr.split(':');
-    final hour = int.parse(parts[0]);
-    final minute = int.parse(parts[1]);
-    return hour * 60 + minute;
-  }
-
-  // Helper function to check if two 1-hour time slots overlap
-  // Games always last 1 hour, so we need to check if the 1-hour windows overlap
-  bool _slotsOverlap(String time1, String time2) {
-    final minutes1 = _timeStringToMinutes(time1);
-    final minutes2 = _timeStringToMinutes(time2);
-
-    // Each slot is a 1-hour window: [start, start+60)
-    final start1 = minutes1;
-    final end1 = minutes1 + 60;
-    final start2 = minutes2;
-    final end2 = minutes2 + 60;
-
-    // Two intervals overlap if: start1 < end2 && start2 < end1
-    return start1 < end2 && start2 < end1;
-  }
-
   // Check if a time slot conflicts with any booked time (considering 1-hour duration)
+  // Uses shared utility for consistency
   bool _isTimeSlotBooked(String time, Set<String> bookedTimes) {
-    for (final bookedTime in bookedTimes) {
-      if (_slotsOverlap(time, bookedTime)) {
-        return true;
-      }
-    }
-    return false;
+    return isTimeSlotBooked(time, bookedTimes);
   }
 
   bool get _isFormComplete {
@@ -346,88 +307,18 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
       );
 
       // Debug: Check what we got back
-      debugPrint(
-        '🔍 Fetched ${rawFields.length} raw fields for sport: $sportType in area: s-Hertogenbosch',
+      NumberedLogger.d(
+        'Fetched ${rawFields.length} raw fields for sport: $sportType in area: s-Hertogenbosch',
       );
       if (rawFields.isNotEmpty) {
-        debugPrint('🔍 First field data: ${rawFields.first}');
+        NumberedLogger.d('First field data: ${rawFields.first}');
       }
 
-      // Normalize Overpass keys for UI consistency
-      String? shortenAddress(dynamic value) {
-        if (value == null) return null;
-        final text = value.toString().trim();
-        if (text.isEmpty) return null;
-        final commaIndex = text.indexOf(',');
-        if (commaIndex == -1) return text;
-        final shortened = text.substring(0, commaIndex).trim();
-        return shortened.isNotEmpty ? shortened : text;
-      }
+      // Normalize fields using extracted processor
+      final fields = FieldDataProcessor.normalizeFields(rawFields);
 
-      // Process fields without waiting for location - display immediately
-      final fields = rawFields
-          .map<Map<String, dynamic>>((f) {
-            final address =
-                f['address_short'] ?? f['addr:street'] ?? f['address'];
-            final rawAddressMicroShort =
-                f['address_micro_short'] ?? f['addressMicroShort'];
-            final rawAddressSuperShort =
-                f['address_super_short'] ?? f['addressSuperShort'];
-            final condensedAddressSuperShort =
-                shortenAddress(rawAddressSuperShort) ?? shortenAddress(address);
-            final rawName = f['name']?.toString().trim();
-            // Check if the name is actually just an address (matches super_short format)
-            final isNameAnAddress = rawName != null &&
-                rawName.isNotEmpty &&
-                rawAddressSuperShort != null &&
-                rawAddressSuperShort.toString().trim().isNotEmpty &&
-                rawName == rawAddressSuperShort.toString().trim();
-            // Prefer micro_short when name is missing or is just an address
-            final candidateName =
-                (rawName != null && rawName.isNotEmpty && !isNameAnAddress)
-                    ? rawName
-                    : (rawAddressMicroShort != null &&
-                            rawAddressMicroShort.toString().trim().isNotEmpty)
-                        ? rawAddressMicroShort.toString().trim()
-                        : (condensedAddressSuperShort ??
-                            rawAddressSuperShort?.toString().trim());
-            final name = (candidateName != null &&
-                    candidateName.toString().trim().isNotEmpty)
-                ? candidateName.toString().trim()
-                : 'Unnamed Field';
-            final lat = f['lat'] ?? f['latitude'];
-            final lon = f['lon'] ?? f['longitude'];
-            final lit = f['lit'] ?? f['lighting'];
-            double? latDouble;
-            double? lonDouble;
-            if (lat is num) latDouble = lat.toDouble();
-            if (lon is num) lonDouble = lon.toDouble();
-            latDouble ??= double.tryParse(lat?.toString() ?? '');
-            lonDouble ??= double.tryParse(lon?.toString() ?? '');
-            return {
-              'id': f['id'],
-              'name': name,
-              'address': address,
-              if (rawAddressMicroShort != null &&
-                  rawAddressMicroShort.toString().trim().isNotEmpty)
-                'addressMicroShort': rawAddressMicroShort.toString().trim(),
-              if (condensedAddressSuperShort != null)
-                'addressSuperShort': condensedAddressSuperShort,
-              if (rawAddressSuperShort != null &&
-                  rawAddressSuperShort.toString().trim().isNotEmpty)
-                'addressSuperShortFull': rawAddressSuperShort.toString().trim(),
-              'latitude': latDouble ?? lat,
-              'longitude': lonDouble ?? lon,
-              'surface': f['surface'],
-              'lighting':
-                  (lit == true) || (lit?.toString().toLowerCase() == 'yes'),
-            };
-          })
-          .where((m) => m['latitude'] != null && m['longitude'] != null)
-          .toList();
-
-      debugPrint(
-        '🔍 Normalized to ${fields.length} fields with valid coordinates',
+      NumberedLogger.d(
+        'Normalized to ${fields.length} fields with valid coordinates',
       );
 
       // Display fields immediately without waiting for location
@@ -441,59 +332,15 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
           // map it to the corresponding instance from the freshly loaded list so identity
           // comparison (_selectedField == field) works for highlighting.
           if (_selectedField != null) {
-            final String selName = (_selectedField?['name'] as String?) ?? '';
-            final String? selFieldId = _selectedField?['id']?.toString();
-            final double? selLat = _selectedField?['latitude']?.toDouble();
-            final double? selLon = _selectedField?['longitude']?.toDouble();
+            final match = FieldDataProcessor.findMatchingField(
+              _selectedField,
+              fields,
+            );
 
-            // Try to match by fieldId first (most reliable)
-            Map<String, dynamic>? match;
-            if (selFieldId != null && selFieldId.isNotEmpty) {
-              match = fields.firstWhere(
-                (f) {
-                  final fId = f['id']?.toString();
-                  return fId != null && fId == selFieldId;
-                },
-                orElse: () => <String, dynamic>{},
-              );
-            }
-
-            // If no match by ID, try by name
-            if ((match == null || match.isEmpty) && selName.isNotEmpty) {
-              match = fields.firstWhere(
-                (f) {
-                  final fName = (f['name'] as String?) ?? '';
-                  return fName == selName ||
-                      fName.toLowerCase().trim() ==
-                          selName.toLowerCase().trim();
-                },
-                orElse: () => <String, dynamic>{},
-              );
-            }
-
-            // If still no match and we have coordinates, try matching by proximity
-            if ((match == null || match.isEmpty) &&
-                selLat != null &&
-                selLon != null) {
-              const double proximityThreshold = 0.0001; // ~11 meters
-              match = fields.firstWhere(
-                (f) {
-                  final fLat = f['latitude']?.toDouble();
-                  final fLon = f['longitude']?.toDouble();
-                  if (fLat == null || fLon == null) return false;
-                  final latDiff = (fLat - selLat).abs();
-                  final lonDiff = (fLon - selLon).abs();
-                  return latDiff < proximityThreshold &&
-                      lonDiff < proximityThreshold;
-                },
-                orElse: () => <String, dynamic>{},
-              );
-            }
-
-            if (match != null && match.isNotEmpty) {
+            if (match.isNotEmpty) {
               _selectedField = match;
-              debugPrint(
-                  '✅ Matched preselected field: ${match['name']} (id: ${match['id']})');
+              NumberedLogger.i(
+                  'Matched preselected field: ${match['name']} (id: ${match['id']})');
               // Ensure the matched field is included in filtered fields
               // (in case there's a search query that would filter it out)
               final matchId = match['id']?.toString();
@@ -510,8 +357,10 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                 _fieldSearchController.clear();
               }
             } else {
-              debugPrint(
-                  '⚠️ Could not match preselected field: $selName (id: $selFieldId)');
+              final selName = (_selectedField?['name'] as String?) ?? '';
+              final selFieldId = _selectedField?['id']?.toString();
+              NumberedLogger.w(
+                  'Could not match preselected field: $selName (id: $selFieldId)');
             }
           }
 
@@ -525,7 +374,7 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
       _updateFieldDistances(fields);
     } catch (e) {
       // Log the error so we can see Overpass or parsing failures
-      debugPrint('❌ Failed to load fields: $e');
+      NumberedLogger.e('Failed to load fields: $e');
       if (mounted) {
         setState(() {
           _availableFields = [];
@@ -550,7 +399,7 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
       userPosition =
           await ref.read(locationActionsProvider).getCurrentPosition();
     } catch (e) {
-      debugPrint('📍 Could not obtain user position: $e');
+      NumberedLogger.w('Could not obtain user position: $e');
       if (mounted) {
         setState(() {
           _isCalculatingDistances = false;
@@ -563,23 +412,12 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
 
     // Calculate distances for all fields
     final fieldsWithDistances = fields.map((f) {
-      final latDouble = (f['latitude'] as num?)?.toDouble() ??
-          double.tryParse(f['latitude']?.toString() ?? '');
-      final lonDouble = (f['longitude'] as num?)?.toDouble() ??
-          double.tryParse(f['longitude']?.toString() ?? '');
-
-      double? distance;
-      if (latDouble != null && lonDouble != null) {
-        distance = Geolocator.distanceBetween(
-          userPosition.latitude,
-          userPosition.longitude,
-          latDouble,
-          lonDouble,
-        );
-        if (!distance.isFinite || distance > _kMaxDistanceMetersToDisplay) {
-          distance = null;
-        }
-      }
+      final distance = calculateDistanceFromMap(
+        startLat: userPosition.latitude,
+        startLon: userPosition.longitude,
+        endField: f,
+        maxDistanceMeters: _kMaxDistanceMetersToDisplay,
+      );
 
       return {
         ...f,
@@ -589,8 +427,8 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
 
     // Sort by distance
     fieldsWithDistances.sort((a, b) {
-      final da = (a['distance'] as num?)?.toDouble() ?? double.infinity;
-      final db = (b['distance'] as num?)?.toDouble() ?? double.infinity;
+      final da = safeToDoubleWithDefault(a['distance'], double.infinity);
+      final db = safeToDoubleWithDefault(b['distance'], double.infinity);
       return da.compareTo(db);
     });
 
@@ -603,8 +441,8 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
         if (_selectedField != null) {
           final String selName = (_selectedField?['name'] as String?) ?? '';
           final String? selFieldId = _selectedField?['id']?.toString();
-          final double? selLat = _selectedField?['latitude']?.toDouble();
-          final double? selLon = _selectedField?['longitude']?.toDouble();
+          final double? selLat = safeToDouble(_selectedField?['latitude']);
+          final double? selLon = safeToDouble(_selectedField?['longitude']);
 
           // Try to match by fieldId first (most reliable)
           Map<String, dynamic>? match;
@@ -634,16 +472,13 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
           if ((match == null || match.isEmpty) &&
               selLat != null &&
               selLon != null) {
-            const double proximityThreshold = 0.0001; // ~11 meters
             match = fieldsWithDistances.firstWhere(
               (f) {
-                final fLat = f['latitude']?.toDouble();
-                final fLon = f['longitude']?.toDouble();
-                if (fLat == null || fLon == null) return false;
-                final latDiff = (fLat - selLat).abs();
-                final lonDiff = (fLon - selLon).abs();
-                return latDiff < proximityThreshold &&
-                    lonDiff < proximityThreshold;
+                return areCoordinatesNearbyFromMap(
+                  refLat: selLat,
+                  refLon: selLon,
+                  field: f,
+                );
               },
               orElse: () => <String, dynamic>{},
             );
@@ -663,24 +498,20 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
   // Only loads weather when both date and field are selected to ensure we use the field's actual coordinates
   Future<void> _loadWeather() async {
     if (_selectedDate == null) {
-      debugPrint('🌤️ Weather: No selected date');
+      NumberedLogger.d('Weather: No selected date');
       return;
     }
 
     // Don't load weather until a field is selected - this ensures we use the field's actual coordinates
     // instead of falling back to default coordinates
-    final selectedFieldLat =
-        (_selectedField?['latitude'] as num?)?.toDouble() ??
-            double.tryParse(_selectedField?['latitude']?.toString() ?? '') ??
-            (_selectedField?['lat'] as num?)?.toDouble();
-    final selectedFieldLon =
-        (_selectedField?['longitude'] as num?)?.toDouble() ??
-            double.tryParse(_selectedField?['longitude']?.toString() ?? '') ??
-            (_selectedField?['lon'] as num?)?.toDouble();
+    final selectedFieldLat = safeToDouble(_selectedField?['latitude']) ??
+        safeToDouble(_selectedField?['lat']);
+    final selectedFieldLon = safeToDouble(_selectedField?['longitude']) ??
+        safeToDouble(_selectedField?['lon']);
 
     if (selectedFieldLat == null || selectedFieldLon == null) {
-      debugPrint(
-          '🌤️ Weather: No field selected - skipping weather load to ensure field-specific coordinates are used');
+      NumberedLogger.d(
+          'Weather: No field selected - skipping weather load to ensure field-specific coordinates are used');
       if (mounted) {
         setState(() {
           _weatherData = {};
@@ -701,8 +532,8 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
       final latitude = selectedFieldLat;
       final longitude = selectedFieldLon;
 
-      debugPrint(
-        "🌤️ Weather: Fetching for date ${_selectedDate!}, field ${_selectedField?['name']}, lat $latitude, lon $longitude",
+      NumberedLogger.d(
+        "Weather: Fetching for date ${_selectedDate!}, field ${_selectedField?['name']}, lat $latitude, lon $longitude",
       );
 
       final weatherData = await weatherActions.fetchWeatherForDate(
@@ -711,8 +542,8 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
         longitude: longitude,
       );
 
-      debugPrint(
-          '🌤️ Weather: Received ${weatherData.length} hours of data for field at ($latitude, $longitude)');
+      NumberedLogger.d(
+          'Weather: Received ${weatherData.length} hours of data for field at ($latitude, $longitude)');
 
       if (mounted) {
         setState(() {
@@ -721,7 +552,7 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
         });
       }
     } catch (e) {
-      debugPrint('🌤️ Weather: Error - $e');
+      NumberedLogger.e('Weather: Error - $e');
       // Set empty weather data on error - don't show misleading default
       if (mounted) {
         setState(() {
@@ -743,50 +574,44 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
     // If no changes in edit mode, show info and exit early
     if (widget.initialGame != null && !_hasChanges) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('No changes were made'),
-            backgroundColor: AppColors.grey,
-          ),
+        SnackBarHelper.showInfo(context, 'No changes were made');
+      }
+      return;
+    }
+    // Validate required fields
+    final requiredFieldsResult = GameFormValidator.validateRequiredFields(
+      sport: _selectedSport,
+      field: _selectedField,
+      date: _selectedDate,
+      time: _selectedTime,
+    );
+    if (!requiredFieldsResult.isValid) {
+      if (mounted) {
+        SnackBarHelper.showError(
+          context,
+          requiredFieldsResult.errorMessage ?? 'form_fill_all_fields',
         );
       }
       return;
     }
-    // Final guard: block past date/time
-    if (_selectedDate != null && _selectedTime != null) {
-      final now = DateTime.now();
-      final parts = _selectedTime!.split(':');
-      final dt = DateTime(
-        _selectedDate!.year,
-        _selectedDate!.month,
-        _selectedDate!.day,
-        int.parse(parts[0]),
-        int.parse(parts[1]),
-      );
-      if (!dt.isAfter(now)) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('please_select_future_time'.tr()),
-              backgroundColor: AppColors.red,
-            ),
-          );
-        }
-        return;
+
+    if (widget.initialGame == null) {
+      if (mounted) {
+        SnackBarHelper.showError(context, 'form_fill_all_fields');
       }
+      return;
     }
 
-    if (_selectedSport == null ||
-        _selectedField == null ||
-        _selectedDate == null ||
-        _selectedTime == null ||
-        widget.initialGame == null) {
+    // Validate future date/time
+    final futureDateTimeResult = GameFormValidator.validateFutureDateTime(
+      date: _selectedDate,
+      time: _selectedTime,
+    );
+    if (!futureDateTimeResult.isValid) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('form_fill_all_fields'.tr()),
-            backgroundColor: AppColors.red,
-          ),
+        SnackBarHelper.showError(
+          context,
+          futureDateTimeResult.errorMessage ?? 'please_select_future_time',
         );
       }
       return;
@@ -800,24 +625,25 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
 
     try {
       // Parse the selected time and combine with selected date
-      final timeParts = _selectedTime!.split(':');
-      final hour = int.parse(timeParts[0]);
-      final minute = int.parse(timeParts[1]);
-      final combinedDateTime = DateTime(
-        _selectedDate!.year,
-        _selectedDate!.month,
-        _selectedDate!.day,
-        hour,
-        minute,
+      final combinedDateTime = GameFormValidator.parseDateTime(
+        date: _selectedDate!,
+        time: _selectedTime!,
       );
+      if (combinedDateTime == null) {
+        if (mounted) {
+          setState(() => _isLoading = false);
+          SnackBarHelper.showError(context, 'invalid_time_format');
+        }
+        return;
+      }
 
       final current = widget.initialGame!;
       final String newLocation = _selectedField?['name'] ?? current.location;
       final String? newAddress = _selectedField?['address'] ?? current.address;
       final double? newLat =
-          _selectedField?['latitude']?.toDouble() ?? current.latitude;
+          safeToDouble(_selectedField?['latitude']) ?? current.latitude;
       final double? newLon =
-          _selectedField?['longitude']?.toDouble() ?? current.longitude;
+          safeToDouble(_selectedField?['longitude']) ?? current.longitude;
       final String? newFieldId =
           _selectedField?['id']?.toString() ?? current.fieldId;
 
@@ -848,13 +674,13 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
             await ref
                 .read(cloudGamesActionsProvider)
                 .sendGameInvitesToFriends(current.id, newInvites);
-            debugPrint(
-              '✅ Successfully sent invites to ${newInvites.length} friends',
+            NumberedLogger.i(
+              'Successfully sent invites to ${newInvites.length} friends',
             );
           } catch (e, stackTrace) {
             // Log error but don't fail game update
-            debugPrint('❌ Failed to send game invites: $e');
-            debugPrint('Stack trace: $stackTrace');
+            NumberedLogger.e('Failed to send game invites: $e');
+            NumberedLogger.d('Stack trace: $stackTrace');
             // Show error to user so they know invites weren't sent
             if (mounted) {
               messenger.showSnackBar(
@@ -888,12 +714,7 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
         Future.delayed(const Duration(milliseconds: 750), () {
           if (mounted) setState(() => _showSuccess = false);
         });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('game_updated_successfully'.tr()),
-            backgroundColor: AppColors.green,
-          ),
-        );
+        SnackBarHelper.showSuccess(context, 'game_updated_successfully');
         // Navigate to My Games → Organized and highlight the updated game
         final ctrl = MainScaffoldController.maybeOf(context);
         ctrl?.openMyGames(
@@ -911,36 +732,16 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
 
         if (isSlotUnavailable) {
           errorMsg = 'time_slot_unavailable'.tr();
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Row(
-                children: [
-                  const Icon(Icons.block, color: Colors.white, size: 20),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      errorMsg,
-                      style: AppTextStyles.body.copyWith(color: Colors.white),
-                    ),
-                  ),
-                ],
-              ),
-              backgroundColor: AppColors.red,
-              duration: const Duration(seconds: 3),
-              behavior: SnackBarBehavior.floating,
-            ),
-          );
+          SnackBarHelper.showBlocked(context, errorMsg);
           ref.read(hapticsActionsProvider)?.mediumImpact();
         } else {
           if (es.contains('not_authorized')) {
             errorMsg = 'not_authorized'.tr();
           }
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(errorMsg),
-              backgroundColor: AppColors.red,
-              duration: const Duration(seconds: 5),
-            ),
+          SnackBarHelper.showError(
+            context,
+            errorMsg,
+            duration: const Duration(seconds: 5),
           );
         }
       }
@@ -954,306 +755,73 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
   }
 
   Future<void> _loadBookedSlots() async {
-    debugPrint('🔍 _loadBookedSlots() called');
+    NumberedLogger.d('_loadBookedSlots() called');
     if (_selectedField == null || _selectedDate == null) {
-      debugPrint(
-        '🔍 _loadBookedSlots() early return: field=${_selectedField?.toString()}, date=${_selectedDate?.toString()}',
+      NumberedLogger.d(
+        '_loadBookedSlots() early return: field=${_selectedField?.toString()}, date=${_selectedDate?.toString()}',
       );
       return;
     }
     try {
-      // Compute dateKey = yyyy-MM-dd
-      final d = _selectedDate!;
-      final y = d.year.toString().padLeft(4, '0');
-      final m = d.month.toString().padLeft(2, '0');
-      final day = d.day.toString().padLeft(2, '0');
-      final dateKey = '$y-$m-$day';
-
-      // Compute fieldKey (prefer id, else lat_lon with underscores, else sanitized name)
-      String fieldKey = '';
-      final id = _selectedField?['id']?.toString();
-      if (id != null && id.trim().isNotEmpty) {
-        fieldKey = id.trim();
-      } else if (_selectedField?['latitude'] != null &&
-          _selectedField?['longitude'] != null) {
-        final lat = (_selectedField?['latitude'] as num).toDouble();
-        final lon = (_selectedField?['longitude'] as num).toDouble();
-        final latFixed = lat.toStringAsFixed(5).replaceAll('.', '_');
-        final lonFixed = lon.toStringAsFixed(5).replaceAll('.', '_');
-        // ignore: unnecessary_brace_in_string_interps
-        fieldKey = '${latFixed}_${lonFixed}';
-      } else {
-        final name = (_selectedField?['name']?.toString() ?? '').toLowerCase();
-        final sanitized = name
-            .replaceAll(RegExp(r'[^a-z0-9]+'), '_')
-            .replaceAll(RegExp(r'_+'), '_')
-            .trim();
-        fieldKey = sanitized.isEmpty ? 'unknown_field' : sanitized;
-      }
-
-      final db = ref.read(firebaseDatabaseProvider);
-      final path = 'slots/$dateKey/$fieldKey';
-      debugPrint(
-        '🔍 Loading booked slots: dateKey=$dateKey, fieldKey=$fieldKey, path=$path',
-      );
-      debugPrint(
-        '🔍 Selected field: ${_selectedField?['name']}, id=${_selectedField?['id']}, lat=${_selectedField?['latitude']}, lon=${_selectedField?['longitude']}',
+      final cloudGamesService = ref.read(cloudGamesServiceProvider);
+      final times = await cloudGamesService.getBookedSlots(
+        date: _selectedDate!,
+        field: _selectedField,
       );
 
-      final times = <String>{};
-      try {
-        final snapshot = await db.ref(path).get();
-
-        if (snapshot.exists && snapshot.value is Map) {
-          final map = Map<dynamic, dynamic>.from(snapshot.value as Map);
-          debugPrint('🔍 Found ${map.keys.length} booked slots in Firebase');
-          for (final k in map.keys) {
-            var t = k.toString();
-            if (t.length == 4) {
-              t = '${t.substring(0, 2)}:${t.substring(2)}';
-            }
-            final normalizedTime = t.trim();
-            times.add(normalizedTime);
-            debugPrint(
-              '🔍 Found booked time: $normalizedTime (raw: ${k.toString()})',
-            );
-          }
-        } else {
-          debugPrint(
-            '🔍 No slots found at path: $path (exists=${snapshot.exists})',
-          );
-        }
-      } catch (e) {
-        debugPrint(
-          '🔍 Firebase slots read failed (may be permission denied): $e',
-        );
-        // Continue to fallback
-      }
-
-      // Always verify slots against active games to filter out cancelled games
-      // This ensures stale slots from cancelled games don't show as occupied
-      try {
-        final gamesService = ref.read(gamesServiceProvider);
-        final myGames = await gamesService.getMyGames();
-        final joinable = await gamesService.getJoinableGames();
-        final all = <dynamic>[...myGames, ...joinable];
-
-        String sanitizeName(String s) => s
-            .toLowerCase()
-            .replaceAll(RegExp(r'[^a-z0-9]+'), '_')
-            .replaceAll(RegExp(r'_+'), '_')
-            .trim();
-
-        bool sameField(dynamic g) {
-          final gLat = (g.latitude);
-          final gLon = (g.longitude);
-          final hasCoords = gLat != null && gLon != null;
-          final gKey = hasCoords
-              ? '${gLat.toStringAsFixed(5).replaceAll('.', '_')}_${gLon.toStringAsFixed(5).replaceAll('.', '_')}'
-              : sanitizeName(g.location);
-          if (gKey == fieldKey) return true;
-          if (hasCoords &&
-              _selectedField?['latitude'] != null &&
-              _selectedField?['longitude'] != null) {
-            final sLat = (_selectedField?['latitude'] as num).toDouble();
-            final sLon = (_selectedField?['longitude'] as num).toDouble();
-            if ((gLat - sLat).abs() < 1e-5 && (gLon - sLon).abs() < 1e-5) {
-              return true;
-            }
-          }
-          return sanitizeName(g.location) ==
-              sanitizeName(_selectedField?['name']?.toString() ?? '');
-        }
-
-        // Build set of actual active game times for this date/field
-        final activeGameTimes = <String>{};
-        for (final g in all) {
-          // Skip cancelled games - they've freed their slots
-          if (!g.isActive) {
-            debugPrint(
-              '🔍 Verification skipping cancelled game ${g.id} at ${g.location}',
-            );
-            continue;
-          }
-          final gDateKey =
-              '${g.dateTime.year.toString().padLeft(4, '0')}-${g.dateTime.month.toString().padLeft(2, '0')}-${g.dateTime.day.toString().padLeft(2, '0')}';
-          if (gDateKey != dateKey) continue;
-          if (!sameField(g)) continue;
-          final hh = g.dateTime.hour.toString().padLeft(2, '0');
-          final mm = g.dateTime.minute.toString().padLeft(2, '0');
-          final timeStr = '$hh:$mm';
-          activeGameTimes.add(timeStr);
-          debugPrint(
-            '🔍 Verification found active game time: $timeStr from game ${g.id} at ${g.location}',
-          );
-        }
-
-        // Filter out slots that don't belong to active games
-        // Use active games as source of truth to avoid stale cancelled game slots
-        final removedTimes = times.difference(activeGameTimes);
-        if (removedTimes.isNotEmpty) {
-          debugPrint(
-            '🔍 Filtered out ${removedTimes.length} stale slots from cancelled games: $removedTimes',
-          );
-        }
-        // Use active games as the authoritative source (they already include Firebase slots if correct)
-        times.clear();
-        times.addAll(activeGameTimes);
-        debugPrint(
-          '🔍 After verification: ${times.length} valid booked times (from ${activeGameTimes.length} active games)',
-        );
-      } catch (e) {
-        debugPrint('🔍 Verification error: $e');
-        // If verification fails, fall back to original behavior
-      }
-
-      // Fallback: infer from games if slots node is empty (original logic preserved)
-      if (times.isEmpty) {
-        debugPrint('🔍 Slots empty, trying fallback from games...');
-        try {
-          final gamesService = ref.read(gamesServiceProvider);
-          final myGames = await gamesService.getMyGames();
-          final joinable = await gamesService.getJoinableGames();
-          final all = <dynamic>[...myGames]
-            // ignore: prefer_spread_collections
-            ..addAll(joinable);
-          debugPrint(
-            '🔍 Checking ${all.length} games (${myGames.length} my, ${joinable.length} joinable)',
-          );
-
-          String sanitizeName(String s) => s
-              .toLowerCase()
-              .replaceAll(RegExp(r'[^a-z0-9]+'), '_')
-              .replaceAll(RegExp(r'_+'), '_')
-              .trim();
-
-          bool sameField(dynamic g) {
-            final gLat = (g.latitude);
-            final gLon = (g.longitude);
-            final hasCoords = gLat != null && gLon != null;
-            final gKey = hasCoords
-                ? '${gLat.toStringAsFixed(5).replaceAll('.', '_')}_${gLon.toStringAsFixed(5).replaceAll('.', '_')}'
-                : sanitizeName(g.location);
-            if (gKey == fieldKey) return true;
-            if (hasCoords &&
-                _selectedField?['latitude'] != null &&
-                _selectedField?['longitude'] != null) {
-              final sLat = (_selectedField?['latitude'] as num).toDouble();
-              final sLon = (_selectedField?['longitude'] as num).toDouble();
-              if ((gLat - sLat).abs() < 1e-5 && (gLon - sLon).abs() < 1e-5) {
-                return true;
-              }
-            }
-            return sanitizeName(g.location) ==
-                sanitizeName(_selectedField?['name']?.toString() ?? '');
-          }
-
-          for (final g in all) {
-            // Skip cancelled games - they've freed their slots
-            if (!g.isActive) {
-              debugPrint(
-                '🔍 Fallback skipping cancelled game ${g.id} at ${g.location}',
-              );
-              continue;
-            }
-            final gDateKey =
-                '${g.dateTime.year.toString().padLeft(4, '0')}-${g.dateTime.month.toString().padLeft(2, '0')}-${g.dateTime.day.toString().padLeft(2, '0')}';
-            if (gDateKey != dateKey) continue;
-            if (!sameField(g)) continue;
-            final hh = g.dateTime.hour.toString().padLeft(2, '0');
-            final mm = g.dateTime.minute.toString().padLeft(2, '0');
-            final timeStr = '$hh:$mm';
-            times.add(timeStr);
-            debugPrint(
-              '🔍 Fallback found booked time: $timeStr from game ${g.id} at ${g.location}',
-            );
-          }
-          debugPrint('🔍 Fallback found ${times.length} booked times total');
-        } catch (e) {
-          debugPrint('🔍 Fallback error: $e');
-        }
-      }
       if (mounted) {
-        debugPrint('🔍 Setting _bookedTimes to: ${times.toList()}');
+        NumberedLogger.d('Setting _bookedTimes to: ${times.toList()}');
         setState(() {
           _bookedTimes
             ..clear()
             ..addAll(times);
         });
-        debugPrint('🔍 _bookedTimes after setState: ${_bookedTimes.toList()}');
+        NumberedLogger.d(
+            '_bookedTimes after setState: ${_bookedTimes.toList()}');
       }
     } catch (e) {
-      debugPrint('🔍 Error loading booked slots: $e');
+      NumberedLogger.e('Error loading booked slots: $e');
     }
-  }
-
-  // Localized day of week and month abbreviations
-  String _getDayOfWeekAbbr(DateTime date, BuildContext context) {
-    // EEE => Mon, Tue (localized). Some locales add a trailing '.' → strip it
-    final s = DateFormat('EEE', context.locale.toString()).format(date);
-    return s.replaceAll('.', '').toUpperCase();
-  }
-
-  String _getMonthAbbr(DateTime date, BuildContext context) {
-    // MMM => Jan, Feb (localized). Some locales add a trailing '.' → strip it
-    final s = DateFormat('MMM', context.locale.toString()).format(date);
-    return s.replaceAll('.', '').toUpperCase();
   }
 
   Future<void> _createGame() async {
-    // Final guard: block past date/time
-    if (_selectedDate != null && _selectedTime != null) {
-      final now = DateTime.now();
-      final parts = _selectedTime!.split(':');
-      final dt = DateTime(
-        _selectedDate!.year,
-        _selectedDate!.month,
-        _selectedDate!.day,
-        int.parse(parts[0]),
-        int.parse(parts[1]),
-      );
-      if (!dt.isAfter(now)) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('please_select_future_time'.tr()),
-              backgroundColor: AppColors.red,
-            ),
-          );
-        }
+    // Validate required fields
+    final requiredFieldsResult = GameFormValidator.validateRequiredFields(
+      sport: _selectedSport,
+      field: _selectedField,
+      date: _selectedDate,
+      time: _selectedTime,
+    );
+    if (!requiredFieldsResult.isValid) {
+      if (_selectedTime == null) {
+        // Inline prompt near time section
+        setState(() {
+          // No-op state change; rely on UI hint rendering below
+        });
+        _scrollToCreateGameButton();
         return;
       }
-    }
-    if (_selectedSport == null) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('please_select_sport'.tr()),
-            backgroundColor: AppColors.red,
-          ),
+        SnackBarHelper.showError(
+          context,
+          requiredFieldsResult.errorMessage ?? 'form_fill_all_fields',
         );
       }
       return;
     }
 
-    if (_selectedDate == null) {
+    // Validate future date/time
+    final futureDateTimeResult = GameFormValidator.validateFutureDateTime(
+      date: _selectedDate,
+      time: _selectedTime,
+    );
+    if (!futureDateTimeResult.isValid) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('please_select_date'.tr()),
-            backgroundColor: AppColors.red,
-          ),
+        SnackBarHelper.showError(
+          context,
+          futureDateTimeResult.errorMessage ?? 'please_select_future_time',
         );
       }
-      return;
-    }
-
-    if (_selectedTime == null) {
-      // Inline prompt near time section
-      setState(() {
-        // No-op state change; rely on UI hint rendering below
-      });
-      _scrollToCreateGameButton();
       return;
     }
 
@@ -1265,16 +833,17 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
 
     try {
       // Parse the selected time and combine with selected date
-      final timeParts = _selectedTime!.split(':');
-      final hour = int.parse(timeParts[0]);
-      final minute = int.parse(timeParts[1]);
-      final combinedDateTime = DateTime(
-        _selectedDate!.year,
-        _selectedDate!.month,
-        _selectedDate!.day,
-        hour,
-        minute,
+      final combinedDateTime = GameFormValidator.parseDateTime(
+        date: _selectedDate!,
+        time: _selectedTime!,
       );
+      if (combinedDateTime == null) {
+        if (mounted) {
+          setState(() => _isLoading = false);
+          SnackBarHelper.showError(context, 'invalid_time_format');
+        }
+        return;
+      }
 
       // Create a game object with selected field data
       final userId = ref.read(currentUserIdProvider);
@@ -1292,8 +861,8 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
         dateTime: combinedDateTime,
         location: _selectedField?['name'] ?? 'Unknown Field',
         address: _selectedField?['address'],
-        latitude: _selectedField?['latitude']?.toDouble(),
-        longitude: _selectedField?['longitude']?.toDouble(),
+        latitude: safeToDouble(_selectedField?['latitude']),
+        longitude: safeToDouble(_selectedField?['longitude']),
         fieldId: _selectedField?['id']?.toString(),
         maxPlayers: _maxPlayers,
         description: '',
@@ -1323,23 +892,18 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
           if (mounted && eventId != null) {
             // Calendar event added successfully - show subtle feedback
             // Don't show a separate snackbar to avoid UI clutter
-            debugPrint('✅ Game $createdId automatically added to calendar');
+            NumberedLogger.i('Game $createdId automatically added to calendar');
           } else if (mounted) {
             // Calendar add failed - log but don't show error (game creation succeeded)
-            debugPrint(
-                '⚠️ Failed to add game $createdId to calendar (non-critical)');
+            NumberedLogger.w(
+                'Failed to add game $createdId to calendar (non-critical)');
           }
         }).catchError((e) {
           // Log error but don't interrupt user flow
-          debugPrint('⚠️ Error adding game to calendar: $e');
+          NumberedLogger.w('Error adding game to calendar: $e');
         });
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('game_created_successfully'.tr()),
-            backgroundColor: AppColors.green,
-          ),
-        );
+        SnackBarHelper.showSuccess(context, 'game_created_successfully');
 
         // Navigate to My Games → Organized and highlight the created game
         // Navigate immediately for consistent UX transition regardless of invite status
@@ -1359,13 +923,13 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
               .read(cloudGamesActionsProvider)
               .sendGameInvitesToFriends(createdId, _selectedFriendUids.toList())
               .then((_) {
-            debugPrint(
-              '✅ Successfully sent invites to ${_selectedFriendUids.length} friends',
+            NumberedLogger.i(
+              'Successfully sent invites to ${_selectedFriendUids.length} friends',
             );
           }).catchError((e, stackTrace) {
             // Log error but don't fail game creation or interrupt navigation
-            debugPrint('❌ Failed to send game invites: $e');
-            debugPrint('Stack trace: $stackTrace');
+            NumberedLogger.e('Failed to send game invites: $e');
+            NumberedLogger.d('Stack trace: $stackTrace');
             // Show error to user so they know invites weren't sent (if still mounted)
             if (mounted) {
               messenger.showSnackBar(
@@ -1405,33 +969,13 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
 
         if (isSlotUnavailable) {
           errorMsg = 'time_slot_unavailable'.tr();
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Row(
-                children: [
-                  const Icon(Icons.block, color: Colors.white, size: 20),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      errorMsg,
-                      style: AppTextStyles.body.copyWith(color: Colors.white),
-                    ),
-                  ),
-                ],
-              ),
-              backgroundColor: AppColors.red,
-              duration: const Duration(seconds: 3),
-              behavior: SnackBarBehavior.floating,
-            ),
-          );
+          SnackBarHelper.showBlocked(context, errorMsg);
           ref.read(hapticsActionsProvider)?.mediumImpact();
         } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(errorMsg),
-              backgroundColor: AppColors.red,
-              duration: const Duration(seconds: 5),
-            ),
+          SnackBarHelper.showError(
+            context,
+            errorMsg,
+            duration: const Duration(seconds: 5),
           );
         }
       }
@@ -1569,7 +1113,7 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
               children: [
                 // Month abbreviation
                 Text(
-                  _getMonthAbbr(date, context),
+                  getMonthAbbr(date, context),
                   style: AppTextStyles.superSmall.copyWith(
                     color: isSelected
                         ? AppColors.blue
@@ -1591,7 +1135,7 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                 ),
                 // Day of week
                 Text(
-                  _getDayOfWeekAbbr(date, context),
+                  getDayOfWeekAbbr(date, context),
                   style: AppTextStyles.superSmall.copyWith(
                     color: isSelected
                         ? AppColors.blue
@@ -1748,7 +1292,7 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
         (field['addressSuperShort'] as String?)?.trim() ?? '';
     final addressSuperShortFull =
         (field['addressSuperShortFull'] as String?)?.trim() ?? '';
-    final distanceMeters = (field['distance'] as num?)?.toDouble();
+    final distanceMeters = safeToDouble(field['distance']);
     final distanceKm = distanceMeters != null
         ? (distanceMeters / 1000).clamp(0, double.infinity)
         : null;
@@ -1817,7 +1361,7 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
               const SizedBox(height: 4),
             if (distanceKm != null && distanceKm.isFinite)
               Text(
-                '${distanceKm.toStringAsFixed(distanceKm < 10 ? 1 : 0)} km away',
+                formatDistance(distanceKm * 1000),
                 style: AppTextStyles.superSmall.copyWith(
                   color: AppColors.grey,
                   fontSize: 10,
@@ -2132,20 +1676,10 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                                                         final lon = field[
                                                                 'longitude'] ??
                                                             field['lon'];
-                                                        final latDouble = lat
-                                                                is num
-                                                            ? lat.toDouble()
-                                                            : double.tryParse(
-                                                                lat?.toString() ??
-                                                                    '',
-                                                              );
-                                                        final lonDouble = lon
-                                                                is num
-                                                            ? lon.toDouble()
-                                                            : double.tryParse(
-                                                                lon?.toString() ??
-                                                                    '',
-                                                              );
+                                                        final latDouble =
+                                                            safeToDouble(lat);
+                                                        final lonDouble =
+                                                            safeToDouble(lon);
                                                         if (latDouble == null ||
                                                             lonDouble == null) {
                                                           return <String,
@@ -2662,8 +2196,8 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                                             final isBooked = _isTimeSlotBooked(
                                                 time, _bookedTimes);
                                             if (index == 0) {
-                                              debugPrint(
-                                                '🔍 UI: First time slot check - time=$time, isBooked=$isBooked, _bookedTimes=${_bookedTimes.toList()}',
+                                              NumberedLogger.d(
+                                                'UI: First time slot check - time=$time, isBooked=$isBooked, _bookedTimes=${_bookedTimes.toList()}',
                                               );
                                             }
                                             // Only show weather if actual forecast data is available
@@ -2677,9 +2211,12 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                                                 !_weatherData
                                                     .containsKey(time)) {
                                               // For 30-minute slots, use the hour's weather data
-                                              final timeParts = time.split(':');
-                                              final hour = timeParts[0];
-                                              weatherKey = '$hour:00';
+                                              final hour =
+                                                  extractHourFromTimeString(
+                                                      time);
+                                              if (hour != null) {
+                                                weatherKey = '$hour:00';
+                                              }
                                             }
                                             final weatherCondition =
                                                 hasWeatherData

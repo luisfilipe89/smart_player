@@ -9,9 +9,12 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:move_young/features/agenda/models/event_model.dart';
-import 'package:move_young/features/agenda/services/events_service.dart';
+import 'package:move_young/features/agenda/services/events_provider.dart';
 import 'package:move_young/theme/_theme.dart';
 import 'package:move_young/widgets/app_back_button.dart';
+import 'package:move_young/widgets/error_retry_widget.dart';
+import 'package:move_young/widgets/cached_data_indicator.dart';
+import 'package:move_young/utils/logger.dart';
 
 class AgendaScreen extends ConsumerStatefulWidget {
   const AgendaScreen({super.key});
@@ -19,6 +22,8 @@ class AgendaScreen extends ConsumerStatefulWidget {
   @override
   ConsumerState<AgendaScreen> createState() => _AgendaScreenState();
 }
+
+enum _LoadState { idle, loading, success, error }
 
 class _AgendaScreenState extends ConsumerState<AgendaScreen> {
   Set<String> _favoriteTitles = {};
@@ -32,6 +37,7 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
   bool _showOneTime = true;
   Timer? _debounce;
   bool _didInit = false;
+  _LoadState _loadState = _LoadState.idle;
 
   @override
   void initState() {
@@ -59,41 +65,87 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
   // Data + prefs
   // --------------------------------------------
   Future<void> loadEvents() async {
-    final currentLang = context.locale.languageCode;
-    final loaded = await loadEventsFromFirebase(lang: currentLang);
     if (!mounted) return;
-
     setState(() {
-      allEvents = loaded;
-      _applyFilters();
+      _loadState = _LoadState.loading;
     });
 
-    // Preload a few images for smoother first paint
+    try {
+      final currentLang = context.locale.languageCode;
+      final eventsService = ref.read(eventsServiceProvider);
+      final loaded = await eventsService.loadEvents(lang: currentLang);
+      if (!mounted) return;
+
+      setState(() {
+        allEvents = loaded;
+        _loadState = _LoadState.success;
+        _applyFilters();
+      });
+    } catch (e, stack) {
+      NumberedLogger.e('Error loading events: $e\n$stack');
+      if (!mounted) return;
+      setState(() {
+        _loadState = _LoadState.error;
+      });
+    }
+
+    // Preload a few images for smoother first paint (optimized with parallel loading)
     final imageUrls = allEvents
         .take(5)
         .where((event) => event.imageUrl?.isNotEmpty ?? false)
-        .map((event) => event.imageUrl!)
+        .map((event) {
+          // Normalize URLs
+          String normalized = event.imageUrl!;
+          if (normalized.startsWith('//')) {
+            normalized = 'https:$normalized';
+          } else if (normalized.startsWith('/')) {
+            normalized = 'https://www.aanbod.s-port.nl$normalized';
+          } else if (!normalized.startsWith('http')) {
+            normalized = 'https://www.aanbod.s-port.nl/$normalized';
+          }
+          return normalized;
+        })
+        .where((url) => !url.startsWith('assets/'))
         .toList();
-    // Preload in background with a short timeout to avoid blocking UI/refresh
-    // Ignore errors - images will still load in cards individually
+
+    // Preload in parallel with limited concurrency to avoid blocking UI
     // Do not await to ensure pull-to-refresh completes quickly
-    // Note: timeout prevents hanging on slow hosts
-    // ignore: unawaited_futures
-    Future(() async {
-      for (final url in imageUrls) {
-        if (url.isNotEmpty && mounted) {
-          try {
-            await precacheImage(
-              CachedNetworkImageProvider(url,
-                  cacheManager: DefaultCacheManager()),
-              context,
-            ).timeout(const Duration(seconds: 5));
-          } catch (_) {
-            // Ignore errors - images will still load in cards individually
+    if (imageUrls.isNotEmpty && mounted) {
+      // ignore: unawaited_futures
+      Future(() async {
+        // Limit concurrent preloads to avoid memory issues
+        final futures = <Future>[];
+        for (int i = 0; i < imageUrls.length && i < 5 && mounted; i++) {
+          final url = imageUrls[i];
+          if (url.isNotEmpty) {
+            futures.add(
+              precacheImage(
+                CachedNetworkImageProvider(
+                  url,
+                  cacheManager: DefaultCacheManager(),
+                  headers: const {
+                    'User-Agent':
+                        'Mozilla/5.0 (Linux; Android 14; Pixel 7) AppleWebKit/537.36',
+                    'Accept':
+                        'image/avif,image/webp,image/apng,image/*,*/*;q=0.8',
+                    'Referer': 'https://www.aanbod.s-port.nl/',
+                  },
+                ),
+                context,
+              ).timeout(const Duration(seconds: 5)).catchError((_) {
+                // Ignore errors - images will still load in cards individually
+              }),
+            );
           }
         }
-      }
-    }).catchError((_) {});
+        // Wait for all preloads in parallel
+        try {
+          await Future.wait(futures);
+        } catch (_) {
+          // Ignore errors - images will still load in cards individually
+        }
+      }).catchError((_) {});
+    }
   }
 
   Future<void> _loadFavorites() async {
@@ -135,33 +187,8 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
     }).toList();
 
     setState(() => filteredEvents = events);
-
-    // Preload visible filtered images with normalized URLs
-    for (var event in events.take(10)) {
-      if (event.imageUrl?.isNotEmpty ?? false) {
-        String normalized = event.imageUrl!;
-        if (normalized.startsWith('//')) {
-          normalized = 'https:$normalized';
-        } else if (normalized.startsWith('/')) {
-          normalized = 'https://www.aanbod.s-port.nl$normalized';
-        } else if (!normalized.startsWith('http')) {
-          normalized = 'https://www.aanbod.s-port.nl/$normalized';
-        }
-        precacheImage(
-          CachedNetworkImageProvider(
-            normalized,
-            headers: const {
-              'User-Agent':
-                  'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36',
-              'Accept': 'image/avif,image/webp,image/apng,image/*,*/*;q=0.8',
-              'Referer': 'https://www.aanbod.s-port.nl/',
-              'Accept-Language': 'en-US,en;q=0.9,nl;q=0.8',
-            },
-          ),
-          context,
-        );
-      }
-    }
+    // Note: Image preloading removed from filter changes to avoid unnecessary network requests
+    // Images are preloaded only on initial load in loadEvents() method
   }
 
   void _onSearchChanged(String query) {
@@ -217,32 +244,41 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
   // UI helpers
   // --------------------------------------------
   Widget _buildSearchField() {
-    return TextField(
-      controller: _searchController,
-      textInputAction: TextInputAction.search,
-      decoration: InputDecoration(
-        hintText: 'search_events'.tr(),
-        filled: true,
-        fillColor: AppColors.lightgrey,
-        prefixIcon: const Icon(Icons.search),
-        suffixIcon: (_searchQuery.isEmpty)
-            ? null
-            : IconButton(
-                icon: const Icon(Icons.clear),
-                onPressed: () {
-                  _searchController.clear();
-                  setState(() {
-                    _searchQuery = '';
-                    _applyFilters();
-                  });
-                },
-              ),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(AppRadius.image),
-          borderSide: BorderSide.none,
+    return Semantics(
+      label: 'Search events',
+      hint: 'Enter event name to search',
+      textField: true,
+      child: TextField(
+        controller: _searchController,
+        textInputAction: TextInputAction.search,
+        decoration: InputDecoration(
+          hintText: 'search_events'.tr(),
+          filled: true,
+          fillColor: AppColors.lightgrey,
+          prefixIcon: const Icon(Icons.search),
+          suffixIcon: (_searchQuery.isEmpty)
+              ? null
+              : Semantics(
+                  label: 'Clear search',
+                  button: true,
+                  child: IconButton(
+                    icon: const Icon(Icons.clear),
+                    onPressed: () {
+                      _searchController.clear();
+                      setState(() {
+                        _searchQuery = '';
+                        _applyFilters();
+                      });
+                    },
+                  ),
+                ),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(AppRadius.image),
+            borderSide: BorderSide.none,
+          ),
         ),
+        onChanged: _onSearchChanged,
       ),
-      onChanged: _onSearchChanged,
     );
   }
 
@@ -268,50 +304,62 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
             // Recurring
             Padding(
               padding: AppPaddings.rightSmall,
-              child: FilterChip(
-                showCheckmark: false,
-                selected: _showRecurring,
-                avatar: Icon(
-                  _showRecurring ? Icons.repeat : Icons.repeat_on_outlined,
-                  color: _showRecurring ? AppColors.amber : AppColors.grey,
-                  size: 18,
+              child: Semantics(
+                label: _showRecurring
+                    ? 'Hide recurring events'
+                    : 'Show recurring events',
+                button: true,
+                child: FilterChip(
+                  showCheckmark: false,
+                  selected: _showRecurring,
+                  avatar: Icon(
+                    _showRecurring ? Icons.repeat : Icons.repeat_on_outlined,
+                    color: _showRecurring ? AppColors.amber : AppColors.grey,
+                    size: 18,
+                  ),
+                  label: Text(
+                    'recurring'.tr(),
+                    style: AppTextStyles.small
+                        .copyWith(color: AppColors.blackText),
+                  ),
+                  onSelected: (selected) {
+                    setState(() {
+                      _showRecurring = selected;
+                      _applyFilters();
+                    });
+                  },
                 ),
-                label: Text(
-                  'recurring'.tr(),
-                  style:
-                      AppTextStyles.small.copyWith(color: AppColors.blackText),
-                ),
-                onSelected: (selected) {
-                  setState(() {
-                    _showRecurring = selected;
-                    _applyFilters();
-                  });
-                },
               ),
             ),
 
             // One-time
             Padding(
               padding: AppPaddings.rightSmall,
-              child: FilterChip(
-                showCheckmark: false,
-                selected: _showOneTime,
-                avatar: Icon(
-                  _showOneTime ? Icons.event_available : Icons.event_note,
-                  color: _showOneTime ? AppColors.amber : AppColors.grey,
-                  size: 18,
+              child: Semantics(
+                label: _showOneTime
+                    ? 'Hide one-time events'
+                    : 'Show one-time events',
+                button: true,
+                child: FilterChip(
+                  showCheckmark: false,
+                  selected: _showOneTime,
+                  avatar: Icon(
+                    _showOneTime ? Icons.event_available : Icons.event_note,
+                    color: _showOneTime ? AppColors.amber : AppColors.grey,
+                    size: 18,
+                  ),
+                  label: Text(
+                    'one_time'.tr(),
+                    style: AppTextStyles.small
+                        .copyWith(color: AppColors.blackText),
+                  ),
+                  onSelected: (selected) {
+                    setState(() {
+                      _showOneTime = selected;
+                      _applyFilters();
+                    });
+                  },
                 ),
-                label: Text(
-                  'one_time'.tr(),
-                  style:
-                      AppTextStyles.small.copyWith(color: AppColors.blackText),
-                ),
-                onSelected: (selected) {
-                  setState(() {
-                    _showOneTime = selected;
-                    _applyFilters();
-                  });
-                },
               ),
             ),
           ],
@@ -361,7 +409,7 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
           ),
         );
       } else {
-        // It's a network URL, use ImageCacheServiceInstance
+        // It's a network URL, use CachedNetworkImage for optimized loading
         // Normalize potential relative URLs from source site
         String normalized = url;
         if (normalized.startsWith('//')) {
@@ -372,14 +420,12 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
           normalized = 'https://www.aanbod.s-port.nl/$normalized';
         }
 
-        // Log the URL we are loading for easier debugging
-        debugPrint('[Agenda] Loading image: $normalized');
-        return Image.network(
-          normalized,
+        return CachedNetworkImage(
+          imageUrl: normalized,
           width: double.infinity,
           height: AppHeights.image,
           fit: BoxFit.cover,
-          headers: const {
+          httpHeaders: const {
             'User-Agent':
                 'Mozilla/5.0 (Linux; Android 14; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Mobile Safari/537.36',
             'Accept': 'image/avif,image/webp,image/apng,image/*,*/*;q=0.8',
@@ -387,21 +433,19 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
             'Accept-Language': 'en-US,en;q=0.9,nl;q=0.8',
             'Cookie': 'locale=en',
           },
-          gaplessPlayback: true,
-          loadingBuilder:
-              (BuildContext context, Widget child, ImageChunkEvent? progress) {
-            if (progress == null) return child;
-            return _buildShimmerPlaceholder();
-          },
-          errorBuilder:
-              (BuildContext context, Object error, StackTrace? stackTrace) {
-            debugPrint('[Agenda] Image failed: $normalized err: $error');
+          placeholder: (context, url) => _buildShimmerPlaceholder(),
+          errorWidget: (context, url, error) {
+            NumberedLogger.w('[Agenda] Image failed: $normalized err: $error');
             return Container(
               height: AppHeights.image,
               color: AppColors.lightgrey,
               child: const Icon(Icons.broken_image),
             );
           },
+          memCacheWidth: 800, // Optimize memory usage
+          memCacheHeight: 600,
+          fadeInDuration: const Duration(milliseconds: 200),
+          fadeOutDuration: const Duration(milliseconds: 100),
         );
       }
     }
@@ -468,39 +512,58 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
-              IconButton(
-                tooltip: 'favorite'.tr(),
-                icon: Icon(
-                  _favoriteTitles.contains(event.title)
-                      ? Icons.favorite
-                      : Icons.favorite_border,
+              Semantics(
+                label: _favoriteTitles.contains(event.title)
+                    ? 'Remove from favorites'
+                    : 'Add to favorites',
+                button: true,
+                child: IconButton(
+                  tooltip: 'favorite'.tr(),
+                  icon: Icon(
+                    _favoriteTitles.contains(event.title)
+                        ? Icons.favorite
+                        : Icons.favorite_border,
+                  ),
+                  color: _favoriteTitles.contains(event.title)
+                      ? AppColors.red
+                      : AppColors.blackIcon,
+                  onPressed: () => _toggleFavorite(event.title),
                 ),
-                color: _favoriteTitles.contains(event.title)
-                    ? AppColors.red
-                    : AppColors.blackIcon,
-                onPressed: () => _toggleFavorite(event.title),
               ),
-              IconButton(
-                tooltip: 'share'.tr(),
-                icon: const Icon(Icons.share),
-                onPressed: () => _shareEvent(event),
+              Semantics(
+                label: 'Share event',
+                button: true,
+                child: IconButton(
+                  tooltip: 'share'.tr(),
+                  icon: const Icon(Icons.share),
+                  onPressed: () => _shareEvent(event),
+                ),
               ),
-              IconButton(
-                tooltip: 'directions'.tr(),
-                icon: const Icon(Icons.directions),
-                onPressed: () => _openDirections(context, event.location),
+              Semantics(
+                label: 'Get directions to ${event.location}',
+                button: true,
+                child: IconButton(
+                  tooltip: 'directions'.tr(),
+                  icon: const Icon(Icons.directions),
+                  onPressed: () => _openDirections(context, event.location),
+                ),
               ),
               if (event.url != null && event.url!.trim().isNotEmpty)
-                ElevatedButton.icon(
-                  onPressed: () => _openUrl(event.url!.trim()),
-                  icon: const Icon(Icons.open_in_new),
-                  label: Text('to_enroll'.tr()),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.green,
-                    foregroundColor: AppColors.white,
-                    padding: AppPaddings.symmSmall,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(AppRadius.smallCard),
+                Semantics(
+                  label: 'Enroll in event',
+                  button: true,
+                  child: ElevatedButton.icon(
+                    onPressed: () => _openUrl(event.url!.trim()),
+                    icon: const Icon(Icons.open_in_new),
+                    label: Text('to_enroll'.tr()),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.green,
+                      foregroundColor: AppColors.white,
+                      padding: AppPaddings.symmSmall,
+                      shape: RoundedRectangleBorder(
+                        borderRadius:
+                            BorderRadius.circular(AppRadius.smallCard),
+                      ),
                     ),
                   ),
                 ),
@@ -542,15 +605,86 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
           ),
 
           // Content
-          if (filteredEvents.isEmpty)
+          if (_loadState == _LoadState.loading)
             SliverToBoxAdapter(
               child: Padding(
                 padding: AppPaddings.allSuperBig,
                 child: Center(
-                  child: Text(
-                    'no_events_found'.tr(),
-                    textAlign: TextAlign.center,
-                    style: AppTextStyles.cardTitle,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const CircularProgressIndicator(),
+                      const SizedBox(height: AppHeights.reg),
+                      Text(
+                        'refreshing_events'.tr(),
+                        style: AppTextStyles.bodyMuted,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            )
+          else if (_loadState == _LoadState.error)
+            SliverToBoxAdapter(
+              child: ErrorRetryWidget(
+                message: 'events_load_failed'.tr(),
+                onRetry: loadEvents,
+                icon: Icons.error_outline,
+              ),
+            )
+          else if (filteredEvents.isEmpty)
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: AppPaddings.allSuperBig,
+                child: Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.event_busy,
+                        size: 64,
+                        color: AppColors.grey,
+                      ),
+                      const SizedBox(height: AppHeights.reg),
+                      Text(
+                        'no_events_found'.tr(),
+                        textAlign: TextAlign.center,
+                        style: AppTextStyles.cardTitle,
+                      ),
+                      const SizedBox(height: AppHeights.small),
+                      if (_searchQuery.isNotEmpty ||
+                          !_showRecurring ||
+                          !_showOneTime)
+                        Text(
+                          _searchQuery.isNotEmpty
+                              ? 'empty_state_adjust_search_filters'.tr()
+                              : 'empty_state_adjust_filters'.tr(),
+                          textAlign: TextAlign.center,
+                          style: AppTextStyles.bodyMuted,
+                        ),
+                      if (_searchQuery.isNotEmpty ||
+                          !_showRecurring ||
+                          !_showOneTime) ...[
+                        const SizedBox(height: AppHeights.reg),
+                        Semantics(
+                          label: 'Clear all filters and search',
+                          button: true,
+                          child: TextButton.icon(
+                            onPressed: () {
+                              setState(() {
+                                _searchQuery = '';
+                                _searchController.clear();
+                                _showRecurring = true;
+                                _showOneTime = true;
+                                _applyFilters();
+                              });
+                            },
+                            icon: const Icon(Icons.clear_all),
+                            label: Text('clear_filters'.tr()),
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                 ),
               ),
@@ -578,28 +712,37 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        leading: const AppBackButton(goHome: true),
-        title: Text('agenda'.tr()),
+        leading: Semantics(
+          label: 'Back to home',
+          button: true,
+          child: const AppBackButton(goHome: true),
+        ),
+        title: Semantics(
+          header: true,
+          child: Text('agenda'.tr()),
+        ),
       ),
-      body: Padding(
-        padding: AppPaddings.symmHorizontalReg,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: Container(
-                decoration: BoxDecoration(
-                  color: AppColors.white,
-                  borderRadius: BorderRadius.circular(AppRadius.container),
-                  boxShadow: AppShadows.md,
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(AppRadius.container),
-                  child: _buildScrollContent(),
+      body: CachedDataIndicator(
+        child: Padding(
+          padding: AppPaddings.symmHorizontalReg,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: AppColors.white,
+                    borderRadius: BorderRadius.circular(AppRadius.container),
+                    boxShadow: AppShadows.md,
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(AppRadius.container),
+                    child: _buildScrollContent(),
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

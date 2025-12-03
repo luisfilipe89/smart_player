@@ -1,11 +1,11 @@
-// lib/services/sync_service_instance.dart
 import 'dart:async';
 import 'dart:convert';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/foundation.dart' show compute;
 import 'package:move_young/utils/logger.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:move_young/features/games/services/games_service.dart';
 import 'package:move_young/features/friends/services/friends_service.dart';
+import 'package:move_young/models/infrastructure/service_error.dart';
 
 /// Instance-based SyncService for use with Riverpod dependency injection
 class SyncServiceInstance {
@@ -25,6 +25,12 @@ class SyncServiceInstance {
       StreamController<SyncStatus>.broadcast();
   Timer? _retryTimer;
   Timer? _healthLogTimer;
+  bool _isRetrying = false;
+  // Lock for queue operations to prevent race conditions
+  // Uses Completer-based lock to ensure atomicity
+  Completer<void> _queueLock = Completer<void>()..complete();
+  // Lock for retry operations to prevent race conditions
+  Completer<void> _retryLock = Completer<void>()..complete();
 
   // Health monitoring configuration
   static const Duration _stuckThreshold = Duration(minutes: 15);
@@ -89,31 +95,58 @@ class SyncServiceInstance {
     String? itemId,
     int priority = _priorityNormal,
   }) async {
-    final syncOp = SyncOperation(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      type: type,
-      data: data,
-      operation: operation,
-      status: _statusPending,
-      timestamp: DateTime.now(),
-      retryCount: 0,
-      itemId: itemId,
-      priority: priority,
-    );
+    // Synchronize queue modifications to prevent race conditions
+    await _synchronizedQueueOperation(() async {
+      final syncOp = SyncOperation(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        type: type,
+        data: data,
+        operation: operation,
+        status: _statusPending,
+        timestamp: DateTime.now(),
+        retryCount: 0,
+        itemId: itemId,
+        priority: priority,
+      );
 
-    // Insert based on priority (higher priority first)
-    // For same priority, FIFO order (insert at appropriate position)
-    int insertIndex = _syncQueue.length;
-    for (int i = 0; i < _syncQueue.length; i++) {
-      if (_syncQueue[i].priority < priority) {
-        insertIndex = i;
-        break;
+      // Insert based on priority (higher priority first)
+      // For same priority, FIFO order (insert at appropriate position)
+      int insertIndex = _syncQueue.length;
+      for (int i = 0; i < _syncQueue.length; i++) {
+        if (_syncQueue[i].priority < priority) {
+          insertIndex = i;
+          break;
+        }
+      }
+      _syncQueue.insert(insertIndex, syncOp);
+
+      await _saveSyncQueue();
+      _notifyStatusChange();
+    });
+  }
+
+  /// Execute queue operations synchronously to prevent race conditions
+  /// Uses a Completer-based lock to ensure atomicity and prevent concurrent modifications
+  Future<void> _synchronizedQueueOperation(
+      Future<void> Function() operation) async {
+    // Wait for any ongoing operation to complete
+    final previousLock = _queueLock;
+
+    // Create a new lock for this operation (atomic operation)
+    final operationCompleter = Completer<void>();
+    _queueLock = operationCompleter;
+
+    try {
+      // Wait for previous operation to complete
+      await previousLock.future;
+      // Execute this operation
+      await operation();
+    } finally {
+      // Complete this operation's lock to allow next operation
+      if (!operationCompleter.isCompleted) {
+        operationCompleter.complete();
       }
     }
-    _syncQueue.insert(insertIndex, syncOp);
-
-    await _saveSyncQueue();
-    _notifyStatusChange();
   }
 
   /// Retry failed operations with exponential backoff
@@ -121,63 +154,100 @@ class SyncServiceInstance {
   /// Operations are retried with exponential backoff based on retry count.
   /// Higher priority operations are retried first.
   Future<void> retryFailedOperations() async {
-    // Get failed operations sorted by priority (high first) and then by timestamp (oldest first)
-    final failedOps =
-        _syncQueue.where((op) => op.status == _statusFailed).toList()
-          ..sort((a, b) {
-            // First sort by priority (descending)
-            if (a.priority != b.priority) {
-              return b.priority.compareTo(a.priority);
-            }
-            // Then by timestamp (oldest first)
-            return a.timestamp.compareTo(b.timestamp);
-          });
+    // Prevent concurrent retry operations using lock mechanism
+    final previousLock = _retryLock;
+    final operationLock = Completer<void>();
+    _retryLock = operationLock;
 
-    for (final op in failedOps) {
-      // Check if enough time has passed since last attempt (exponential backoff)
-      if (op.lastAttempt != null) {
-        final delay = _calculateRetryDelay(op.retryCount);
-        final timeSinceLastAttempt = DateTime.now().difference(op.lastAttempt!);
-        if (timeSinceLastAttempt < delay) {
-          // Too soon to retry, skip for now
-          continue;
-        }
-      }
+    try {
+      // Wait for any ongoing retry operation to complete
+      await previousLock.future;
 
-      // Check max retries
-      if (op.retryCount >= _maxRetries) {
-        NumberedLogger.w(
-            'Sync operation ${op.id} exceeded max retries ($_maxRetries), marking as permanently failed');
-        continue; // Skip permanently failed operations
+      // Check if retry is already in progress (double-check after acquiring lock)
+      if (_isRetrying) {
+        NumberedLogger.d('Retry already in progress, skipping');
+        operationLock.complete();
+        return;
       }
-
-      try {
-        final success = await _executeOperation(op);
-        if (success) {
-          op.status = _statusSynced;
-          op.lastAttempt = DateTime.now();
-          NumberedLogger.d(
-              'Sync operation ${op.id} succeeded after ${op.retryCount} retries');
-        } else {
-          op.retryCount++;
-          op.lastAttempt = DateTime.now();
-          op.status = _statusFailed; // Keep as failed for next retry cycle
-          NumberedLogger.w(
-              'Sync operation ${op.id} failed (attempt ${op.retryCount}/$_maxRetries)');
-        }
-      } catch (e, stack) {
-        op.retryCount++;
-        op.lastAttempt = DateTime.now();
-        op.status = _statusFailed;
-        NumberedLogger.w('Sync retry failed for ${op.id}: $e');
-        NumberedLogger.d('Stack trace: $stack');
-      }
+      _isRetrying = true;
+    } catch (e) {
+      operationLock.complete();
+      NumberedLogger.w('Error acquiring retry lock: $e');
+      return;
     }
 
-    // Remove synced operations
-    _syncQueue.removeWhere((op) => op.status == _statusSynced);
-    await _saveSyncQueue();
-    _notifyStatusChange();
+    try {
+      // Get failed operations sorted by priority (high first) and then by timestamp (oldest first)
+      final failedOps =
+          _syncQueue.where((op) => op.status == _statusFailed).toList()
+            ..sort((a, b) {
+              // First sort by priority (descending)
+              if (a.priority != b.priority) {
+                return b.priority.compareTo(a.priority);
+              }
+              // Then by timestamp (oldest first)
+              return a.timestamp.compareTo(b.timestamp);
+            });
+
+      for (final op in failedOps) {
+        // Check if enough time has passed since last attempt (exponential backoff)
+        if (op.lastAttempt != null) {
+          final delay = _calculateRetryDelay(op.retryCount);
+          final timeSinceLastAttempt =
+              DateTime.now().difference(op.lastAttempt!);
+          if (timeSinceLastAttempt < delay) {
+            // Too soon to retry, skip for now
+            continue;
+          }
+        }
+
+        // Check max retries
+        if (op.retryCount >= _maxRetries) {
+          NumberedLogger.w(
+              'Sync operation ${op.id} exceeded max retries ($_maxRetries), marking as permanently failed');
+          continue; // Skip permanently failed operations
+        }
+
+        try {
+          final success = await _executeOperation(op);
+          if (success) {
+            op.status = _statusSynced;
+            op.lastAttempt = DateTime.now();
+            NumberedLogger.d(
+                'Sync operation ${op.id} succeeded after ${op.retryCount} retries');
+          } else {
+            op.retryCount++;
+            op.lastAttempt = DateTime.now();
+            op.status = _statusFailed; // Keep as failed for next retry cycle
+            NumberedLogger.w(
+                'Sync operation ${op.id} failed (attempt ${op.retryCount}/$_maxRetries)');
+            // Save queue after each retry attempt to persist retry count
+            await _saveSyncQueue();
+          }
+        } catch (e, stack) {
+          op.retryCount++;
+          op.lastAttempt = DateTime.now();
+          op.status = _statusFailed;
+          NumberedLogger.w('Sync retry failed for ${op.id}: $e');
+          NumberedLogger.d('Stack trace: $stack');
+          // Save queue after each retry attempt to persist retry count
+          await _saveSyncQueue();
+        }
+      }
+
+      // Remove synced operations (synchronized to prevent race conditions)
+      await _synchronizedQueueOperation(() async {
+        _syncQueue.removeWhere((op) => op.status == _statusSynced);
+        await _saveSyncQueue();
+        _notifyStatusChange();
+      });
+    } finally {
+      _isRetrying = false;
+      // Complete the lock to allow next retry operation
+      if (!_retryLock.isCompleted) {
+        _retryLock.complete();
+      }
+    }
   }
 
   /// Calculate exponential backoff delay for retry
@@ -192,33 +262,37 @@ class SyncServiceInstance {
 
   /// Mark operation as synced
   Future<void> markAsSynced(String operationId) async {
-    final op = _syncQueue.firstWhere(
-      (op) => op.id == operationId,
-      orElse: () => throw Exception('Operation not found'),
-    );
+    await _synchronizedQueueOperation(() async {
+      final op = _syncQueue.firstWhere(
+        (op) => op.id == operationId,
+        orElse: () => throw Exception('Operation $operationId not found'),
+      );
 
-    op.status = _statusSynced;
-    op.lastAttempt = DateTime.now();
+      op.status = _statusSynced;
+      op.lastAttempt = DateTime.now();
 
-    // Remove from queue
-    _syncQueue.removeWhere((op) => op.id == operationId);
-    await _saveSyncQueue();
-    _notifyStatusChange();
+      // Remove from queue
+      _syncQueue.removeWhere((op) => op.id == operationId);
+      await _saveSyncQueue();
+      _notifyStatusChange();
+    });
   }
 
   /// Mark operation as failed
   Future<void> markAsFailed(String operationId) async {
-    final op = _syncQueue.firstWhere(
-      (op) => op.id == operationId,
-      orElse: () => throw Exception('Operation not found'),
-    );
+    await _synchronizedQueueOperation(() async {
+      final op = _syncQueue.firstWhere(
+        (op) => op.id == operationId,
+        orElse: () => throw Exception('Operation $operationId not found'),
+      );
 
-    op.status = _statusFailed;
-    op.lastAttempt = DateTime.now();
-    op.retryCount++;
+      op.status = _statusFailed;
+      op.lastAttempt = DateTime.now();
+      op.retryCount++;
 
-    await _saveSyncQueue();
-    _notifyStatusChange();
+      await _saveSyncQueue();
+      _notifyStatusChange();
+    });
   }
 
   /// Get sync queue
@@ -255,7 +329,7 @@ class SyncServiceInstance {
   Future<void> _loadSyncQueue() async {
     try {
       if (_prefs == null) {
-        debugPrint(
+        NumberedLogger.w(
             'SharedPreferences not available, starting with empty queue');
         _syncQueue.clear();
         return;
@@ -264,12 +338,16 @@ class SyncServiceInstance {
       final queueJson = _prefs!.getString(_syncQueueKey);
 
       if (queueJson != null) {
-        final List<dynamic> queueList = jsonDecode(queueJson);
+        // Use compute() for large JSON parsing to avoid blocking main thread
+        final List<dynamic> queueList = await _parseJsonInIsolate(queueJson);
         _syncQueue.clear();
 
         for (final item in queueList) {
-          final op = SyncOperation.fromJson(item);
-          // Don't restore the actual operation function, just the metadata
+          final op = SyncOperation.fromJson(
+            item,
+            _cloudGamesService,
+            _friendsService,
+          );
           _syncQueue.add(op);
         }
       }
@@ -278,6 +356,27 @@ class SyncServiceInstance {
       // If SharedPreferences is not ready, just start with empty queue
       _syncQueue.clear();
     }
+  }
+
+  /// Parse JSON in isolate to avoid blocking main thread
+  Future<List<dynamic>> _parseJsonInIsolate(String jsonString) async {
+    // Only use compute for large JSON strings (>10KB) to avoid overhead
+    if (jsonString.length > 10000) {
+      try {
+        return await compute(_parseJson, jsonString);
+      } catch (e) {
+        NumberedLogger.w('Error parsing JSON in isolate: $e');
+        // Fallback to direct parsing
+        return jsonDecode(jsonString) as List<dynamic>;
+      }
+    }
+    // For small JSON, parse directly (faster than isolate overhead)
+    return jsonDecode(jsonString) as List<dynamic>;
+  }
+
+  /// Static function for isolate execution
+  static List<dynamic> _parseJson(String jsonString) {
+    return jsonDecode(jsonString) as List<dynamic>;
   }
 
   /// Save sync queue to storage
@@ -307,7 +406,7 @@ class SyncServiceInstance {
     });
   }
 
-  /// Start periodic health logs (non-invasive telemetry via debugPrint)
+  /// Start periodic health logs (non-invasive telemetry via NumberedLogger)
   void _startHealthLogTimer() {
     _healthLogTimer?.cancel();
     _healthLogTimer = Timer.periodic(_healthLogInterval, (_) {
@@ -317,7 +416,9 @@ class SyncServiceInstance {
 
   /// Notify status change
   void _notifyStatusChange() {
-    _statusController.add(currentStatus);
+    if (!_statusController.isClosed) {
+      _statusController.add(currentStatus);
+    }
   }
 
   /// Execute operation based on type and data
@@ -349,9 +450,23 @@ class SyncServiceInstance {
           NumberedLogger.w('Unknown operation type: $type');
           return false;
       }
-    } catch (e) {
+    } on AuthException catch (e) {
+      // Don't retry auth errors - they won't succeed until user re-authenticates
+      NumberedLogger.w('Auth error in sync operation $type: $e');
+      return false; // Mark as failed, but don't retry indefinitely
+    } on NetworkException catch (e) {
+      // Retry network errors - they may succeed when connectivity is restored
+      NumberedLogger.w('Network error in sync operation $type: $e');
+      return false; // Will be retried
+    } on ValidationException catch (e) {
+      // Don't retry validation errors - they indicate invalid data
+      NumberedLogger.w('Validation error in sync operation $type: $e');
+      return false; // Mark as permanently failed
+    } catch (e, stack) {
+      // Log other errors with stack trace for debugging
       NumberedLogger.e('Error executing operation $type: $e');
-      return false;
+      NumberedLogger.d('Stack trace: $stack');
+      return false; // Will be retried (may be transient)
     }
   }
 }
@@ -394,21 +509,84 @@ class SyncOperation {
         'priority': priority,
       };
 
-  factory SyncOperation.fromJson(Map<String, dynamic> json) => SyncOperation(
-        id: json['id'],
-        type: json['type'],
-        data: Map<String, dynamic>.from(json['data']),
-        operation: () async =>
-            false, // Placeholder since function can't be serialized
-        status: json['status'],
-        timestamp: DateTime.parse(json['timestamp']),
-        retryCount: json['retryCount'] ?? 0,
-        lastAttempt: json['lastAttempt'] != null
-            ? DateTime.parse(json['lastAttempt'])
-            : null,
-        itemId: json['itemId'],
-        priority: json['priority'] ?? SyncServiceInstance._priorityNormal,
-      );
+  factory SyncOperation.fromJson(
+    Map<String, dynamic> json,
+    IGamesService? cloudGamesService,
+    IFriendsService? friendsService,
+  ) {
+    final type = json['type'] as String;
+    final data = Map<String, dynamic>.from(json['data']);
+
+    // Reconstruct operation based on type
+    Future<bool> Function() operation;
+    switch (type) {
+      case 'game_join':
+        final gameId = data['gameId'] as String;
+        operation = () async {
+          if (cloudGamesService == null) {
+            NumberedLogger.w(
+                'Cannot execute game_join: cloudGamesService not available');
+            return false;
+          }
+          await cloudGamesService.joinGame(gameId);
+          return true;
+        };
+        break;
+      case 'game_leave':
+        final gameId = data['gameId'] as String;
+        operation = () async {
+          if (cloudGamesService == null) {
+            NumberedLogger.w(
+                'Cannot execute game_leave: cloudGamesService not available');
+            return false;
+          }
+          await cloudGamesService.leaveGame(gameId);
+          return true;
+        };
+        break;
+      case 'friend_request':
+        final toUid = data['toUid'] as String;
+        operation = () async {
+          if (friendsService == null) {
+            NumberedLogger.w(
+                'Cannot execute friend_request: friendsService not available');
+            return false;
+          }
+          return await friendsService.sendFriendRequest(toUid);
+        };
+        break;
+      case 'friend_accept':
+        final fromUid = data['fromUid'] as String;
+        operation = () async {
+          if (friendsService == null) {
+            NumberedLogger.w(
+                'Cannot execute friend_accept: friendsService not available');
+            return false;
+          }
+          return await friendsService.acceptFriendRequest(fromUid);
+        };
+        break;
+      default:
+        NumberedLogger.w('Unknown operation type during restoration: $type');
+        operation = () async => false;
+    }
+
+    return SyncOperation(
+      id: json['id'],
+      type: type,
+      data: data,
+      operation: operation,
+      status: json['status'],
+      timestamp: DateTime.tryParse(json['timestamp']?.toString() ?? '') ??
+          DateTime.now(),
+      retryCount: json['retryCount'] ?? 0,
+      lastAttempt: json['lastAttempt'] != null
+          ? (DateTime.tryParse(json['lastAttempt'].toString()) ?? null)
+          : null,
+      itemId: json['itemId'],
+      priority: json['priority'] ?? SyncServiceInstance._priorityNormal,
+    );
+  }
 }
 
 /// Sync status enum

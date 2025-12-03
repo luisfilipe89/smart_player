@@ -15,6 +15,7 @@ import 'package:move_young/navigation/route_registry.dart';
 import 'package:move_young/services/system/haptics_provider.dart';
 import 'package:move_young/utils/navigation_utils.dart';
 import 'package:move_young/features/friends/services/friends_provider.dart';
+import 'package:move_young/utils/logger.dart';
 
 // ---------------------------- Navigation Controller Scope ----------------------------
 class MainScaffoldController {
@@ -59,7 +60,7 @@ class MainScaffoldController {
 
   // Static method to navigate to a specific game from notifications
   static void navigateToGame(String gameId) {
-    debugPrint('Navigating to game: $gameId');
+    NumberedLogger.d('Navigating to game: $gameId');
     // This will be implemented to work with the current controller instance
   }
 }
@@ -268,7 +269,7 @@ class MainScaffoldState extends ConsumerState<MainScaffold> {
       if (mounted) {
         // Check for pending game ID from notification tap
         // This is a simple approach - in production you'd use proper state management
-        debugPrint('Checking for pending notifications...');
+        NumberedLogger.d('Checking for pending notifications...');
 
         // Check if there's a pending game ID to navigate to
         // This would be set by the notification tap handler in main.dart
