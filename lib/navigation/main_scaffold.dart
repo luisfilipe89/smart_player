@@ -117,12 +117,16 @@ class MainScaffoldState extends ConsumerState<MainScaffold> {
 
   late final MainScaffoldController _controller;
   MyGamesArgs? _myGamesArgs;
+  String? _highlightEventTitle;
   // expose intent handlers
   void handleRouteIntent(RouteIntent intent) {
     if (intent is FriendsIntent) {
       switchToTab(kTabFriends, popToRoot: true);
     } else if (intent is AgendaIntent) {
+      _highlightEventTitle = intent.highlightEventTitle;
       switchToTab(kTabAgenda, popToRoot: true);
+      // Note: AgendaScreen will receive highlightEventTitle via widget parameter
+      // and will scroll to it when events are loaded
     } else if (intent is DiscoverGamesIntent) {
       switchToTab(kTabJoin, popToRoot: true);
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -321,7 +325,9 @@ class MainScaffoldState extends ConsumerState<MainScaffold> {
                                 navigatorKey: _joinKey, args: _myGamesArgs)),
                         HeroMode(
                             enabled: currentIndex == kTabAgenda,
-                            child: _AgendaFlow(navigatorKey: _agendaKey)),
+                            child: _AgendaFlow(
+                                navigatorKey: _agendaKey,
+                                highlightEventTitle: _highlightEventTitle)),
                       ],
                     ),
                   ),
@@ -400,16 +406,26 @@ class _HomeFlow extends StatelessWidget {
 }
 
 class _AgendaFlow extends StatelessWidget {
-  const _AgendaFlow({required this.navigatorKey});
+  const _AgendaFlow({
+    required this.navigatorKey,
+    this.highlightEventTitle,
+  });
   final GlobalKey<NavigatorState> navigatorKey;
+  final String? highlightEventTitle;
 
   @override
   Widget build(BuildContext context) {
     return Navigator(
       key: navigatorKey,
       onGenerateRoute: (settings) {
+        // Use a key based on highlightEventTitle to force rebuild when it changes
         return MaterialPageRoute(
-          builder: (_) => AgendaScreen(),
+          builder: (_) => AgendaScreen(
+            key: highlightEventTitle != null 
+                ? ValueKey('agenda_$highlightEventTitle')
+                : const ValueKey('agenda'),
+            highlightEventTitle: highlightEventTitle,
+          ),
           settings: settings,
         );
       },

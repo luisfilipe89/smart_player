@@ -84,7 +84,7 @@ export async function scrapeEvents(): Promise<EventItem[]> {
         ]);
 
         await page.goto(
-            'https://www.aanbod.s-port.nl/activiteiten?gemeente%5B0%5D=40&projecten%5B0%5D=5395&sort=name&order=asc',
+            'https://www.aanbod.s-port.nl/activiteiten?gemeente%5B0%5D=40&sort=name&order=asc',
             { waitUntil: 'networkidle' }
         );
 

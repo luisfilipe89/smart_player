@@ -1712,14 +1712,12 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
             : const <String>{},
         onApply: (selectedUids) {
           // Apply changes when Done is pressed
-          setState(() {
-            // Keep locked invites (they can't be removed)
-            final newSelection = <String>{..._formState.lockedInvitedUids};
-            // Add newly selected friends
-            newSelection.addAll(selectedUids);
-            _formState.selectedFriendUids.clear();
-            _formState.selectedFriendUids.addAll(newSelection);
-          });
+          // Keep locked invites (they can't be removed)
+          final newSelection = <String>{..._formState.lockedInvitedUids};
+          // Add newly selected friends
+          newSelection.addAll(selectedUids);
+          // Update state via notifier (don't mutate the unmodifiable set directly)
+          _formNotifier.updateSelectedFriends(newSelection);
         },
       ),
     );

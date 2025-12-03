@@ -17,7 +17,9 @@ import 'package:move_young/widgets/cached_data_indicator.dart';
 import 'package:move_young/utils/logger.dart';
 
 class AgendaScreen extends ConsumerStatefulWidget {
-  const AgendaScreen({super.key});
+  const AgendaScreen({super.key, this.highlightEventTitle});
+
+  final String? highlightEventTitle;
 
   @override
   ConsumerState<AgendaScreen> createState() => _AgendaScreenState();
@@ -38,10 +40,18 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
   Timer? _debounce;
   bool _didInit = false;
   _LoadState _loadState = _LoadState.idle;
+  final Map<String, GlobalKey> _itemKeys = {};
 
   @override
   void initState() {
     super.initState();
+    // Schedule scroll to highlighted event after first frame (similar to games screen)
+    if (widget.highlightEventTitle != null) {
+      NumberedLogger.d('AgendaScreen initState with highlightEventTitle: ${widget.highlightEventTitle}');
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _scrollToHighlightedEvent();
+      });
+    }
   }
 
   @override
@@ -51,6 +61,21 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
       _didInit = true;
       loadEvents();
       _loadFavorites();
+    }
+  }
+  
+  @override
+  void didUpdateWidget(AgendaScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // If highlightEventTitle changed and events are already loaded, scroll to it
+    if (widget.highlightEventTitle != null &&
+        widget.highlightEventTitle != oldWidget.highlightEventTitle &&
+        filteredEvents.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _scrollToHighlightedEvent();
+        });
+      });
     }
   }
 
@@ -81,6 +106,18 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
         _loadState = _LoadState.success;
         _applyFilters();
       });
+      
+      // Scroll to highlighted event after loading - wait for list to be built
+      if (widget.highlightEventTitle != null) {
+        // Use multiple nested callbacks to ensure CustomScrollView is fully built
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              _scrollToHighlightedEvent();
+            });
+          });
+        });
+      }
     } catch (e, stack) {
       NumberedLogger.e('Error loading events: $e\n$stack');
       if (!mounted) return;
@@ -186,9 +223,143 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
       return true;
     }).toList();
 
-    setState(() => filteredEvents = events);
+    setState(() {
+      filteredEvents = events;
+    });
+    
+    // Scroll to highlighted event after filtering if needed
+    if (widget.highlightEventTitle != null && events.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _scrollToHighlightedEvent();
+        });
+      });
+    }
     // Note: Image preloading removed from filter changes to avoid unnecessary network requests
     // Images are preloaded only on initial load in loadEvents() method
+  }
+  
+  void _scrollToHighlightedEvent({int attempts = 0}) {
+    if (widget.highlightEventTitle == null || !mounted) {
+      if (widget.highlightEventTitle == null) {
+        NumberedLogger.d('_scrollToHighlightedEvent: highlightEventTitle is null');
+      }
+      return;
+    }
+    
+    NumberedLogger.d('_scrollToHighlightedEvent: attempt $attempts, looking for: ${widget.highlightEventTitle}');
+    NumberedLogger.d('_scrollToHighlightedEvent: filteredEvents count: ${filteredEvents.length}, allEvents count: ${allEvents.length}');
+    
+    // Check if the highlighted event is in the filtered list
+    final eventIndex = filteredEvents.indexWhere(
+      (event) => event.title == widget.highlightEventTitle,
+    );
+    final eventExists = eventIndex >= 0;
+    
+    if (eventExists) {
+      NumberedLogger.d('_scrollToHighlightedEvent: event found at index $eventIndex in filteredEvents');
+    } else {
+      NumberedLogger.d('_scrollToHighlightedEvent: event NOT found in filteredEvents');
+      // Log first few event titles for debugging
+      if (filteredEvents.isNotEmpty) {
+        NumberedLogger.d('_scrollToHighlightedEvent: first 3 event titles: ${filteredEvents.take(3).map((e) => e.title).toList()}');
+      }
+    }
+    if (!eventExists) {
+      // If event not found, check if events are still loading
+      if (_loadState == _LoadState.loading) {
+        // Still loading, wait and retry
+        if (attempts < 15) {
+          Future.delayed(const Duration(milliseconds: 300), () {
+            if (mounted) {
+              _scrollToHighlightedEvent(attempts: attempts + 1);
+            }
+          });
+        }
+        return;
+      }
+      // Events loaded but event not in filtered list - might be filtered out
+      // Try to find it in allEvents to see if it exists
+      final existsInAll = allEvents.any(
+        (event) => event.title == widget.highlightEventTitle,
+      );
+      if (existsInAll) {
+        // Event exists but is filtered out - clear filters and retry
+        setState(() {
+          _searchQuery = '';
+          _searchController.clear();
+          _showRecurring = true;
+          _showOneTime = true;
+          _applyFilters();
+        });
+        if (attempts < 5) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              _scrollToHighlightedEvent(attempts: attempts + 1);
+            });
+          });
+        }
+        return;
+      }
+      // Event doesn't exist at all, give up after a few more attempts
+      if (attempts < 5) {
+        Future.delayed(const Duration(milliseconds: 300), () {
+          if (mounted) {
+            _scrollToHighlightedEvent(attempts: attempts + 1);
+          }
+        });
+      }
+      return;
+    }
+    
+    final key = _itemKeys[widget.highlightEventTitle!];
+    NumberedLogger.d('_scrollToHighlightedEvent: key exists: ${key != null}, key: $key');
+    
+    if (key == null) {
+      // Key not created yet, retry (keys are created lazily in _buildEventCard)
+      NumberedLogger.d('_scrollToHighlightedEvent: key is null, retrying...');
+      if (attempts < 15) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _scrollToHighlightedEvent(attempts: attempts + 1);
+        });
+      }
+      return;
+    }
+    
+    final ctx = key.currentContext;
+    NumberedLogger.d('_scrollToHighlightedEvent: context exists: ${ctx != null}, context: $ctx');
+    
+    if (ctx != null && mounted) {
+      try {
+        NumberedLogger.d('_scrollToHighlightedEvent: attempting Scrollable.ensureVisible...');
+        Scrollable.ensureVisible(
+          ctx,
+          duration: const Duration(milliseconds: 450),
+          curve: Curves.easeOutCubic,
+          alignment: 0.15,
+        );
+        NumberedLogger.d('Successfully scrolled to event: ${widget.highlightEventTitle}');
+        return;
+      } catch (e, stack) {
+        // If scroll fails, retry
+        NumberedLogger.w('Scroll to event failed: $e\n$stack');
+        if (attempts < 10) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            _scrollToHighlightedEvent(attempts: attempts + 1);
+          });
+        }
+      }
+    } else {
+      // Context not available yet, retry with more attempts
+      NumberedLogger.d('_scrollToHighlightedEvent: context is null or not mounted, retrying... (attempts: $attempts)');
+      if (attempts < 15) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _scrollToHighlightedEvent(attempts: attempts + 1);
+        });
+      } else {
+        NumberedLogger.w('_scrollToHighlightedEvent: giving up after $attempts attempts');
+      }
+    }
   }
 
   void _onSearchChanged(String query) {
@@ -477,7 +648,12 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
   }
 
   Widget _buildEventCard(Event event) {
-    return Container(
+    // Use putIfAbsent to ensure key is created only once, like games screen
+    final key = _itemKeys.putIfAbsent(event.title, () => GlobalKey());
+    
+    return KeyedSubtree(
+      key: key,
+      child: Container(
       margin: AppPaddings.topBottom,
       padding: AppPaddings.allMedium,
       decoration: BoxDecoration(
@@ -570,6 +746,7 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
             ],
           ),
         ],
+      ),
       ),
     );
   }

@@ -8,6 +8,7 @@ import 'package:move_young/features/profile/services/profile_settings_provider.d
 import 'package:move_young/features/welcome/screens/welcome_screen.dart';
 import 'package:move_young/theme/tokens.dart';
 import 'package:move_young/navigation/main_scaffold.dart';
+import 'package:move_young/navigation/route_registry.dart';
 import 'package:move_young/features/settings/screens/settings_screen.dart';
 import 'package:move_young/features/help/screens/help_screen.dart';
 import 'package:move_young/features/profile/screens/profile_screen.dart';
@@ -275,6 +276,13 @@ class _HomeScreenNewState extends ConsumerState<HomeScreenNew> {
                         MainScaffold.maybeOf(
                           context,
                         )?.switchToTab(kTabAgenda, popToRoot: true);
+                      },
+                      onEventTap: (event) {
+                        final haptics = ref.read(hapticsServiceProvider);
+                        haptics?.selectionClick();
+                        MainScaffold.maybeOf(context)?.handleRouteIntent(
+                          AgendaIntent(highlightEventTitle: event.title),
+                        );
                       },
                     ),
                     const SizedBox(height: AppHeights.huge),
@@ -767,6 +775,7 @@ class _UpcomingEventsCard extends ConsumerWidget {
   final List<Event> events;
   final VoidCallback onRetry;
   final VoidCallback onSeeAll;
+  final ValueChanged<Event>? onEventTap;
   final WidgetRef ref;
 
   const _UpcomingEventsCard({
@@ -774,6 +783,7 @@ class _UpcomingEventsCard extends ConsumerWidget {
     required this.events,
     required this.onRetry,
     required this.onSeeAll,
+    this.onEventTap,
     required this.ref,
   });
 
@@ -975,7 +985,10 @@ class _UpcomingEventsCard extends ConsumerWidget {
                   ),
                 ),
                 trailing: const Icon(Icons.chevron_right),
-                onTap: () => ref.read(hapticsActionsProvider)?.selectionClick(),
+                onTap: () {
+                  ref.read(hapticsActionsProvider)?.selectionClick();
+                  onEventTap?.call(e);
+                },
               );
             },
           ),

@@ -1037,6 +1037,128 @@ export const cleanupOldNotifications = onSchedule(
   }
 );
 
+// Cleanup old cancelled and past games
+// Runs nightly at 3 AM (1 hour after notification cleanup)
+export const cleanupOldGames = onSchedule(
+  { schedule: "0 3 * * *", timeZone: "Europe/Amsterdam" },
+  async () => {
+    const db = admin.database();
+    const now = Date.now();
+    const ninetyDaysAgo = now - 90 * 24 * 60 * 60 * 1000; // 90 days in milliseconds
+    const oneYearAgo = now - 365 * 24 * 60 * 60 * 1000; // 1 year in milliseconds
+
+    try {
+      const gamesSnapshot = await db.ref("/games").once("value");
+      const games = gamesSnapshot.val();
+      if (!games) {
+        console.log("No games found for cleanup");
+        return;
+      }
+
+      const gamesToDelete: string[] = [];
+      const updates: { [path: string]: null } = {};
+
+      // First pass: identify games to delete
+      for (const [gameId, gameData] of Object.entries(games)) {
+        const game = gameData as any;
+        if (!game) continue;
+
+        let shouldDelete = false;
+        let reason = "";
+
+        // Check if game is cancelled and cancelled more than 90 days ago
+        if (game.isActive === false && game.canceledAt) {
+          const canceledAt = typeof game.canceledAt === "number"
+            ? game.canceledAt
+            : parseInt(game.canceledAt);
+          if (canceledAt && canceledAt < ninetyDaysAgo) {
+            shouldDelete = true;
+            reason = `cancelled ${Math.floor((now - canceledAt) / (24 * 60 * 60 * 1000))} days ago`;
+          }
+        }
+
+        // Check if game date is more than 1 year in the past (regardless of active status)
+        // This catches old historical games that should be archived
+        if (!shouldDelete && game.dateTime) {
+          let gameDate: number;
+          if (typeof game.dateTime === "number") {
+            // If stored as timestamp
+            gameDate = game.dateTime;
+          } else if (typeof game.dateTime === "string") {
+            // If stored as ISO string, parse it
+            const parsed = new Date(game.dateTime).getTime();
+            if (isNaN(parsed)) continue;
+            gameDate = parsed;
+          } else {
+            continue;
+          }
+
+          if (gameDate < oneYearAgo) {
+            shouldDelete = true;
+            reason = `game date was ${Math.floor((now - gameDate) / (24 * 60 * 60 * 1000))} days ago`;
+          }
+        }
+
+        if (shouldDelete) {
+          gamesToDelete.push(gameId);
+          console.log(`Marking game ${gameId} for deletion: ${reason}`);
+        }
+      }
+
+      if (gamesToDelete.length === 0) {
+        console.log("No old games found to clean up");
+        return;
+      }
+
+      // Second pass: collect all related data to clean up
+      const usersSnapshot = await db.ref("/users").once("value");
+      const users = usersSnapshot.val() || {};
+
+      // Get all games data for slot cleanup
+      for (const gameId of gamesToDelete) {
+        const game = games[gameId] as any;
+        if (!game) continue;
+
+        // Delete the game itself (this will trigger onGameDelete for some cleanup)
+        updates[`/games/${gameId}`] = null;
+
+        // Clean up organizer's createdGames index
+        if (game.organizerId) {
+          updates[`/users/${game.organizerId}/createdGames/${gameId}`] = null;
+        }
+
+        // Clean up slot reservation if game has slot info
+        if (game.slotDate && game.slotField && game.slotTime) {
+          updates[`/slots/${game.slotDate}/${game.slotField}/${game.slotTime}`] = null;
+        }
+
+        // Clean up pending invite index for all users
+        for (const uid of Object.keys(users)) {
+          updates[`/pendingInviteIndex/${uid}/${gameId}`] = null;
+        }
+      }
+
+      // Note: onGameDelete will automatically clean up:
+      // - /users/{uid}/joinedGames/{gameId}
+      // - /users/{uid}/gameInvites/{gameId}
+      // - Related notifications
+      // But we clean up createdGames and pendingInviteIndex here since onGameDelete
+      // might not catch all cases
+
+      // Execute all deletions atomically
+      if (Object.keys(updates).length > 0) {
+        await db.ref().update(updates);
+        console.log(
+          `Successfully cleaned up ${gamesToDelete.length} old games and related data`
+        );
+      }
+    } catch (error) {
+      console.error("Error cleaning up old games:", error);
+      throw error; // Re-throw to trigger Cloud Functions retry
+    }
+  }
+);
+
 // Invite status change → notify organizer (accepted/declined)
 export const onInviteStatusChange = onValueWritten(
   "/games/{gameId}/invites/{inviteeUid}/status",

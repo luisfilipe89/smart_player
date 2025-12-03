@@ -5,7 +5,10 @@ abstract class RouteIntent {}
 
 class FriendsIntent extends RouteIntent {}
 
-class AgendaIntent extends RouteIntent {}
+class AgendaIntent extends RouteIntent {
+  AgendaIntent({this.highlightEventTitle});
+  final String? highlightEventTitle;
+}
 
 class DiscoverGamesIntent extends RouteIntent {
   DiscoverGamesIntent({this.highlightGameId});
