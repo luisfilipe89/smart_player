@@ -115,7 +115,7 @@
             "$uid": {
                 ".read": "auth != null",
                 ".write": "auth != null && auth.uid == $uid",
-                ".validate": "newData.hasChildren(['displayName']) && newData.child('displayName').isString() && newData.child('displayName').val().length() >= 2 && newData.child('displayName').val().length() <= 50 && (!newData.hasChild('photoURL') || newData.child('photoURL').isString()) && (!newData.hasChild('photoURL') || newData.child('photoURL').val().length() <= 500)"
+                ".validate": "newData.hasChildren(['displayName']) && newData.child('displayName').isString() && (!newData.hasChild('photoURL') || newData.child('photoURL').isString())"
             }
         },
         "usersByEmailHash": {

@@ -581,7 +581,7 @@ class SyncOperation {
           DateTime.now(),
       retryCount: json['retryCount'] ?? 0,
       lastAttempt: json['lastAttempt'] != null
-          ? (DateTime.tryParse(json['lastAttempt'].toString()) ?? null)
+          ? DateTime.tryParse(json['lastAttempt'].toString())
           : null,
       itemId: json['itemId'],
       priority: json['priority'] ?? SyncServiceInstance._priorityNormal,

@@ -101,4 +101,3 @@ String? safeToString(dynamic value) {
 String safeToStringWithDefault(dynamic value, String defaultValue) {
   return safeToString(value) ?? defaultValue;
 }
-

@@ -9,24 +9,24 @@ import 'package:move_young/features/auth/services/auth_provider.dart';
 import 'package:move_young/features/games/services/games_provider.dart';
 import 'package:move_young/features/games/services/cloud_games_provider.dart';
 import 'package:move_young/services/external/weather_provider.dart';
-import 'package:move_young/features/activities/services/fields_provider.dart';
 import 'package:move_young/services/system/haptics_provider.dart';
 import 'package:move_young/features/friends/services/friends_provider.dart';
 import 'package:move_young/navigation/main_scaffold.dart';
 import 'package:move_young/widgets/success_checkmark_overlay.dart';
-import 'package:move_young/services/system/location_provider.dart';
 import 'package:move_young/features/maps/screens/gmaps_screen.dart';
-import 'package:geolocator/geolocator.dart';
 import 'package:move_young/services/calendar/calendar_service.dart';
 import 'package:move_young/widgets/app_back_button.dart';
 import 'package:move_young/utils/time_slot_utils.dart';
-import 'package:move_young/features/games/services/field_data_processor.dart';
 import 'package:move_young/features/games/services/game_form_validator.dart';
 import 'package:move_young/utils/snackbar_helper.dart';
-import 'package:move_young/utils/date_formatter.dart';
 import 'package:move_young/utils/type_converters.dart';
 import 'package:move_young/utils/geolocation_utils.dart';
 import 'package:move_young/utils/logger.dart';
+import 'package:move_young/features/games/notifiers/game_form_notifier.dart';
+import 'package:move_young/features/games/notifiers/game_form_state.dart';
+import 'package:move_young/features/games/widgets/game_form_sport_selector.dart';
+import 'package:move_young/features/games/widgets/game_form_max_players_slider.dart';
+import 'package:move_young/features/games/widgets/game_form_date_selector.dart';
 
 class GameOrganizeScreen extends ConsumerStatefulWidget {
   final Game? initialGame;
@@ -37,48 +37,12 @@ class GameOrganizeScreen extends ConsumerStatefulWidget {
 }
 
 class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
-  static const double _kMaxDistanceMetersToDisplay = 500000; // 500 km
-  String? _selectedSport;
-  DateTime? _selectedDate;
-  String? _selectedTime;
-  bool _isLoading = false;
-  int _maxPlayers = 10;
-  bool _showSuccess = false;
-
   // Scroll controller for auto-scrolling
   final ScrollController _scrollController = ScrollController();
   final GlobalKey _createGameButtonKey = GlobalKey();
 
-  // Fields data
-  List<Map<String, dynamic>> _availableFields = [];
-  List<Map<String, dynamic>> _filteredFields = [];
-  Map<String, dynamic>? _selectedField;
-  bool _isLoadingFields = false;
-  bool _isCalculatingDistances = false;
-  bool _isPublic = true;
-
-  // Search for fields
+  // Search for fields (still local for TextEditingController)
   final TextEditingController _fieldSearchController = TextEditingController();
-  Timer? _searchDebounce;
-  String _fieldSearchQuery = '';
-
-  // Weather data
-  Map<String, String> _weatherData = {};
-  bool _isLoadingWeather = false;
-  // Booked times for selected field/date
-  final Set<String> _bookedTimes = {};
-
-  // Friend invites (selected friend UIDs)
-  final Set<String> _selectedFriendUids = <String>{};
-  // Locked invited users when editing an existing game
-  final Set<String> _lockedInvitedUids = <String>{};
-
-  // Original values for change detection when editing
-  String? _originalSport;
-  DateTime? _originalDate;
-  String? _originalTime;
-  int _originalMaxPlayers = 10;
-  Map<String, dynamic>? _originalField;
 
   void _showSignInInlinePrompt() {
     if (!mounted) return;
@@ -89,9 +53,14 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
   void dispose() {
     _scrollController.dispose();
     _fieldSearchController.dispose();
-    _searchDebounce?.cancel();
     super.dispose();
   }
+
+  // Get form state and notifier from provider
+  GameFormState get _formState =>
+      ref.watch(gameFormNotifierProvider(widget.initialGame));
+  GameFormNotifier get _formNotifier =>
+      ref.read(gameFormNotifierProvider(widget.initialGame).notifier);
 
   // Auto-scroll to Create Game button
   void _scrollToCreateGameButton() {
@@ -107,54 +76,7 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
     });
   }
 
-  // Available sports with their icons
-  final List<Map<String, dynamic>> _sports = [
-    {
-      'key': 'soccer',
-      'icon': Icons.sports_soccer,
-      'color': const Color(0xFF4CAF50),
-    },
-    {
-      'key': 'basketball',
-      'icon': Icons.sports_basketball,
-      'color': const Color(0xFFFF9800),
-    },
-    {
-      'key': 'volleyball',
-      'icon': Icons.sports_volleyball,
-      'color': const Color(0xFFE91E63),
-    },
-    {
-      'key': 'table_tennis',
-      'icon': Icons.sports_tennis,
-      'color': const Color(0xFF00BCD4),
-    },
-    {
-      'key': 'skateboard',
-      'icon': Icons.skateboarding,
-      'color': const Color(0xFFF9A825),
-    },
-    {
-      'key': 'boules',
-      'icon': Icons.scatter_plot,
-      'color': const Color(0xFF795548),
-    },
-    {
-      'key': 'swimming',
-      'icon': Icons.pool,
-      'color': const Color(0xFF2196F3),
-    },
-  ];
-
-  // Generate list of dates for the next two weeks
-  List<DateTime> get _availableDates {
-    final today = DateTime.now();
-    final dates = <DateTime>[];
-    for (int i = 0; i < 14; i++) {
-      dates.add(DateTime(today.year, today.month, today.day + i));
-    }
-    return dates;
-  }
+  // Sports and dates are now in extracted widgets
 
   List<String> get _availableTimes {
     final now = DateTime.now();
@@ -187,14 +109,14 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
     ];
 
     // If no date is selected, return all times
-    if (_selectedDate == null) return allTimes;
+    if (_formState.date == null) return allTimes;
 
     // Check if selected date is today
     final today = DateTime(now.year, now.month, now.day);
     final selectedDate = DateTime(
-      _selectedDate!.year,
-      _selectedDate!.month,
-      _selectedDate!.day,
+      _formState.date!.year,
+      _formState.date!.month,
+      _formState.date!.day,
     );
 
     if (selectedDate == today) {
@@ -214,354 +136,18 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
     return isTimeSlotBooked(time, bookedTimes);
   }
 
-  bool get _isFormComplete {
-    return _selectedSport != null &&
-        _selectedField != null &&
-        _selectedDate != null &&
-        _selectedTime != null;
-  }
-
-  // Check if any changes have been made to the game
-  // Check if we're creating a similar game from a historic game (not editing)
-  bool get _isCreatingSimilarGame {
-    if (widget.initialGame == null) return false;
-    return widget.initialGame!.dateTime.isBefore(DateTime.now());
-  }
-
-  bool get _hasChanges {
-    if (widget.initialGame == null) return false;
-
-    // Check if new friends were invited (exclude locked ones)
-    final newInvites = _selectedFriendUids
-        .where((uid) => !_lockedInvitedUids.contains(uid))
-        .toSet();
-
-    return _selectedSport != _originalSport ||
-        _selectedDate != _originalDate ||
-        _selectedTime != _originalTime ||
-        _maxPlayers != _originalMaxPlayers ||
-        _selectedField?['name'] != _originalField?['name'] ||
-        newInvites.isNotEmpty; // New check for friend invitations
-  }
-
-  // Load fields for the selected sport
-  void _applyFieldSearchFilter() {
-    final query = _fieldSearchQuery.toLowerCase().trim();
-    if (query.isEmpty) {
-      _filteredFields = List.from(_availableFields);
-    } else {
-      _filteredFields = _availableFields.where((field) {
-        final name = (field['name'] as String?)?.toLowerCase().trim() ?? '';
-        final addressSuperShort =
-            (field['addressSuperShort'] as String?)?.toLowerCase().trim() ?? '';
-        final addressSuperShortFull =
-            (field['addressSuperShortFull'] as String?)?.toLowerCase().trim() ??
-                '';
-        return name.contains(query) ||
-            addressSuperShort.contains(query) ||
-            addressSuperShortFull.contains(query);
-      }).toList();
-    }
-  }
+  // Use computed properties from state
+  bool get _isFormComplete => _formState.isFormComplete;
+  bool get _isCreatingSimilarGame => _formState.isCreatingSimilarGame;
+  bool get _hasChanges => _formState.hasChanges;
 
   void _onFieldSearchChanged(String query) {
-    setState(() {
-      _fieldSearchQuery = query;
-    });
-    if (_searchDebounce?.isActive ?? false) _searchDebounce!.cancel();
-    _searchDebounce = Timer(const Duration(milliseconds: 300), () {
-      if (!mounted) return;
-      setState(() {
-        _applyFieldSearchFilter();
-      });
-    });
+    _fieldSearchController.text = query;
+    _formNotifier.updateFieldSearch(query);
   }
 
-  Future<void> _loadFields() async {
-    if (_selectedSport == null) return;
-
-    if (mounted) {
-      setState(() {
-        _isLoadingFields = true;
-        _availableFields = [];
-      });
-    }
-
-    try {
-      final fieldsActions = ref.read(fieldsActionsProvider);
-
-      final sportType = switch (_selectedSport) {
-        'basketball' => 'basketball',
-        'volleyball' => 'beachvolleyball',
-        'table_tennis' => 'table_tennis',
-        'skateboard' => 'skateboard',
-        'boules' => 'boules',
-        'swimming' => 'swimming',
-        _ => 'soccer',
-      };
-
-      // Fetch fields first (this is the main data we need)
-      final rawFields = await fieldsActions.fetchFields(
-        sportType: sportType,
-        bypassCache: true, // Force fresh fetch to debug
-      );
-
-      // Debug: Check what we got back
-      NumberedLogger.d(
-        'Fetched ${rawFields.length} raw fields for sport: $sportType in area: s-Hertogenbosch',
-      );
-      if (rawFields.isNotEmpty) {
-        NumberedLogger.d('First field data: ${rawFields.first}');
-      }
-
-      // Normalize fields using extracted processor
-      final fields = FieldDataProcessor.normalizeFields(rawFields);
-
-      NumberedLogger.d(
-        'Normalized to ${fields.length} fields with valid coordinates',
-      );
-
-      // Display fields immediately without waiting for location
-      if (mounted) {
-        setState(() {
-          _availableFields = fields;
-          _isLoadingFields = false;
-          _applyFieldSearchFilter();
-
-          // If a field was preselected (e.g., editing a game or creating similar game),
-          // map it to the corresponding instance from the freshly loaded list so identity
-          // comparison (_selectedField == field) works for highlighting.
-          if (_selectedField != null) {
-            final match = FieldDataProcessor.findMatchingField(
-              _selectedField,
-              fields,
-            );
-
-            if (match.isNotEmpty) {
-              _selectedField = match;
-              NumberedLogger.i(
-                  'Matched preselected field: ${match['name']} (id: ${match['id']})');
-              // Ensure the matched field is included in filtered fields
-              // (in case there's a search query that would filter it out)
-              final matchId = match['id']?.toString();
-              final matchName = (match['name'] as String?) ?? '';
-              final isInFiltered = _filteredFields.any((f) {
-                final fId = f['id']?.toString();
-                final fName = (f['name'] as String?) ?? '';
-                return (matchId != null && fId == matchId) ||
-                    (matchName.isNotEmpty && fName == matchName);
-              });
-              if (!isInFiltered) {
-                // If field is not in filtered list, clear search to show it
-                _fieldSearchQuery = '';
-                _fieldSearchController.clear();
-              }
-            } else {
-              final selName = (_selectedField?['name'] as String?) ?? '';
-              final selFieldId = _selectedField?['id']?.toString();
-              NumberedLogger.w(
-                  'Could not match preselected field: $selName (id: $selFieldId)');
-            }
-          }
-
-          // Re-apply filter after matching to ensure selected field is visible
-          _applyFieldSearchFilter();
-        });
-      }
-
-      // Now fetch location in the background and update distances/sorting
-      // This happens asynchronously after fields are already displayed
-      _updateFieldDistances(fields);
-    } catch (e) {
-      // Log the error so we can see Overpass or parsing failures
-      NumberedLogger.e('Failed to load fields: $e');
-      if (mounted) {
-        setState(() {
-          _availableFields = [];
-          _filteredFields = [];
-          _isLoadingFields = false;
-        });
-      }
-    }
-  }
-
-  /// Updates field distances and sorts by distance in the background
-  /// This is called after fields are already displayed to improve perceived performance
-  Future<void> _updateFieldDistances(List<Map<String, dynamic>> fields) async {
-    if (mounted) {
-      setState(() {
-        _isCalculatingDistances = true;
-      });
-    }
-
-    Position userPosition;
-    try {
-      userPosition =
-          await ref.read(locationActionsProvider).getCurrentPosition();
-    } catch (e) {
-      NumberedLogger.w('Could not obtain user position: $e');
-      if (mounted) {
-        setState(() {
-          _isCalculatingDistances = false;
-        });
-      }
-      return; // Exit early if location can't be obtained
-    }
-
-    if (!mounted) return;
-
-    // Calculate distances for all fields
-    final fieldsWithDistances = fields.map((f) {
-      final distance = calculateDistanceFromMap(
-        startLat: userPosition.latitude,
-        startLon: userPosition.longitude,
-        endField: f,
-        maxDistanceMeters: _kMaxDistanceMetersToDisplay,
-      );
-
-      return {
-        ...f,
-        if (distance != null) 'distance': distance,
-      };
-    }).toList();
-
-    // Sort by distance
-    fieldsWithDistances.sort((a, b) {
-      final da = safeToDoubleWithDefault(a['distance'], double.infinity);
-      final db = safeToDoubleWithDefault(b['distance'], double.infinity);
-      return da.compareTo(db);
-    });
-
-    // Update UI with sorted fields
-    if (mounted) {
-      setState(() {
-        _availableFields = fieldsWithDistances;
-        _isCalculatingDistances = false;
-        // Update selected field reference if it exists (using improved matching)
-        if (_selectedField != null) {
-          final String selName = (_selectedField?['name'] as String?) ?? '';
-          final String? selFieldId = _selectedField?['id']?.toString();
-          final double? selLat = safeToDouble(_selectedField?['latitude']);
-          final double? selLon = safeToDouble(_selectedField?['longitude']);
-
-          // Try to match by fieldId first (most reliable)
-          Map<String, dynamic>? match;
-          if (selFieldId != null && selFieldId.isNotEmpty) {
-            match = fieldsWithDistances.firstWhere(
-              (f) {
-                final fId = f['id']?.toString();
-                return fId != null && fId == selFieldId;
-              },
-              orElse: () => <String, dynamic>{},
-            );
-          }
-
-          // If no match by ID, try by name
-          if ((match == null || match.isEmpty) && selName.isNotEmpty) {
-            match = fieldsWithDistances.firstWhere(
-              (f) {
-                final fName = (f['name'] as String?) ?? '';
-                return fName == selName ||
-                    fName.toLowerCase().trim() == selName.toLowerCase().trim();
-              },
-              orElse: () => <String, dynamic>{},
-            );
-          }
-
-          // If still no match and we have coordinates, try matching by proximity
-          if ((match == null || match.isEmpty) &&
-              selLat != null &&
-              selLon != null) {
-            match = fieldsWithDistances.firstWhere(
-              (f) {
-                return areCoordinatesNearbyFromMap(
-                  refLat: selLat,
-                  refLon: selLon,
-                  field: f,
-                );
-              },
-              orElse: () => <String, dynamic>{},
-            );
-          }
-
-          if (match != null && match.isNotEmpty) {
-            _selectedField = match;
-          }
-        }
-
-        _applyFieldSearchFilter();
-      });
-    }
-  }
-
-  // Load weather data for the selected date and field
-  // Only loads weather when both date and field are selected to ensure we use the field's actual coordinates
-  Future<void> _loadWeather() async {
-    if (_selectedDate == null) {
-      NumberedLogger.d('Weather: No selected date');
-      return;
-    }
-
-    // Don't load weather until a field is selected - this ensures we use the field's actual coordinates
-    // instead of falling back to default coordinates
-    final selectedFieldLat = safeToDouble(_selectedField?['latitude']) ??
-        safeToDouble(_selectedField?['lat']);
-    final selectedFieldLon = safeToDouble(_selectedField?['longitude']) ??
-        safeToDouble(_selectedField?['lon']);
-
-    if (selectedFieldLat == null || selectedFieldLon == null) {
-      NumberedLogger.d(
-          'Weather: No field selected - skipping weather load to ensure field-specific coordinates are used');
-      if (mounted) {
-        setState(() {
-          _weatherData = {};
-          _isLoadingWeather = false;
-        });
-      }
-      return;
-    }
-
-    if (mounted) {
-      setState(() {
-        _isLoadingWeather = true;
-      });
-    }
-
-    try {
-      final weatherActions = ref.read(weatherActionsProvider);
-      final latitude = selectedFieldLat;
-      final longitude = selectedFieldLon;
-
-      NumberedLogger.d(
-        "Weather: Fetching for date ${_selectedDate!}, field ${_selectedField?['name']}, lat $latitude, lon $longitude",
-      );
-
-      final weatherData = await weatherActions.fetchWeatherForDate(
-        date: _selectedDate!,
-        latitude: latitude,
-        longitude: longitude,
-      );
-
-      NumberedLogger.d(
-          'Weather: Received ${weatherData.length} hours of data for field at ($latitude, $longitude)');
-
-      if (mounted) {
-        setState(() {
-          _weatherData = weatherData;
-          _isLoadingWeather = false;
-        });
-      }
-    } catch (e) {
-      NumberedLogger.e('Weather: Error - $e');
-      // Set empty weather data on error - don't show misleading default
-      if (mounted) {
-        setState(() {
-          _weatherData = {};
-          _isLoadingWeather = false;
-        });
-      }
-    }
-  }
+  // Field and weather loading are now handled by GameFormNotifier
+  // Methods removed: _loadFields(), _updateFieldDistances(), _loadWeather()
 
   Future<void> _updateGame() async {
     // Safety check: don't update historic games (should create new game instead)
@@ -580,10 +166,10 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
     }
     // Validate required fields
     final requiredFieldsResult = GameFormValidator.validateRequiredFields(
-      sport: _selectedSport,
-      field: _selectedField,
-      date: _selectedDate,
-      time: _selectedTime,
+      sport: _formState.sport,
+      field: _formState.field,
+      date: _formState.date,
+      time: _formState.time,
     );
     if (!requiredFieldsResult.isValid) {
       if (mounted) {
@@ -604,8 +190,8 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
 
     // Validate future date/time
     final futureDateTimeResult = GameFormValidator.validateFutureDateTime(
-      date: _selectedDate,
-      time: _selectedTime,
+      date: _formState.date,
+      time: _formState.time,
     );
     if (!futureDateTimeResult.isValid) {
       if (mounted) {
@@ -617,35 +203,32 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
       return;
     }
 
-    if (mounted) {
-      setState(() {
-        _isLoading = true;
-      });
-    }
+    _formNotifier.setLoading(true);
 
     try {
       // Parse the selected time and combine with selected date
       final combinedDateTime = GameFormValidator.parseDateTime(
-        date: _selectedDate!,
-        time: _selectedTime!,
+        date: _formState.date!,
+        time: _formState.time!,
       );
       if (combinedDateTime == null) {
         if (mounted) {
-          setState(() => _isLoading = false);
+          _formNotifier.setLoading(false);
           SnackBarHelper.showError(context, 'invalid_time_format');
         }
         return;
       }
 
       final current = widget.initialGame!;
-      final String newLocation = _selectedField?['name'] ?? current.location;
-      final String? newAddress = _selectedField?['address'] ?? current.address;
+      final String newLocation = _formState.field?['name'] ?? current.location;
+      final String? newAddress =
+          _formState.field?['address'] ?? current.address;
       final double? newLat =
-          safeToDouble(_selectedField?['latitude']) ?? current.latitude;
+          safeToDouble(_formState.field?['latitude']) ?? current.latitude;
       final double? newLon =
-          safeToDouble(_selectedField?['longitude']) ?? current.longitude;
+          safeToDouble(_formState.field?['longitude']) ?? current.longitude;
       final String? newFieldId =
-          _selectedField?['id']?.toString() ?? current.fieldId;
+          _formState.field?['id']?.toString() ?? current.fieldId;
 
       // Update game through provider
       final updatedGame = current.copyWith(
@@ -661,10 +244,12 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
 
       // Send invites to newly selected friends
       final userId = ref.read(currentUserIdProvider);
-      if (userId != null && _selectedFriendUids.isNotEmpty && mounted) {
+      if (userId != null &&
+          _formState.selectedFriendUids.isNotEmpty &&
+          mounted) {
         // Filter out already-invited friends (locked ones)
-        final newInvites = _selectedFriendUids
-            .where((uid) => !_lockedInvitedUids.contains(uid))
+        final newInvites = _formState.selectedFriendUids
+            .where((uid) => !_formState.lockedInvitedUids.contains(uid))
             .toList();
 
         if (newInvites.isNotEmpty) {
@@ -710,9 +295,9 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
 
       if (mounted) {
         ref.read(hapticsActionsProvider)?.mediumImpact();
-        setState(() => _showSuccess = true);
+        _formNotifier.setSuccess(true);
         Future.delayed(const Duration(milliseconds: 750), () {
-          if (mounted) setState(() => _showSuccess = false);
+          if (mounted) _formNotifier.setSuccess(false);
         });
         SnackBarHelper.showSuccess(context, 'game_updated_successfully');
         // Navigate to My Games → Organized and highlight the updated game
@@ -747,57 +332,25 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
       }
     } finally {
       if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
+        _formNotifier.setLoading(false);
       }
     }
   }
 
-  Future<void> _loadBookedSlots() async {
-    NumberedLogger.d('_loadBookedSlots() called');
-    if (_selectedField == null || _selectedDate == null) {
-      NumberedLogger.d(
-        '_loadBookedSlots() early return: field=${_selectedField?.toString()}, date=${_selectedDate?.toString()}',
-      );
-      return;
-    }
-    try {
-      final cloudGamesService = ref.read(cloudGamesServiceProvider);
-      final times = await cloudGamesService.getBookedSlots(
-        date: _selectedDate!,
-        field: _selectedField,
-      );
-
-      if (mounted) {
-        NumberedLogger.d('Setting _bookedTimes to: ${times.toList()}');
-        setState(() {
-          _bookedTimes
-            ..clear()
-            ..addAll(times);
-        });
-        NumberedLogger.d(
-            '_bookedTimes after setState: ${_bookedTimes.toList()}');
-      }
-    } catch (e) {
-      NumberedLogger.e('Error loading booked slots: $e');
-    }
-  }
+  // Booked slots loading is now handled by GameFormNotifier
+  // Method removed: _loadBookedSlots()
 
   Future<void> _createGame() async {
     // Validate required fields
     final requiredFieldsResult = GameFormValidator.validateRequiredFields(
-      sport: _selectedSport,
-      field: _selectedField,
-      date: _selectedDate,
-      time: _selectedTime,
+      sport: _formState.sport,
+      field: _formState.field,
+      date: _formState.date,
+      time: _formState.time,
     );
     if (!requiredFieldsResult.isValid) {
-      if (_selectedTime == null) {
+      if (_formState.time == null) {
         // Inline prompt near time section
-        setState(() {
-          // No-op state change; rely on UI hint rendering below
-        });
         _scrollToCreateGameButton();
         return;
       }
@@ -812,8 +365,8 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
 
     // Validate future date/time
     final futureDateTimeResult = GameFormValidator.validateFutureDateTime(
-      date: _selectedDate,
-      time: _selectedTime,
+      date: _formState.date,
+      time: _formState.time,
     );
     if (!futureDateTimeResult.isValid) {
       if (mounted) {
@@ -825,21 +378,17 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
       return;
     }
 
-    if (mounted) {
-      setState(() {
-        _isLoading = true;
-      });
-    }
+    _formNotifier.setLoading(true);
 
     try {
       // Parse the selected time and combine with selected date
       final combinedDateTime = GameFormValidator.parseDateTime(
-        date: _selectedDate!,
-        time: _selectedTime!,
+        date: _formState.date!,
+        time: _formState.time!,
       );
       if (combinedDateTime == null) {
         if (mounted) {
-          setState(() => _isLoading = false);
+          _formNotifier.setLoading(false);
           SnackBarHelper.showError(context, 'invalid_time_format');
         }
         return;
@@ -857,19 +406,19 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
 
       final game = Game(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
-        sport: _selectedSport!,
+        sport: _formState.sport!,
         dateTime: combinedDateTime,
-        location: _selectedField?['name'] ?? 'Unknown Field',
-        address: _selectedField?['address'],
-        latitude: safeToDouble(_selectedField?['latitude']),
-        longitude: safeToDouble(_selectedField?['longitude']),
-        fieldId: _selectedField?['id']?.toString(),
-        maxPlayers: _maxPlayers,
+        location: _formState.field?['name'] ?? 'Unknown Field',
+        address: _formState.field?['address'],
+        latitude: safeToDouble(_formState.field?['latitude']),
+        longitude: safeToDouble(_formState.field?['longitude']),
+        fieldId: _formState.field?['id']?.toString(),
+        maxPlayers: _formState.maxPlayers,
         description: '',
         organizerId: userId,
         organizerName: userDisplayName,
         createdAt: DateTime.now(),
-        isPublic: _isPublic,
+        isPublic: _formState.isPublic,
         currentPlayers: 1,
         players: [userId], // Creator is counted as the first player
       );
@@ -881,9 +430,9 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
 
       if (mounted) {
         ref.read(hapticsActionsProvider)?.mediumImpact();
-        setState(() => _showSuccess = true);
+        _formNotifier.setSuccess(true);
         Future.delayed(const Duration(milliseconds: 750), () {
-          if (mounted) setState(() => _showSuccess = false);
+          if (mounted) _formNotifier.setSuccess(false);
         });
 
         // Automatically add newly created game to calendar (non-blocking)
@@ -916,15 +465,16 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
 
         // Send in-app invites to selected friends in the background (non-blocking)
         // This ensures consistent transition timing whether friends are invited or not
-        if (_selectedFriendUids.isNotEmpty && mounted) {
+        if (_formState.selectedFriendUids.isNotEmpty && mounted) {
           // Capture messenger before async operation to avoid BuildContext warning
           final messenger = ScaffoldMessenger.of(context);
           ref
               .read(cloudGamesActionsProvider)
-              .sendGameInvitesToFriends(createdId, _selectedFriendUids.toList())
+              .sendGameInvitesToFriends(
+                  createdId, _formState.selectedFriendUids.toList())
               .then((_) {
             NumberedLogger.i(
-              'Successfully sent invites to ${_selectedFriendUids.length} friends',
+              'Successfully sent invites to ${_formState.selectedFriendUids.length} friends',
             );
           }).catchError((e, stackTrace) {
             // Log error but don't fail game creation or interrupt navigation
@@ -981,178 +531,12 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
       }
     } finally {
       if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
+        _formNotifier.setLoading(false);
       }
     }
   }
 
-  Widget _buildSportCard({
-    required Map<String, dynamic> sport,
-    required bool isSelected,
-    required VoidCallback onTap,
-    bool disabled = false,
-  }) {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.white,
-        borderRadius: BorderRadius.circular(AppRadius.card),
-        border: isSelected
-            ? Border.all(color: AppColors.blue, width: 2)
-            : Border.all(
-                color: AppColors.grey.withValues(alpha: 0.3),
-                width: 1,
-              ),
-      ),
-      child: Material(
-        color: Colors.transparent,
-        borderRadius: BorderRadius.circular(AppRadius.card),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.all(4),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                // Sport Icon - smaller for compact design
-                Expanded(
-                  flex: 2,
-                  child: Container(
-                    width: double.infinity,
-                    decoration: BoxDecoration(
-                      color: disabled
-                          ? AppColors.grey.withValues(alpha: 0.06)
-                          : (isSelected
-                              ? AppColors.blue.withValues(alpha: 0.1)
-                              : (sport['color'] as Color).withValues(
-                                  alpha: 0.1,
-                                )),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Icon(
-                      sport['icon'] as IconData,
-                      size: 20,
-                      color: disabled
-                          ? AppColors.grey
-                          : (isSelected
-                              ? AppColors.blue
-                              : sport['color'] as Color),
-                    ),
-                  ),
-                ),
-
-                const SizedBox(height: 2),
-
-                // Sport Name - smaller text
-                Expanded(
-                  flex: 1,
-                  child: Text(
-                    sport['key'].toString().tr(),
-                    style: AppTextStyles.superSmall.copyWith(
-                      color: disabled
-                          ? AppColors.grey
-                          : (isSelected ? AppColors.blue : AppColors.blackText),
-                      fontWeight: FontWeight.w600,
-                      fontSize: 10,
-                    ),
-                    textAlign: TextAlign.center,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-
-                // Selection indicator - smaller
-                if (isSelected)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 2),
-                    child: Icon(
-                      Icons.check_circle,
-                      color: disabled ? AppColors.grey : AppColors.blue,
-                      size: 10,
-                    ),
-                  ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildDateCard({
-    required DateTime date,
-    required bool isSelected,
-    required bool isToday,
-    required VoidCallback onTap,
-  }) {
-    return Container(
-      width: 50,
-      height: 60,
-      decoration: BoxDecoration(
-        color: AppColors.white,
-        borderRadius: BorderRadius.circular(AppRadius.smallCard),
-        border: isSelected
-            ? Border.all(color: AppColors.blue, width: 2)
-            : Border.all(
-                color: AppColors.grey.withValues(alpha: 0.3),
-                width: 1,
-              ),
-      ),
-      child: Material(
-        color: Colors.transparent,
-        borderRadius: BorderRadius.circular(AppRadius.smallCard),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 4),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                // Month abbreviation
-                Text(
-                  getMonthAbbr(date, context),
-                  style: AppTextStyles.superSmall.copyWith(
-                    color: isSelected
-                        ? AppColors.blue
-                        : isToday
-                            ? AppColors.blue
-                            : AppColors.grey,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 7,
-                  ),
-                ),
-                // Day of month
-                Text(
-                  date.day.toString(),
-                  style: AppTextStyles.smallCardTitle.copyWith(
-                    color: isSelected ? AppColors.blue : AppColors.blackText,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                // Day of week
-                Text(
-                  getDayOfWeekAbbr(date, context),
-                  style: AppTextStyles.superSmall.copyWith(
-                    color: isSelected
-                        ? AppColors.blue
-                        : isToday
-                            ? AppColors.blue
-                            : AppColors.grey,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 7,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
+  // Sport and date card builders are now in extracted widgets
 
   Widget _buildWeatherTimeCard({
     required String time,
@@ -1372,10 +756,10 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
               ),
             if (distanceKm != null && distanceKm.isFinite)
               const SizedBox(height: 4),
-            if (_selectedSport != 'table_tennis')
+            if (_formState.sport != 'table_tennis')
               Builder(
                 builder: (context) {
-                  final icon = _surfaceIconForSport(_selectedSport);
+                  final icon = _surfaceIconForSport(_formState.sport);
                   final surfaceText = surface;
                   final hasSurfaceText =
                       surfaceText != null && surfaceText.isNotEmpty;
@@ -1489,58 +873,8 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Pre-fill form if initial game provided and fields not set yet
-    if (widget.initialGame != null && _selectedSport == null) {
-      final g = widget.initialGame!;
-      final isHistoricGame = g.dateTime.isBefore(DateTime.now());
-
-      _selectedSport = g.sport;
-      // For historic games, don't pre-fill date/time - user must select new ones
-      // For future games (editing), pre-fill with existing date/time
-      if (isHistoricGame) {
-        _selectedDate = null;
-        _selectedTime = null;
-      } else {
-        _selectedDate = DateTime(
-          g.dateTime.year,
-          g.dateTime.month,
-          g.dateTime.day,
-        );
-        _selectedTime = g.formattedTime;
-      }
-      _maxPlayers = g.maxPlayers;
-      _selectedField = {
-        'name': g.location,
-        'address': g.address,
-        'latitude': g.latitude,
-        'longitude': g.longitude,
-        'id': g.fieldId,
-      };
-
-      // Store original values for change detection (only for future games being edited)
-      if (!isHistoricGame) {
-        _originalSport = g.sport;
-        _originalDate = DateTime(
-          g.dateTime.year,
-          g.dateTime.month,
-          g.dateTime.day,
-        );
-        _originalTime = g.formattedTime;
-        _originalMaxPlayers = g.maxPlayers;
-        _originalField = {
-          'name': g.location,
-          'address': g.address,
-          'latitude': g.latitude,
-          'longitude': g.longitude,
-          'id': g.fieldId,
-        };
-      }
-
-      // Load fields for the selected sport
-      _loadFields();
-      // Load existing invites (or participants for historic games)
-      _loadLockedInvites();
-    }
+    // Form state is managed by GameFormNotifier - no need to pre-fill here
+    // The notifier handles initialization from initialGame
     return Scaffold(
       appBar: AppBar(
         leadingWidth: 48,
@@ -1552,7 +886,7 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
       backgroundColor: AppColors.white,
       body: SafeArea(
         child: SuccessCheckmarkOverlay(
-          show: _showSuccess,
+          show: _formState.showSuccess,
           child: Padding(
             padding: AppPaddings.symmHorizontalReg,
             child: Column(
@@ -1579,72 +913,14 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                             // Sport Selection - Horizontal Scrollable List
                             Padding(
                               padding: AppPaddings.symmHorizontalReg,
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Transform.translate(
-                                    offset: const Offset(0, -6),
-                                    child: SizedBox(
-                                      height: 80,
-                                      child: ListView.builder(
-                                        scrollDirection: Axis.horizontal,
-                                        itemCount: _sports.length,
-                                        itemBuilder: (context, index) {
-                                          final sport = _sports[index];
-                                          final isSelected =
-                                              _selectedSport == sport['key'];
-
-                                          final bool isEdit =
-                                              widget.initialGame != null;
-                                          return Padding(
-                                            padding: EdgeInsets.only(
-                                              right: index < _sports.length - 1
-                                                  ? AppWidths.small
-                                                  : 0,
-                                            ),
-                                            child: SizedBox(
-                                              width:
-                                                  70, // Slightly wider for bigger icons
-                                              child: IgnorePointer(
-                                                ignoring: isEdit,
-                                                child: _buildSportCard(
-                                                  sport: sport,
-                                                  isSelected: isSelected,
-                                                  disabled: isEdit,
-                                                  onTap: () {
-                                                    ref
-                                                        .read(
-                                                            hapticsActionsProvider)
-                                                        ?.lightImpact();
-                                                    setState(() {
-                                                      _selectedSport =
-                                                          sport['key'];
-                                                      _selectedField = null;
-                                                      _selectedDate = null;
-                                                      _selectedTime = null;
-                                                      _availableFields = [];
-                                                      _filteredFields = [];
-                                                      _weatherData = {};
-                                                      _fieldSearchController
-                                                          .clear();
-                                                      _fieldSearchQuery = '';
-                                                    });
-                                                    _loadFields();
-                                                  },
-                                                ),
-                                              ),
-                                            ),
-                                          );
-                                        },
-                                      ),
-                                    ),
-                                  ),
-                                ],
+                              child: GameFormSportSelector(
+                                initialGame: widget.initialGame,
+                                notifier: _formNotifier,
                               ),
                             ),
 
                             // Available Fields Section (only show if sport is selected)
-                            if (_selectedSport != null) ...[
+                            if (_formState.sport != null) ...[
                               Padding(
                                 padding: AppPaddings.symmHorizontalReg,
                                 child: Row(
@@ -1659,79 +935,77 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                                     ),
                                     const SizedBox(width: 8),
                                     TextButton.icon(
-                                      onPressed: (_isLoadingFields ||
-                                              _availableFields.isEmpty)
+                                      onPressed: (_formState.isLoadingFields ||
+                                              _formState
+                                                  .availableFields.isEmpty)
                                           ? null
                                           : () {
-                                              final mapLocations =
-                                                  _availableFields
-                                                      .map<
-                                                          Map<String,
-                                                              dynamic>>((
-                                                        field,
-                                                      ) {
-                                                        final lat =
-                                                            field['latitude'] ??
-                                                                field['lat'];
-                                                        final lon = field[
-                                                                'longitude'] ??
+                                              final mapLocations = _formState
+                                                  .availableFields
+                                                  .map<Map<String, dynamic>>((
+                                                    field,
+                                                  ) {
+                                                    final lat =
+                                                        field['latitude'] ??
+                                                            field['lat'];
+                                                    final lon =
+                                                        field['longitude'] ??
                                                             field['lon'];
-                                                        final latDouble =
-                                                            safeToDouble(lat);
-                                                        final lonDouble =
-                                                            safeToDouble(lon);
-                                                        if (latDouble == null ||
-                                                            lonDouble == null) {
-                                                          return <String,
-                                                              dynamic>{};
-                                                        }
-                                                        return {
-                                                          'id': field['id'] ??
-                                                              field[
-                                                                  'fieldId'] ??
-                                                              field['@id'] ??
-                                                              field['osm_id'] ??
-                                                              field['osmId'],
-                                                          'name': (field['name']
+                                                    final latDouble =
+                                                        safeToDouble(lat);
+                                                    final lonDouble =
+                                                        safeToDouble(lon);
+                                                    if (latDouble == null ||
+                                                        lonDouble == null) {
+                                                      return <String,
+                                                          dynamic>{};
+                                                    }
+                                                    return {
+                                                      'id': field['id'] ??
+                                                          field['fieldId'] ??
+                                                          field['@id'] ??
+                                                          field['osm_id'] ??
+                                                          field['osmId'],
+                                                      'name': (field['name']
+                                                                  ?.toString()
+                                                                  .trim()
+                                                                  .isNotEmpty ==
+                                                              true)
+                                                          ? field['name']
+                                                              .toString()
+                                                              .trim()
+                                                          : (field['address_micro_short']
                                                                       ?.toString()
                                                                       .trim()
                                                                       .isNotEmpty ==
                                                                   true)
-                                                              ? field['name']
+                                                              ? field['address_micro_short']
                                                                   .toString()
                                                                   .trim()
-                                                              : (field['address_micro_short']
+                                                              : (field['addressMicroShort']
                                                                           ?.toString()
                                                                           .trim()
                                                                           .isNotEmpty ==
                                                                       true)
-                                                                  ? field['address_micro_short']
+                                                                  ? field['addressMicroShort']
                                                                       .toString()
                                                                       .trim()
-                                                                  : (field['addressMicroShort']
-                                                                              ?.toString()
-                                                                              .trim()
-                                                                              .isNotEmpty ==
-                                                                          true)
-                                                                      ? field['addressMicroShort']
-                                                                          .toString()
-                                                                          .trim()
-                                                                      : 'Unnamed Field',
-                                                          'lat': latDouble,
-                                                          'lon': lonDouble,
-                                                          'lit':
-                                                              (field['lighting'] ==
-                                                                      true)
-                                                                  ? 'yes'
-                                                                  : 'no',
-                                                          'surface':
-                                                              field['surface'],
-                                                        };
-                                                      })
-                                                      .where(
-                                                        (loc) => loc.isNotEmpty,
-                                                      )
-                                                      .toList();
+                                                                  : 'Unnamed Field',
+                                                      'lat': latDouble,
+                                                      'lon': lonDouble,
+                                                      'lit':
+                                                          (field['lighting'] ==
+                                                                  true)
+                                                              ? 'yes'
+                                                              : 'no',
+                                                      'surface':
+                                                          field['surface'],
+                                                    };
+                                                  })
+                                                  .where(
+                                                    (loc) => loc.isNotEmpty,
+                                                  )
+                                                  .toList();
 
                                               if (mapLocations.isEmpty) {
                                                 ScaffoldMessenger.of(
@@ -1748,7 +1022,8 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                                               }
 
                                               final mapTitle =
-                                                  _selectedSport == 'basketball'
+                                                  _formState.sport ==
+                                                          'basketball'
                                                       ? 'basketball_courts'.tr()
                                                       : 'football_fields'.tr();
 
@@ -1778,10 +1053,9 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                                     controller: _fieldSearchController,
                                     textInputAction: TextInputAction.search,
                                     style: AppTextStyles.body,
+                                    onChanged: _onFieldSearchChanged,
                                     onSubmitted: (_) {
-                                      setState(() {
-                                        _applyFieldSearchFilter();
-                                      });
+                                      // Search filter is applied via onChanged with debouncing
                                     },
                                     decoration: InputDecoration(
                                       hintText: 'search_by_name_address'.tr(),
@@ -1797,7 +1071,8 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                                         Icons.search,
                                         size: 20,
                                       ),
-                                      suffixIcon: _fieldSearchQuery.isEmpty
+                                      suffixIcon: _formState
+                                              .fieldSearchQuery.isEmpty
                                           ? null
                                           : IconButton(
                                               icon: const Icon(
@@ -1811,10 +1086,8 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                                               ),
                                               onPressed: () {
                                                 _fieldSearchController.clear();
-                                                setState(() {
-                                                  _fieldSearchQuery = '';
-                                                  _applyFieldSearchFilter();
-                                                });
+                                                _formNotifier
+                                                    .updateFieldSearch('');
                                               },
                                             ),
                                       border: OutlineInputBorder(
@@ -1824,7 +1097,6 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                                         borderSide: BorderSide.none,
                                       ),
                                     ),
-                                    onChanged: _onFieldSearchChanged,
                                   ),
                                 ),
                               ),
@@ -1837,11 +1109,11 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                                       CrossAxisAlignment.stretch,
                                   children: [
                                     const SizedBox(height: 8),
-                                    if (_isLoadingFields)
+                                    if (_formState.isLoadingFields)
                                       const Center(
                                         child: CircularProgressIndicator(),
                                       )
-                                    else if (_availableFields.isEmpty)
+                                    else if (_formState.availableFields.isEmpty)
                                       Container(
                                         height: 100,
                                         decoration: BoxDecoration(
@@ -1867,7 +1139,7 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                                           ),
                                         ),
                                       )
-                                    else if (_filteredFields.isEmpty)
+                                    else if (_formState.filteredFields.isEmpty)
                                       Container(
                                         height: 100,
                                         decoration: BoxDecoration(
@@ -1895,7 +1167,7 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                                       )
                                     else ...[
                                       // Show subtle loading indicator when calculating distances
-                                      if (_isCalculatingDistances)
+                                      if (_formState.isCalculatingDistances)
                                         Padding(
                                           padding: const EdgeInsets.only(
                                             bottom: 8,
@@ -1935,17 +1207,19 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                                           height: 120,
                                           child: ListView.builder(
                                             scrollDirection: Axis.horizontal,
-                                            itemCount: _filteredFields.length,
+                                            itemCount: _formState
+                                                .filteredFields.length,
                                             itemBuilder: (context, index) {
-                                              final field =
-                                                  _filteredFields[index];
+                                              final field = _formState
+                                                  .filteredFields[index];
                                               final isSelected =
-                                                  _selectedField == field;
+                                                  _formState.field == field;
 
                                               return Padding(
                                                 padding: EdgeInsets.only(
                                                   right: index <
-                                                          _filteredFields
+                                                          _formState
+                                                                  .filteredFields
                                                                   .length -
                                                               1
                                                       ? AppWidths.regular
@@ -1959,17 +1233,9 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                                                         .read(
                                                             hapticsActionsProvider)
                                                         ?.lightImpact();
-                                                    setState(() {
-                                                      _selectedField = field;
-                                                      // Clear previous field's busy times and selected time
-                                                      _bookedTimes.clear();
-                                                      _selectedTime = null;
-                                                    });
-                                                    // Reload weather with new field coordinates if date is already selected
-                                                    if (_selectedDate != null) {
-                                                      _loadWeather();
-                                                    }
-                                                    _loadBookedSlots();
+                                                    _formNotifier
+                                                        .selectField(field);
+                                                    // Weather and booked slots are automatically reloaded by notifier
                                                   },
                                                 ),
                                               );
@@ -1985,106 +1251,13 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                             ],
 
                             // Max Players Slider (right after field)
-                            if (_selectedField != null) ...[
+                            if (_formState.field != null) ...[
                               PanelHeader('max_players'.tr()),
                               Padding(
                                 padding: AppPaddings.symmHorizontalReg,
-                                child: Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Transform.translate(
-                                      offset: const Offset(0, -6),
-                                      child: Row(
-                                        children: [
-                                          const Icon(
-                                            Icons.group_outlined,
-                                            color: AppColors.grey,
-                                            size: 18,
-                                          ),
-                                          const SizedBox(width: 8),
-                                          Expanded(
-                                            child: SliderTheme(
-                                              data: SliderTheme.of(context)
-                                                  .copyWith(
-                                                activeTrackColor: (widget
-                                                            .initialGame !=
-                                                        null)
-                                                    ? AppColors.grey.withValues(
-                                                        alpha: 0.4,
-                                                      )
-                                                    : AppColors.blue,
-                                                inactiveTrackColor: (widget
-                                                            .initialGame !=
-                                                        null)
-                                                    ? AppColors.grey.withValues(
-                                                        alpha: 0.2,
-                                                      )
-                                                    : AppColors.blue.withValues(
-                                                        alpha: 0.2,
-                                                      ),
-                                                thumbColor:
-                                                    (widget.initialGame != null)
-                                                        ? AppColors.grey
-                                                        : AppColors.blue,
-                                                overlayColor: (widget
-                                                            .initialGame !=
-                                                        null)
-                                                    ? AppColors.grey.withValues(
-                                                        alpha: 0.1,
-                                                      )
-                                                    : AppColors.blue.withValues(
-                                                        alpha: 0.1,
-                                                      ),
-                                                valueIndicatorColor:
-                                                    (widget.initialGame != null)
-                                                        ? AppColors.grey
-                                                        : AppColors.blue,
-                                              ),
-                                              child: Slider(
-                                                value: _maxPlayers.toDouble(),
-                                                min: 2,
-                                                max: 10,
-                                                divisions: 8,
-                                                label: _maxPlayers.toString(),
-                                                onChangeStart: (_) {
-                                                  ref
-                                                      .read(
-                                                        hapticsActionsProvider,
-                                                      )
-                                                      ?.selectionClick();
-                                                },
-                                                onChanged:
-                                                    (widget.initialGame != null)
-                                                        ? null
-                                                        : (v) {
-                                                            setState(() {
-                                                              _maxPlayers =
-                                                                  v.round();
-                                                            });
-                                                          },
-                                                onChangeEnd: (_) {
-                                                  ref
-                                                      .read(
-                                                        hapticsActionsProvider,
-                                                      )
-                                                      ?.lightImpact();
-                                                },
-                                              ),
-                                            ),
-                                          ),
-                                          SizedBox(
-                                            width: 40,
-                                            child: Center(
-                                              child: Text(
-                                                _maxPlayers.toString(),
-                                                style: AppTextStyles.body,
-                                              ),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ],
+                                child: GameFormMaxPlayersSlider(
+                                  initialGame: widget.initialGame,
+                                  notifier: _formNotifier,
                                 ),
                               ),
 
@@ -2095,87 +1268,16 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                               ),
                               Padding(
                                 padding: AppPaddings.symmHorizontalReg,
-                                child: Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Transform.translate(
-                                      offset: const Offset(0, -6),
-                                      child: SizedBox(
-                                        height: 65,
-                                        child: ListView.builder(
-                                          scrollDirection: Axis.horizontal,
-                                          itemCount: _availableDates.length,
-                                          itemBuilder: (context, index) {
-                                            final date = _availableDates[index];
-                                            final isSelected =
-                                                _selectedDate == date;
-                                            final isToday = date.day ==
-                                                    DateTime.now().day &&
-                                                date.month ==
-                                                    DateTime.now().month &&
-                                                date.year ==
-                                                    DateTime.now().year;
-
-                                            return Padding(
-                                              padding: EdgeInsets.only(
-                                                right: index <
-                                                        _availableDates.length -
-                                                            1
-                                                    ? AppWidths.regular
-                                                    : 0,
-                                              ),
-                                              child: _buildDateCard(
-                                                date: date,
-                                                isSelected: isSelected,
-                                                isToday: isToday,
-                                                onTap: () {
-                                                  ref
-                                                      .read(
-                                                        hapticsActionsProvider,
-                                                      )
-                                                      ?.lightImpact();
-                                                  setState(() {
-                                                    if (isSelected) {
-                                                      // If clicking on the already selected date, unselect it
-                                                      _selectedDate = null;
-                                                      _weatherData = {};
-                                                    } else {
-                                                      // Select the new date
-                                                      _selectedDate = date;
-                                                    }
-                                                  });
-                                                  // Load weather + booked slots only if both date and field are selected
-                                                  // Weather requires field coordinates, so it will load when field is selected
-                                                  if (_selectedDate != null) {
-                                                    // Only load weather if field is already selected (has coordinates)
-                                                    if (_selectedField !=
-                                                            null &&
-                                                        _selectedField?[
-                                                                'latitude'] !=
-                                                            null &&
-                                                        _selectedField?[
-                                                                'longitude'] !=
-                                                            null) {
-                                                      _loadWeather();
-                                                    }
-                                                    _loadBookedSlots();
-                                                    // Auto-scroll to Create Game button after selecting date
-                                                    _scrollToCreateGameButton();
-                                                  }
-                                                },
-                                              ),
-                                            );
-                                          },
-                                        ),
-                                      ),
-                                    ),
-                                  ],
+                                child: GameFormDateSelector(
+                                  initialGame: widget.initialGame,
+                                  notifier: _formNotifier,
+                                  onDateSelected: _scrollToCreateGameButton,
                                 ),
                               ),
                             ],
 
                             // Time Selection Section (only show if date is selected)
-                            if (_selectedDate != null) ...[
+                            if (_formState.date != null) ...[
                               PanelHeader('choose_time'.tr()),
                               Padding(
                                 padding: AppPaddings.symmHorizontalReg,
@@ -2192,23 +1294,23 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                                           itemBuilder: (context, index) {
                                             final time = _availableTimes[index];
                                             final isSelected =
-                                                _selectedTime == time;
+                                                _formState.time == time;
                                             final isBooked = _isTimeSlotBooked(
-                                                time, _bookedTimes);
+                                                time, _formState.bookedTimes);
                                             if (index == 0) {
                                               NumberedLogger.d(
-                                                'UI: First time slot check - time=$time, isBooked=$isBooked, _bookedTimes=${_bookedTimes.toList()}',
+                                                'UI: First time slot check - time=$time, isBooked=$isBooked, _formState.bookedTimes=${_formState.bookedTimes.toList()}',
                                               );
                                             }
                                             // Only show weather if actual forecast data is available
                                             // This ensures we only display location-based weather predictions
-                                            final hasWeatherData =
-                                                _weatherData.isNotEmpty;
+                                            final hasWeatherData = _formState
+                                                .weatherData.isNotEmpty;
                                             // Weather API returns hourly data (e.g., "10:00"), so map 30-minute slots
                                             // to their hour's weather data (e.g., "10:30" -> "10:00")
                                             String weatherKey = time;
                                             if (hasWeatherData &&
-                                                !_weatherData
+                                                !_formState.weatherData
                                                     .containsKey(time)) {
                                               // For 30-minute slots, use the hour's weather data
                                               final hour =
@@ -2220,7 +1322,8 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                                             }
                                             final weatherCondition =
                                                 hasWeatherData
-                                                    ? _weatherData[weatherKey]
+                                                    ? _formState
+                                                        .weatherData[weatherKey]
                                                     : null;
 
                                             final weatherIcon =
@@ -2267,8 +1370,8 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                                                       weatherCondition,
                                                   weatherIcon: weatherIcon,
                                                   weatherColor: weatherColor,
-                                                  isLoadingWeather:
-                                                      _isLoadingWeather,
+                                                  isLoadingWeather: _formState
+                                                      .isLoadingWeather,
                                                   onTap: () {
                                                     if (isBooked) {
                                                       ScaffoldMessenger.of(
@@ -2323,9 +1426,8 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                                                           hapticsActionsProvider,
                                                         )
                                                         ?.lightImpact();
-                                                    setState(() {
-                                                      _selectedTime = time;
-                                                    });
+                                                    _formNotifier
+                                                        .selectTime(time);
                                                     // Auto-scroll to show next options after selecting time
                                                     _scrollToCreateGameButton();
                                                   },
@@ -2343,7 +1445,7 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                             ],
 
                             // Visibility Selection (create only, after time is chosen)
-                            if (_selectedTime != null &&
+                            if (_formState.time != null &&
                                 widget.initialGame == null) ...[
                               PanelHeader('choose_visibility'.tr()),
                               Padding(
@@ -2357,12 +1459,12 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                                           child: _buildVisibilityCard(
                                             title: 'public'.tr(),
                                             icon: Icons.public,
-                                            isSelected: _isPublic,
+                                            isSelected: _formState.isPublic,
                                             onTap: () {
                                               ref
                                                   .read(hapticsActionsProvider)
                                                   ?.lightImpact();
-                                              setState(() => _isPublic = true);
+                                              _formNotifier.setVisibility(true);
                                             },
                                           ),
                                         ),
@@ -2373,12 +1475,13 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                                           child: _buildVisibilityCard(
                                             title: 'private'.tr(),
                                             icon: Icons.lock,
-                                            isSelected: !_isPublic,
+                                            isSelected: !_formState.isPublic,
                                             onTap: () {
                                               ref
                                                   .read(hapticsActionsProvider)
                                                   ?.lightImpact();
-                                              setState(() => _isPublic = false);
+                                              _formNotifier
+                                                  .setVisibility(false);
                                             },
                                           ),
                                         ),
@@ -2390,7 +1493,7 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                             ],
 
                             // Invite Friends Section (optional, after time is chosen)
-                            if (_selectedTime != null) ...[
+                            if (_formState.time != null) ...[
                               PanelHeader('invite_friends_label'.tr()),
                               Padding(
                                 padding: AppPaddings.symmHorizontalReg,
@@ -2398,13 +1501,14 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     // Selected friends displayed as chips
-                                    if (_selectedFriendUids.isNotEmpty)
+                                    if (_formState
+                                        .selectedFriendUids.isNotEmpty)
                                       Wrap(
                                         spacing: 8,
                                         runSpacing: 8,
                                         children: [
                                           // Render each selected friend as a chip
-                                          ...(_selectedFriendUids.map(
+                                          ...(_formState.selectedFriendUids.map(
                                             (uid) => _buildFriendChip(uid),
                                           )),
                                           // "Add more" button chip
@@ -2427,13 +1531,14 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                                 width: double.infinity,
                                 height: 50,
                                 child: ElevatedButton(
-                                  onPressed: _isFormComplete && !_isLoading
-                                      ? (_isCreatingSimilarGame
-                                          ? _createGame
-                                          : (widget.initialGame != null
-                                              ? _updateGame
-                                              : _createGame))
-                                      : null,
+                                  onPressed:
+                                      _isFormComplete && !_formState.isLoading
+                                          ? (_isCreatingSimilarGame
+                                              ? _createGame
+                                              : (widget.initialGame != null
+                                                  ? _updateGame
+                                                  : _createGame))
+                                          : null,
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor: _isFormComplete
                                         ? (_isCreatingSimilarGame
@@ -2452,7 +1557,7 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                                     ),
                                     elevation: 0,
                                   ),
-                                  child: _isLoading
+                                  child: _formState.isLoading
                                       ? const SizedBox(
                                           width: 20,
                                           height: 20,
@@ -2504,8 +1609,8 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
 
         final name = snap.data?['displayName'] ?? 'Friend';
         final photo = snap.data?['photoURL'];
-        final locked =
-            widget.initialGame != null && _lockedInvitedUids.contains(uid);
+        final locked = widget.initialGame != null &&
+            _formState.lockedInvitedUids.contains(uid);
 
         return Chip(
           avatar: CircleAvatar(
@@ -2526,7 +1631,7 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
           onDeleted: locked
               ? null
               : () {
-                  setState(() => _selectedFriendUids.remove(uid));
+                  setState(() => _formState.selectedFriendUids.remove(uid));
                 },
           backgroundColor: locked
               ? AppColors.grey.withValues(alpha: 0.1)
@@ -2556,88 +1661,27 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
       backgroundColor: Colors.transparent,
       builder: (context) => _FriendSelectionSheet(
         currentUid: ref.read(currentUserIdProvider) ?? '',
-        initiallySelected: _selectedFriendUids,
-        lockedUids:
-            widget.initialGame != null ? _lockedInvitedUids : const <String>{},
+        initiallySelected: _formState.selectedFriendUids,
+        lockedUids: widget.initialGame != null
+            ? _formState.lockedInvitedUids
+            : const <String>{},
         onApply: (selectedUids) {
           // Apply changes when Done is pressed
           setState(() {
             // Keep locked invites (they can't be removed)
-            final newSelection = <String>{..._lockedInvitedUids};
+            final newSelection = <String>{..._formState.lockedInvitedUids};
             // Add newly selected friends
             newSelection.addAll(selectedUids);
-            _selectedFriendUids.clear();
-            _selectedFriendUids.addAll(newSelection);
+            _formState.selectedFriendUids.clear();
+            _formState.selectedFriendUids.addAll(newSelection);
           });
         },
       ),
     );
   }
 
-  Future<void> _loadLockedInvites() async {
-    if (widget.initialGame == null) return;
-    final game = widget.initialGame!;
-    final currentUserId = ref.read(currentUserIdProvider);
-
-    // Check if this is a historic game (past game) - if so, we're creating a similar game
-    final isHistoricGame = game.dateTime.isBefore(DateTime.now());
-
-    try {
-      if (isHistoricGame) {
-        // For historic games: load all participants (players + invited friends) as friend invites
-        // This allows creating a similar game with the same people
-        final Set<String> allParticipants = <String>{};
-
-        // Add all players (excluding the current user who will be the new organizer)
-        for (final playerId in game.players) {
-          if (playerId != currentUserId) {
-            allParticipants.add(playerId);
-          }
-        }
-
-        // Also try to get invited users (even if they didn't join)
-        try {
-          final statuses = await ref
-              .read(cloudGamesActionsProvider)
-              .getGameInviteStatuses(game.id);
-          // Add invited users (excluding current user)
-          for (final uid in statuses.keys) {
-            if (uid != currentUserId) {
-              allParticipants.add(uid);
-            }
-          }
-        } catch (_) {
-          // If we can't load invite statuses, that's okay - we still have players
-        }
-
-        if (!mounted) return;
-        setState(() {
-          // For historic games, don't lock invites - user can modify them
-          _lockedInvitedUids.clear();
-          // Pre-populate friend invites with all participants
-          _selectedFriendUids
-            ..clear()
-            ..addAll(allParticipants);
-        });
-      } else {
-        // For future games: this is edit mode - load invite statuses as locked invites
-        final statuses = await ref
-            .read(cloudGamesActionsProvider)
-            .getGameInviteStatuses(game.id);
-        if (!mounted) return;
-        setState(() {
-          _lockedInvitedUids
-            ..clear()
-            ..addAll(statuses.keys);
-          // Also populate selectedFriendUids with already-invited friends
-          // so they appear checked in the UI
-          _selectedFriendUids
-            ..clear()
-            ..addAll(statuses.keys);
-        });
-      }
-    } catch (_) {}
-  }
+  // Locked invites loading is now handled by GameFormNotifier
+  // Method removed: _loadLockedInvites()
 }
 
 // Bottom sheet widget for selecting friends with search

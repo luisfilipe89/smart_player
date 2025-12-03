@@ -1,12 +1,12 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:move_young/providers/infrastructure/shared_preferences_provider.dart';
-import 'favorites_service_instance.dart';
+import 'favorites_service.dart';
 
 /// FavoritesService provider with dependency injection
-final favoritesServiceProvider = Provider<FavoritesServiceInstance?>((ref) {
+final favoritesServiceProvider = Provider<FavoritesService?>((ref) {
   final prefsAsync = ref.watch(sharedPreferencesProvider);
   return prefsAsync.when(
-    data: (prefs) => FavoritesServiceInstance(prefs),
+    data: (prefs) => FavoritesService(prefs),
     loading: () => null,
     error: (_, __) => null,
   );
@@ -32,7 +32,7 @@ final favoritesActionsProvider = Provider<FavoritesActions?>((ref) {
 
 /// Helper class for favorites actions
 class FavoritesActions {
-  final FavoritesServiceInstance _favoritesService;
+  final FavoritesService _favoritesService;
 
   FavoritesActions(this._favoritesService);
 

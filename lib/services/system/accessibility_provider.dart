@@ -1,16 +1,15 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:move_young/providers/infrastructure/shared_preferences_provider.dart';
-import 'accessibility_service_instance.dart';
+import 'accessibility_service.dart';
 import 'package:move_young/utils/logger.dart';
 
 // AccessibilityService provider with dependency injection
-final accessibilityServiceProvider =
-    Provider<AccessibilityServiceInstance?>((ref) {
+final accessibilityServiceProvider = Provider<AccessibilityService?>((ref) {
   final prefsAsync = ref.watch(sharedPreferencesProvider);
 
   return prefsAsync.when(
     data: (prefs) {
-      final service = AccessibilityServiceInstance(prefs);
+      final service = AccessibilityService(prefs);
       // Initialize asynchronously but don't await - this will populate the stream
       // Wrap in try-catch to handle any initialization errors gracefully
       service.initialize().catchError((error) {
@@ -66,7 +65,7 @@ final accessibilityActionsProvider = Provider<AccessibilityActions?>((ref) {
 
 // Helper class for accessibility actions
 class AccessibilityActions {
-  final AccessibilityServiceInstance _accessibilityService;
+  final AccessibilityService _accessibilityService;
 
   AccessibilityActions(this._accessibilityService);
 

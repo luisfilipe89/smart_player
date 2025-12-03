@@ -39,7 +39,7 @@ class CachedDataIndicator extends ConsumerWidget {
                 child: Container(
                   width: double.infinity,
                   padding: AppPaddings.allSmall,
-                  color: AppColors.amber.withOpacity(0.9),
+                  color: AppColors.amber.withValues(alpha: 0.9),
                   child: Row(
                     children: [
                       const Icon(

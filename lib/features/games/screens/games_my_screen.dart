@@ -12,7 +12,6 @@ import 'package:move_young/features/games/screens/games_join_screen.dart';
 import 'package:move_young/features/games/screens/game_organize_screen.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:move_young/features/friends/services/friends_provider.dart';
 import 'package:move_young/services/external/weather_provider.dart';
 import 'package:move_young/utils/error_extensions.dart';
 import 'package:move_young/widgets/error_retry_widget.dart';
@@ -22,8 +21,8 @@ import 'package:move_young/widgets/cached_data_indicator.dart';
 import 'package:move_young/features/maps/screens/gmaps_screen.dart';
 import 'package:move_young/services/calendar/calendar_service.dart';
 import 'package:move_young/services/system/haptics_provider.dart';
-import 'package:move_young/models/infrastructure/cached_data.dart';
 import 'package:move_young/utils/logger.dart';
+import 'package:move_young/features/games/notifiers/games_my_screen_notifier.dart';
 import 'dart:async';
 
 class GamesMyScreen extends ConsumerStatefulWidget {
@@ -39,20 +38,6 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
     with SingleTickerProviderStateMixin {
   final Map<String, GlobalKey> _itemKeys = {};
   late final TabController _tab;
-  // Weather forecast cache per gameId with TTL (1 hour expiry)
-  // Cache expires after 1 hour to ensure fresh weather data
-  final Map<String, CachedData<Map<String, String>>> _weatherByGameId = {};
-  final Set<String> _weatherLoading = <String>{};
-  static const Duration _weatherCacheTTL = Duration(hours: 1);
-  // Calendar status cache per gameId: true = in calendar, false = not in calendar, null = checking
-  final Map<String, bool?> _calendarStatusByGameId = {};
-  final Set<String> _calendarLoading = <String>{};
-  bool _calendarPreloadInProgress = false;
-  // Profile cache: uid -> profile data
-  final Map<String, Map<String, String?>> _profileCache = {};
-  // Track which profiles are currently loading to avoid duplicate requests
-  final Set<String> _profileLoading = <String>{};
-  String? _highlightId;
   // Periodic stream for time countdown - created once to avoid memory leaks
   late final Stream<int> _periodicMinuteStream;
 
@@ -61,7 +46,6 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
     super.initState();
     _tab =
         TabController(length: 3, vsync: this, initialIndex: widget.initialTab);
-    _highlightId = widget.highlightGameId;
     // Create periodic stream once in initState to avoid creating new streams on every rebuild
     _periodicMinuteStream = Stream.periodic(
       const Duration(minutes: 1),
@@ -81,84 +65,9 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
 
     // Pre-load calendar statuses for all games when screen initializes
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _preloadCalendarStatuses();
-    });
-  }
-
-  /// Pre-load calendar statuses for all games from database
-  /// Moved to isolate to avoid blocking main thread
-  Future<void> _preloadCalendarStatuses() async {
-    if (!mounted || _calendarPreloadInProgress) return;
-
-    _calendarPreloadInProgress = true;
-
-    // Defer heavy operation to avoid blocking UI
-    Future.microtask(() async {
-      try {
-        // Ensure CalendarService is initialized
-        await CalendarService.initialize();
-
-        // Get all games from providers
-        final myGamesAsync = ref.read(myGamesProvider);
-        final historicGamesAsync = ref.read(historicGamesProvider);
-
-        // Collect all game IDs from all tabs
-        final allGameIds = <String>{};
-
-        // Get games from myGamesAsync if available
-        final myGames = myGamesAsync.valueOrNull;
-        if (myGames != null) {
-          for (final game in myGames) {
-            allGameIds.add(game.id);
-          }
-        }
-
-        // Get games from historicGamesAsync if available
-        final historicGames = historicGamesAsync.valueOrNull;
-        if (historicGames != null) {
-          for (final game in historicGames) {
-            allGameIds.add(game.id);
-          }
-        }
-
-        // Batch check calendar status for all games
-        if (allGameIds.isEmpty) {
-          if (mounted) {
-            setState(() {
-              _calendarPreloadInProgress = false;
-            });
-          }
-          return;
-        }
-
-        // Get all games that are in calendar from database
-        final gamesInCalendar = await CalendarService.getAllGamesInCalendar();
-        final gamesInCalendarSet = gamesInCalendar.toSet();
-
-        // Update cache for all games
-        if (mounted) {
-          setState(() {
-            for (final gameId in allGameIds) {
-              _calendarStatusByGameId[gameId] =
-                  gamesInCalendarSet.contains(gameId);
-            }
-            _calendarPreloadInProgress = false;
-          });
-          NumberedLogger.i(
-              'Preloaded calendar statuses for ${allGameIds.length} games (${gamesInCalendarSet.length} in calendar)');
-        } else {
-          _calendarPreloadInProgress = false;
-        }
-      } catch (e, stackTrace) {
-        NumberedLogger.e('Error preloading calendar statuses: $e');
-        NumberedLogger.d('Stack trace: $stackTrace');
-        // Non-critical, continue without cache
-        if (mounted) {
-          setState(() {
-            _calendarPreloadInProgress = false;
-          });
-        }
-      }
+      final notifier = ref
+          .read(gamesMyScreenNotifierProvider(widget.highlightGameId).notifier);
+      notifier.preloadCalendarStatuses();
     });
   }
 
@@ -169,8 +78,12 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
   }
 
   void _scrollToHighlightedGame({int attempts = 0}) {
-    if (!mounted || _highlightId == null) return;
-    final key = _itemKeys[_highlightId!];
+    final screenState =
+        ref.read(gamesMyScreenNotifierProvider(widget.highlightGameId));
+    if (!mounted || screenState.highlightId == null) {
+      return;
+    }
+    final key = _itemKeys[screenState.highlightId!];
     final ctx = key?.currentContext;
     if (ctx != null) {
       Scrollable.ensureVisible(
@@ -180,7 +93,12 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
         alignment: 0.15,
       );
       Future.delayed(const Duration(seconds: 2), () {
-        if (mounted) setState(() => _highlightId = null);
+        if (mounted) {
+          ref
+              .read(gamesMyScreenNotifierProvider(widget.highlightGameId)
+                  .notifier)
+              .clearHighlightId();
+        }
       });
       return;
     }
@@ -209,15 +127,19 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
               // Keep invitees included visually even if they haven't joined yet
               final List<String> merged =
                   <String>{...basePlayerUids, ...invited}.toList();
-              if (merged.isEmpty) return const SizedBox.shrink();
+              if (merged.isEmpty) {
+                return const SizedBox.shrink();
+              }
 
               // Fetch minimal profiles for merged set
               final List<String> limited = merged.take(12).toList();
 
               // Build profiles from cache immediately (synchronous)
+              final screenState = ref
+                  .watch(gamesMyScreenNotifierProvider(widget.highlightGameId));
               final List<Map<String, String?>> profiles = limited
                   .map((uid) =>
-                      _profileCache[uid] ??
+                      screenState.profileCache[uid] ??
                       {
                         'uid': uid,
                         'displayName': null,
@@ -228,16 +150,21 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
               // Trigger background loading for missing profiles
               final List<String> missing = limited
                   .where((uid) =>
-                      !_profileCache.containsKey(uid) &&
-                      !_profileLoading.contains(uid))
+                      !screenState.profileCache.containsKey(uid) &&
+                      !screenState.profileLoading.contains(uid))
                   .toList();
 
               if (missing.isNotEmpty) {
                 // Load in background without blocking UI
-                _loadMissingProfiles(missing);
+                ref
+                    .read(gamesMyScreenNotifierProvider(widget.highlightGameId)
+                        .notifier)
+                    .loadMissingProfiles(missing);
               }
 
-              if (profiles.isEmpty) return const SizedBox.shrink();
+              if (profiles.isEmpty) {
+                return const SizedBox.shrink();
+              }
 
               const double radius = 18;
               const double diameter = radius * 2;
@@ -402,83 +329,28 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
     );
   }
 
-  /// Load missing profiles in the background and update cache
-  void _loadMissingProfiles(List<String> uids) {
-    if (uids.isEmpty) return;
-
-    // Mark as loading
-    _profileLoading.addAll(uids);
-
-    // Load in background
-    Future.wait(
-      uids.map((uid) async {
-        try {
-          final friendsActions = ref.read(friendsActionsProvider);
-          final profile = await friendsActions.fetchMinimalProfile(uid);
-          if (mounted) {
-            setState(() {
-              _profileCache[uid] = profile;
-              _profileLoading.remove(uid);
-            });
-          }
-        } catch (e) {
-          // Cache placeholder on error to avoid retrying
-          if (mounted) {
-            setState(() {
-              _profileCache[uid] = {
-                'uid': uid,
-                'displayName': null,
-                'photoURL': null,
-              };
-              _profileLoading.remove(uid);
-            });
-          }
-        }
-      }),
-    );
-  }
-
   String _initialsFromName(String name) {
     final parts =
         name.split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
-    if (parts.isEmpty) return '?';
+    if (parts.isEmpty) {
+      return '?';
+    }
     final firstPart = parts.first;
-    if (firstPart.isEmpty) return '?';
+    if (firstPart.isEmpty) {
+      return '?';
+    }
     final first = firstPart[0];
     final second = parts.length > 1 && parts[1].isNotEmpty ? parts[1][0] : '';
     return (first + second).toUpperCase();
   }
 
   Future<String?> _ensureWeatherForGame(Game game) async {
-    if (game.latitude == null || game.longitude == null) return null;
-    final key = game.id;
-
-    // Check if we have valid cached data (not expired)
-    final cached = _weatherByGameId[key];
-    if (cached != null && !cached.isExpired) {
-      return null; // Already have fresh data
+    if (game.latitude == null || game.longitude == null) {
+      return null;
     }
-
-    if (_weatherLoading.contains(key)) return null;
-    _weatherLoading.add(key);
-    try {
-      final weatherActions = ref.read(weatherActionsProvider);
-      final map = await weatherActions.fetchWeatherForDate(
-        date: game.dateTime,
-        latitude: game.latitude!,
-        longitude: game.longitude!,
-      );
-      // Cache with TTL
-      _weatherByGameId[key] = CachedData(
-        map,
-        DateTime.now(),
-        expiry: _weatherCacheTTL,
-      );
-      if (mounted) setState(() {});
-    } catch (e) {
-      NumberedLogger.e('Error fetching weather for game ${game.id}: $e');
-    }
-    _weatherLoading.remove(key);
+    await ref
+        .read(gamesMyScreenNotifierProvider(widget.highlightGameId).notifier)
+        .ensureWeatherForGame(game);
     return null;
   }
 
@@ -527,7 +399,9 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
 
   bool _isUserJoined(Game game) {
     final uid = ref.watch(currentUserIdProvider);
-    if (uid == null || uid.isEmpty) return false;
+    if (uid == null || uid.isEmpty) {
+      return false;
+    }
     return game.players.any((p) => p == uid);
   }
 
@@ -622,7 +496,9 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
 
   Future<void> _messageOrganizer(Game game) async {
     final info = game.contactInfo?.trim();
-    if (info == null || info.isEmpty) return;
+    if (info == null || info.isEmpty) {
+      return;
+    }
     if (info.contains('@')) {
       final uri = Uri(scheme: 'mailto', path: info, queryParameters: {
         'subject': 'About our game at ${game.location}',
@@ -643,63 +519,15 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
     await Share.share('Organizer: ${game.organizerName} — $info');
   }
 
-  /// Check calendar status for a game (cached)
-  Future<bool?> _getCalendarStatus(String gameId) async {
-    // Return cached status if available
-    if (_calendarStatusByGameId.containsKey(gameId)) {
-      return _calendarStatusByGameId[gameId];
-    }
-
-    // Check if already loading
-    if (_calendarLoading.contains(gameId)) {
-      return null; // Still loading
-    }
-
-    // Start loading
-    if (!mounted) return null;
-
-    setState(() {
-      _calendarLoading.add(gameId);
-      _calendarStatusByGameId[gameId] = null; // Mark as checking
-    });
-
-    try {
-      // Ensure CalendarService is initialized
-      await CalendarService.initialize();
-
-      final isInCalendar = await CalendarService.isGameInCalendar(gameId);
-      if (mounted) {
-        setState(() {
-          _calendarStatusByGameId[gameId] = isInCalendar;
-          _calendarLoading.remove(gameId);
-        });
-      }
-      return isInCalendar;
-    } catch (e, stackTrace) {
-      NumberedLogger.e('Error checking calendar status: $e');
-      NumberedLogger.d('Stack trace: $stackTrace');
-      if (mounted) {
-        setState(() {
-          _calendarStatusByGameId[gameId] = false; // Default to false on error
-          _calendarLoading.remove(gameId);
-        });
-      }
-      return false;
-    }
-  }
-
   Future<void> _addToCalendar(Game game) async {
-    if (_calendarLoading.contains(game.id)) return; // Already processing
+    final screenState =
+        ref.read(gamesMyScreenNotifierProvider(widget.highlightGameId));
+    if (screenState.calendarLoading.contains(game.id)) {
+      return; // Already processing
+    }
 
     try {
       ref.read(hapticsActionsProvider)?.selectionClick();
-
-      // Set loading state
-      if (mounted) {
-        setState(() {
-          _calendarLoading.add(game.id);
-        });
-      }
 
       // Check if game is already in calendar
       final isInCalendar = await CalendarService.isGameInCalendar(game.id);
@@ -708,10 +536,10 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
         // Remove from calendar
         final success = await CalendarService.removeGameFromCalendar(game.id);
         if (mounted) {
-          setState(() {
-            _calendarStatusByGameId[game.id] = !success; // Update cache
-            _calendarLoading.remove(game.id);
-          });
+          ref
+              .read(gamesMyScreenNotifierProvider(widget.highlightGameId)
+                  .notifier)
+              .updateCalendarStatus(game.id, !success);
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(
@@ -727,10 +555,10 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
         // Add to calendar
         final eventId = await CalendarService.addGameToCalendar(game);
         if (mounted) {
-          setState(() {
-            _calendarStatusByGameId[game.id] = eventId != null; // Update cache
-            _calendarLoading.remove(game.id);
-          });
+          ref
+              .read(gamesMyScreenNotifierProvider(widget.highlightGameId)
+                  .notifier)
+              .updateCalendarStatus(game.id, eventId != null);
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(
@@ -747,9 +575,6 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
     } catch (e) {
       NumberedLogger.e('Error adding game to calendar: $e');
       if (mounted) {
-        setState(() {
-          _calendarLoading.remove(game.id);
-        });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('calendar_event_added_error'.tr()),
@@ -797,7 +622,9 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
       ),
     );
 
-    if (!mounted || result != true) return;
+    if (!mounted || result != true) {
+      return;
+    }
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -912,6 +739,8 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
     // Watch providers for reactive data
     final myGamesAsync = ref.watch(myGamesProvider);
     final historicGamesAsync = ref.watch(historicGamesProvider);
+    final screenNotifier = ref
+        .read(gamesMyScreenNotifierProvider(widget.highlightGameId).notifier);
 
     // Pre-load calendar statuses when games are loaded
     // This ensures calendar status is persisted when user exits and re-enters app
@@ -936,12 +765,9 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
         }
 
         // If cache is empty or missing some games, reload
-        final needsReload = _calendarStatusByGameId.isEmpty ||
-            allGameIds.any((id) => !_calendarStatusByGameId.containsKey(id));
-
-        if (needsReload) {
+        if (screenNotifier.needsCalendarPreload(allGameIds)) {
           // Trigger preload without blocking UI
-          _preloadCalendarStatuses();
+          screenNotifier.preloadCalendarStatuses();
         }
       }
     }
@@ -1354,7 +1180,9 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
                   if (!time.endsWith(':00')) {
                     time = '${time.substring(0, 2)}:00';
                   }
-                  final cachedWeather = _weatherByGameId[game.id];
+                  final screenState = ref.watch(
+                      gamesMyScreenNotifierProvider(widget.highlightGameId));
+                  final cachedWeather = screenState.weatherByGameId[game.id];
                   final forecasts = cachedWeather?.isExpired == false
                       ? cachedWeather!.data
                       : null;
@@ -1563,41 +1391,45 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
                       Expanded(
                         child: Builder(
                           builder: (context) {
+                            final screenState = ref.watch(
+                                gamesMyScreenNotifierProvider(
+                                    widget.highlightGameId));
+                            final screenNotifier = ref.read(
+                                gamesMyScreenNotifierProvider(
+                                        widget.highlightGameId)
+                                    .notifier);
                             // Check cached status first
                             final cachedStatus =
-                                _calendarStatusByGameId[game.id];
+                                screenState.calendarStatusByGameId[game.id];
                             final isLoading =
-                                _calendarLoading.contains(game.id);
+                                screenState.calendarLoading.contains(game.id);
 
                             // If preload is in progress and status is unknown, show as checking
                             final isActuallyLoading = isLoading ||
                                 (cachedStatus == null &&
-                                    _calendarPreloadInProgress);
+                                    screenState.calendarPreloadInProgress);
 
                             // If not cached and not loading, and preload is not in progress, trigger async check
                             // Wait for preload to complete first to avoid duplicate checks
                             if (cachedStatus == null &&
                                 !isLoading &&
-                                !_calendarPreloadInProgress) {
+                                !screenState.calendarPreloadInProgress) {
                               // Only trigger individual check if preload hasn't populated it yet
                               // This handles edge cases where a game was added after preload completed
                               WidgetsBinding.instance.addPostFrameCallback((_) {
+                                final currentState = ref.read(
+                                    gamesMyScreenNotifierProvider(
+                                        widget.highlightGameId));
                                 if (mounted &&
-                                    !_calendarStatusByGameId
+                                    !currentState.calendarStatusByGameId
                                         .containsKey(game.id) &&
-                                    !_calendarPreloadInProgress) {
+                                    !currentState.calendarPreloadInProgress) {
                                   // Trigger async check but don't wait
-                                  _getCalendarStatus(game.id).catchError((e) {
+                                  screenNotifier
+                                      .getCalendarStatus(game.id)
+                                      .catchError((e) {
                                     NumberedLogger.e(
-                                        'Error in _getCalendarStatus for ${game.id}: $e');
-                                    // Ensure loading state is cleared on error
-                                    if (mounted) {
-                                      setState(() {
-                                        _calendarStatusByGameId[game.id] =
-                                            false;
-                                        _calendarLoading.remove(game.id);
-                                      });
-                                    }
+                                        'Error in getCalendarStatus for ${game.id}: $e');
                                     return false; // Return value for catchError
                                   });
                                 }

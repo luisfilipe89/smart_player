@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_core/firebase_core.dart';
 import 'package:move_young/features/games/models/game.dart';
 import 'package:move_young/db/db_paths.dart';
 import 'package:move_young/utils/logger.dart';
@@ -2516,7 +2515,7 @@ class CloudGamesServiceInstance {
       }
       final latFixed = lat.toStringAsFixed(5).replaceAll('.', '_');
       final lonFixed = lon.toStringAsFixed(5).replaceAll('.', '_');
-      return '${latFixed}_${lonFixed}';
+      return '$latFixed' '_$lonFixed';
     } else {
       final name = (field['name']?.toString() ?? '').toLowerCase();
       final sanitized = name

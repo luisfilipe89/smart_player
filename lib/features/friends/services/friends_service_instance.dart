@@ -128,15 +128,15 @@ class FriendsServiceInstance with ServiceErrorHandlerMixin implements IFriendsSe
 
     return handleListQueryError(
       () async {
-        final snapshot = await _safeGet(DbPaths.userFriends(uid));
-        if (snapshot.exists) {
-          final friendsData = snapshot.value as Map<dynamic, dynamic>;
-          final friends = friendsData.keys.map((key) => key.toString()).toList();
+      final snapshot = await _safeGet(DbPaths.userFriends(uid));
+      if (snapshot.exists) {
+        final friendsData = snapshot.value as Map<dynamic, dynamic>;
+        final friends = friendsData.keys.map((key) => key.toString()).toList();
 
-          // Cache the result
-          _friendsCache[cacheKey] = CachedData(friends, DateTime.now());
-          return friends;
-        }
+        // Cache the result
+        _friendsCache[cacheKey] = CachedData(friends, DateTime.now());
+        return friends;
+      }
         return <String>[];
       },
       'getting friends for $uid',
@@ -148,11 +148,11 @@ class FriendsServiceInstance with ServiceErrorHandlerMixin implements IFriendsSe
   Future<List<String>> getUserFriendRequestsSent(String uid) async {
     return handleListQueryError(
       () async {
-        final snapshot = await _safeGet(DbPaths.userFriendRequestsSent(uid));
-        if (snapshot.exists) {
-          final requestsData = snapshot.value as Map<dynamic, dynamic>;
-          return requestsData.keys.map((key) => key.toString()).toList();
-        }
+      final snapshot = await _safeGet(DbPaths.userFriendRequestsSent(uid));
+      if (snapshot.exists) {
+        final requestsData = snapshot.value as Map<dynamic, dynamic>;
+        return requestsData.keys.map((key) => key.toString()).toList();
+      }
         return <String>[];
       },
       'getting sent friend requests for $uid',
@@ -164,11 +164,11 @@ class FriendsServiceInstance with ServiceErrorHandlerMixin implements IFriendsSe
   Future<List<String>> getUserFriendRequestsReceived(String uid) async {
     return handleListQueryError(
       () async {
-        final snapshot = await _safeGet(DbPaths.userFriendRequestsReceived(uid));
-        if (snapshot.exists) {
-          final requestsData = snapshot.value as Map<dynamic, dynamic>;
-          return requestsData.keys.map((key) => key.toString()).toList();
-        }
+      final snapshot = await _safeGet(DbPaths.userFriendRequestsReceived(uid));
+      if (snapshot.exists) {
+        final requestsData = snapshot.value as Map<dynamic, dynamic>;
+        return requestsData.keys.map((key) => key.toString()).toList();
+      }
         return <String>[];
       },
       'getting received friend requests for $uid',
@@ -185,31 +185,31 @@ class FriendsServiceInstance with ServiceErrorHandlerMixin implements IFriendsSe
 
     return handleBooleanError(
       () async {
-        // Check if already friends
-        final friends = await getUserFriends(fromUid);
-        if (friends.contains(toUid)) return false;
+      // Check if already friends
+      final friends = await getUserFriends(fromUid);
+      if (friends.contains(toUid)) return false;
 
-        // Check if request already sent
-        final sentRequests = await getUserFriendRequestsSent(fromUid);
-        if (sentRequests.contains(toUid)) return false;
+      // Check if request already sent
+      final sentRequests = await getUserFriendRequestsSent(fromUid);
+      if (sentRequests.contains(toUid)) return false;
 
-        // Send request
-        await _db.ref().update({
-          '${DbPaths.userFriendRequestsSent(fromUid)}/$toUid': true,
-          '${DbPaths.userFriendRequestsReceived(toUid)}/$fromUid': true,
-        });
+      // Send request
+      await _db.ref().update({
+        '${DbPaths.userFriendRequestsSent(fromUid)}/$toUid': true,
+        '${DbPaths.userFriendRequestsReceived(toUid)}/$fromUid': true,
+      });
 
-        // Record the request for rate limiting
-        await _recordFriendRequest(fromUid);
+      // Record the request for rate limiting
+      await _recordFriendRequest(fromUid);
 
-        // Send notification
-        await _notificationService.sendFriendRequestNotification(toUid, fromUid);
+      // Send notification
+      await _notificationService.sendFriendRequestNotification(toUid, fromUid);
 
-        // Clear cache
-        _friendsCache.remove('friends_$fromUid');
-        _friendsCache.remove('friends_$toUid');
+      // Clear cache
+      _friendsCache.remove('friends_$fromUid');
+      _friendsCache.remove('friends_$toUid');
 
-        return true;
+      return true;
       },
       'sending friend request',
     );
@@ -225,29 +225,29 @@ class FriendsServiceInstance with ServiceErrorHandlerMixin implements IFriendsSe
 
     return handleBooleanError(
       () async {
-        // Add to friends list for both users
-        await _db.ref().update({
-          '${DbPaths.userFriends(fromUid)}/$toUid': true,
-          '${DbPaths.userFriends(toUid)}/$fromUid': true,
-        });
+      // Add to friends list for both users
+      await _db.ref().update({
+        '${DbPaths.userFriends(fromUid)}/$toUid': true,
+        '${DbPaths.userFriends(toUid)}/$fromUid': true,
+      });
 
-        // Remove from requests
-        await _db.ref().update({
-          '${DbPaths.userFriendRequestsSent(fromUid)}/$toUid': null,
-          '${DbPaths.userFriendRequestsReceived(toUid)}/$fromUid': null,
-        });
+      // Remove from requests
+      await _db.ref().update({
+        '${DbPaths.userFriendRequestsSent(fromUid)}/$toUid': null,
+        '${DbPaths.userFriendRequestsReceived(toUid)}/$fromUid': null,
+      });
 
-        // Send notification
-        await _notificationService.sendFriendAcceptedNotification(
-          fromUid,
-          toUid,
-        );
+      // Send notification
+      await _notificationService.sendFriendAcceptedNotification(
+        fromUid,
+        toUid,
+      );
 
-        // Clear cache
-        _friendsCache.remove('friends_$fromUid');
-        _friendsCache.remove('friends_$toUid');
+      // Clear cache
+      _friendsCache.remove('friends_$fromUid');
+      _friendsCache.remove('friends_$toUid');
 
-        return true;
+      return true;
       },
       'accepting friend request',
     );
@@ -263,27 +263,27 @@ class FriendsServiceInstance with ServiceErrorHandlerMixin implements IFriendsSe
 
     return handleBooleanError(
       () async {
-        // Remove the received request (allowed for current user)
-        await _db
-            .ref(DbPaths.userFriendRequestsReceived(toUid))
-            .child(fromUid)
-            .remove();
+      // Remove the received request (allowed for current user)
+      await _db
+          .ref(DbPaths.userFriendRequestsReceived(toUid))
+          .child(fromUid)
+          .remove();
 
-        // Best-effort removal from sender's "sent" list (may fail due to rules)
+      // Best-effort removal from sender's "sent" list (may fail due to rules)
         // Use handleVoidError for this nested operation since failure is acceptable
         await handleVoidError(
           () => _db
-              .ref(DbPaths.userFriendRequestsSent(fromUid))
-              .child(toUid)
+            .ref(DbPaths.userFriendRequestsSent(fromUid))
+            .child(toUid)
               .remove(),
           'removing sent request entry for $fromUid -> $toUid',
         );
 
-        // Clear cache
-        _friendsCache.remove('friends_$fromUid');
-        _friendsCache.remove('friends_$toUid');
+      // Clear cache
+      _friendsCache.remove('friends_$fromUid');
+      _friendsCache.remove('friends_$toUid');
 
-        return true;
+      return true;
       },
       'declining friend request',
     );
@@ -298,15 +298,15 @@ class FriendsServiceInstance with ServiceErrorHandlerMixin implements IFriendsSe
 
     return handleBooleanError(
       () async {
-        await _db.ref().update({
-          '${DbPaths.userFriendRequestsSent(fromUid)}/$toUid': null,
-          '${DbPaths.userFriendRequestsReceived(toUid)}/$fromUid': null,
-        });
+      await _db.ref().update({
+        '${DbPaths.userFriendRequestsSent(fromUid)}/$toUid': null,
+        '${DbPaths.userFriendRequestsReceived(toUid)}/$fromUid': null,
+      });
 
-        _friendsCache.remove('friends_$fromUid');
-        _friendsCache.remove('friends_$toUid');
+      _friendsCache.remove('friends_$fromUid');
+      _friendsCache.remove('friends_$toUid');
 
-        return true;
+      return true;
       },
       'cancelling friend request',
     );
@@ -322,23 +322,23 @@ class FriendsServiceInstance with ServiceErrorHandlerMixin implements IFriendsSe
 
     return handleBooleanError(
       () async {
-        // Remove from friends list for both users
-        await _db.ref().update({
-          '${DbPaths.userFriends(currentUid)}/$friendUid': null,
-          '${DbPaths.userFriends(friendUid)}/$currentUid': null,
-        });
+      // Remove from friends list for both users
+      await _db.ref().update({
+        '${DbPaths.userFriends(currentUid)}/$friendUid': null,
+        '${DbPaths.userFriends(friendUid)}/$currentUid': null,
+      });
 
-        // Notify the removed friend
-        await _notificationService.sendFriendRemovedNotification(
-          removedUserUid: friendUid,
-          removerUid: currentUid,
-        );
+      // Notify the removed friend
+      await _notificationService.sendFriendRemovedNotification(
+        removedUserUid: friendUid,
+        removerUid: currentUid,
+      );
 
-        // Clear cache
-        _friendsCache.remove('friends_$currentUid');
-        _friendsCache.remove('friends_$friendUid');
+      // Clear cache
+      _friendsCache.remove('friends_$currentUid');
+      _friendsCache.remove('friends_$friendUid');
 
-        return true;
+      return true;
       },
       'removing friend',
     );
@@ -354,30 +354,30 @@ class FriendsServiceInstance with ServiceErrorHandlerMixin implements IFriendsSe
 
     return handleBooleanError(
       () async {
-        // Add to blocked users list
-        await _db.ref().update({
-          'users/$currentUid/blockedUsers/$friendUid': true,
-        });
+      // Add to blocked users list
+      await _db.ref().update({
+        'users/$currentUid/blockedUsers/$friendUid': true,
+      });
 
-        // Remove from friends list if already friends
-        await _db.ref().update({
-          '${DbPaths.userFriends(currentUid)}/$friendUid': null,
-          '${DbPaths.userFriends(friendUid)}/$currentUid': null,
-        });
+      // Remove from friends list if already friends
+      await _db.ref().update({
+        '${DbPaths.userFriends(currentUid)}/$friendUid': null,
+        '${DbPaths.userFriends(friendUid)}/$currentUid': null,
+      });
 
-        // Remove any pending friend requests
-        await _db.ref().update({
-          '${DbPaths.userFriendRequestsSent(currentUid)}/$friendUid': null,
-          '${DbPaths.userFriendRequestsReceived(currentUid)}/$friendUid': null,
-          '${DbPaths.userFriendRequestsSent(friendUid)}/$currentUid': null,
-          '${DbPaths.userFriendRequestsReceived(friendUid)}/$currentUid': null,
-        });
+      // Remove any pending friend requests
+      await _db.ref().update({
+        '${DbPaths.userFriendRequestsSent(currentUid)}/$friendUid': null,
+        '${DbPaths.userFriendRequestsReceived(currentUid)}/$friendUid': null,
+        '${DbPaths.userFriendRequestsSent(friendUid)}/$currentUid': null,
+        '${DbPaths.userFriendRequestsReceived(friendUid)}/$currentUid': null,
+      });
 
-        // Clear cache
-        _friendsCache.remove('friends_$currentUid');
-        _friendsCache.remove('friends_$friendUid');
+      // Clear cache
+      _friendsCache.remove('friends_$currentUid');
+      _friendsCache.remove('friends_$friendUid');
 
-        return true;
+      return true;
       },
       'blocking friend',
     );

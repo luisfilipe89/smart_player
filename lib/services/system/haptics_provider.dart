@@ -1,13 +1,13 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'haptics_service_instance.dart';
+import 'haptics_service.dart';
 import 'package:move_young/providers/infrastructure/shared_preferences_provider.dart';
 
 // HapticsService provider with dependency injection
-final hapticsServiceProvider = Provider<HapticsServiceInstance?>((ref) {
+final hapticsServiceProvider = Provider<HapticsService?>((ref) {
   final prefsAsync = ref.watch(sharedPreferencesProvider);
   return prefsAsync.when(
     data: (prefs) {
-      final service = HapticsServiceInstance(prefs);
+      final service = HapticsService(prefs);
       // Dispose service when provider is disposed to prevent memory leaks
       ref.onDispose(() => service.dispose());
       return service;
@@ -48,7 +48,7 @@ final hapticsActionsProvider = Provider<HapticsActions?>((ref) {
 
 // Helper class for haptics actions
 class HapticsActions {
-  final HapticsServiceInstance _hapticsService;
+  final HapticsService _hapticsService;
 
   HapticsActions(this._hapticsService);
 

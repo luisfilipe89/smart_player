@@ -1,13 +1,13 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:move_young/features/friends/services/email_service_instance.dart';
+import 'package:move_young/features/friends/services/email_service.dart';
 import 'package:move_young/providers/infrastructure/firebase_providers.dart';
 
 // Email service provider
-final emailServiceProvider = Provider<EmailServiceInstance>((ref) {
+final emailServiceProvider = Provider<EmailService>((ref) {
   final database = ref.watch(firebaseDatabaseProvider);
   final auth = ref.watch(firebaseAuthProvider);
   final firestore = ref.watch(firebaseFirestoreProvider);
-  return EmailServiceInstance(database, auth, firestore);
+  return EmailService(database, auth, firestore);
 });
 
 // Email actions provider
@@ -17,7 +17,7 @@ final emailActionsProvider = Provider<EmailActions>((ref) {
 });
 
 class EmailActions {
-  final EmailServiceInstance _emailService;
+  final EmailService _emailService;
 
   EmailActions(this._emailService);
 
