@@ -239,7 +239,13 @@ class GameFormNotifier extends StateNotifier<GameFormState> {
       _applyFieldSearchFilter();
     } catch (e) {
       NumberedLogger.e('Failed to calculate field distances: $e');
-      state = state.copyWith(isCalculatingDistances: false);
+      // If location fails (e.g., in emulator), still show fields without distance sorting
+      // This prevents the app from breaking when location is unavailable
+      state = state.copyWith(
+        availableFields: fields, // Show fields without distance
+        isCalculatingDistances: false,
+      );
+      _applyFieldSearchFilter();
     }
   }
 

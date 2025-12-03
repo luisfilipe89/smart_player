@@ -97,6 +97,8 @@
     "failed_events": "Failed to load events",
     "events_load_failed": "Failed to load events.",
     "failed_location": "Failed to get your location.",
+    "location_timeout": "Location request timed out. This may happen in emulators. Please try again or use a real device.",
+    "location_emulator_not_supported": "Location services are not available in emulators. Please use a real device for location features.",
     "location_services_disabled": "Location services are disabled. Please turn them on.",
     "find_location_exercise": "Find location for your exercise",
     "find_your_activity": "Find your activity",

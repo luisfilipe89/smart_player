@@ -22,6 +22,16 @@
                 "organizerId": {
                     ".validate": "newData.val() == auth.uid || (!data.exists() && newData.val() == auth.uid)"
                 },
+                "players": {
+                    ".read": "auth != null",
+                    ".write": "auth != null",
+                    ".validate": "newData.hasChildren()"
+                },
+                "currentPlayers": {
+                    ".read": "auth != null",
+                    ".write": "auth != null && (root.child('games/'+$gameId+'/organizerId').val() == auth.uid || newData.val() == data.val() + 1 || newData.val() == data.val() - 1)",
+                    ".validate": "newData.isNumber() && newData.val() >= 0"
+                },
                 "invites": {
                     ".indexOn": [
                         "status"
@@ -77,12 +87,15 @@
                     ".read": "auth != null"
                 },
                 "friendRequests": {
+                    ".read": "auth != null && auth.uid == $uid",
                     "received": {
+                        ".read": "auth != null && auth.uid == $uid",
                         "$fromUid": {
                             ".write": "auth != null && ((auth.uid == $fromUid && newData.val() === true) || (auth.uid == $uid && newData.val() == null) || (auth.uid == $fromUid && newData.val() == null))"
                         }
                     },
                     "sent": {
+                        ".read": "auth != null && auth.uid == $uid",
                         "$toUid": {
                             ".write": "auth != null && ((auth.uid == $uid && (newData.val() === true || newData.val() == null)) || (auth.uid == $toUid && newData.val() == null))"
                         }

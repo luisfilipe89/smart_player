@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:geolocator/geolocator.dart';
 
@@ -30,24 +31,63 @@ class LocationServiceInstance {
 
   /// Get current position with unified flow and error messages.
   /// Returns either a Position or throws a LocationException with a localized message key.
+  /// Automatically disabled on emulators to prevent crashes.
   Future<Position> getCurrentPosition(
       {LocationAccuracy accuracy = LocationAccuracy.high}) async {
-    final serviceEnabled = await Geolocator.isLocationServiceEnabled();
-    if (!serviceEnabled) {
-      throw LocationException('location_services_disabled'.tr());
-    }
-
-    final permission = await requestPermissionIfNeeded();
-    if (permission == LocationPermission.deniedForever ||
-        permission == LocationPermission.denied) {
-      throw LocationException('location_denied'.tr());
-    }
-
     try {
-      return Geolocator.getCurrentPosition(
-        locationSettings: LocationSettings(accuracy: accuracy),
-      );
-    } catch (_) {
+      final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        throw LocationException('location_services_disabled'.tr());
+      }
+
+      final permission = await requestPermissionIfNeeded();
+      if (permission == LocationPermission.deniedForever ||
+          permission == LocationPermission.denied) {
+        throw LocationException('location_denied'.tr());
+      }
+
+      // Try to get position with very short timeout first to detect emulators
+      // Emulators typically fail immediately or hang
+      try {
+        return await Geolocator.getCurrentPosition(
+          locationSettings: LocationSettings(
+            accuracy: accuracy,
+            timeLimit:
+                const Duration(seconds: 2), // Short timeout to detect emulators
+          ),
+        ).timeout(
+          const Duration(seconds: 3),
+          onTimeout: () {
+            // Timeout likely means emulator - throw emulator-specific error
+            throw LocationException('location_emulator_not_supported'.tr());
+          },
+        );
+      } on TimeoutException {
+        // Timeout = likely emulator
+        throw LocationException('location_emulator_not_supported'.tr());
+      } catch (e) {
+        // If it fails immediately or with platform error, likely emulator
+        final errorMsg = e.toString().toLowerCase();
+        if (errorMsg.contains('platform') ||
+            errorMsg.contains('methodchannel') ||
+            errorMsg.contains('not implemented') ||
+            errorMsg.contains('unavailable')) {
+          throw LocationException('location_emulator_not_supported'.tr());
+        }
+        rethrow; // Re-throw other errors
+      }
+    } on LocationException {
+      rethrow; // Re-throw LocationException as-is
+    } catch (e) {
+      // Catch all other errors and treat as emulator issue if it's a platform error
+      final errorMsg = e.toString().toLowerCase();
+      if (errorMsg.contains('platform') ||
+          errorMsg.contains('methodchannel') ||
+          errorMsg.contains('not implemented') ||
+          errorMsg.contains('unavailable') ||
+          errorMsg.contains('timeout')) {
+        throw LocationException('location_emulator_not_supported'.tr());
+      }
       throw LocationException('failed_location'.tr());
     }
   }

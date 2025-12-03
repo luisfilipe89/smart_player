@@ -196,12 +196,12 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
           SnackBarHelper.showBlocked(context, errorMsg);
           ref.read(hapticsActionsProvider)?.mediumImpact();
         } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
               content: Text(errorMsg),
-              backgroundColor: AppColors.red,
-            ),
-          );
+            backgroundColor: AppColors.red,
+          ),
+        );
         }
       }
     }

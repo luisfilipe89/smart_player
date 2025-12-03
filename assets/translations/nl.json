@@ -97,6 +97,8 @@
     "failed_events": "Kan gebeurtenissen niet laden",
     "events_load_failed": "Evenementen laden mislukt.",
     "failed_location": "Kan je locatie niet ophalen.",
+    "location_timeout": "Locatieverzoek is verlopen. Dit kan gebeuren in emulators. Probeer het opnieuw of gebruik een echt apparaat.",
+    "location_emulator_not_supported": "Locatieservices zijn niet beschikbaar in emulators. Gebruik een echt apparaat voor locatiefuncties.",
     "location_services_disabled": "Locatieservices zijn uitgeschakeld. Schakel ze in.",
     "find_location_exercise": "Vind een locatie voor je oefening",
     "find_your_activity": "Vind je activiteit",
