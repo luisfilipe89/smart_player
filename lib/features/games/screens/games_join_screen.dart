@@ -17,6 +17,7 @@ import 'package:move_young/widgets/cached_data_indicator.dart';
 import 'package:move_young/utils/logger.dart';
 import 'package:move_young/features/games/notifiers/games_join_screen_notifier.dart';
 import 'package:move_young/features/games/notifiers/games_join_screen_state.dart';
+import 'package:move_young/utils/snackbar_helper.dart';
 
 class GamesJoinScreen extends ConsumerStatefulWidget {
   final String? highlightGameId;
@@ -186,12 +187,22 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
       // Invited games will update automatically via stream provider
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to join game'),
-            backgroundColor: AppColors.red,
-          ),
-        );
+        String errorMsg = 'Failed to join game';
+        final es = e.toString();
+        final isUserBusy = es.contains('user_already_busy');
+
+        if (isUserBusy) {
+          errorMsg = 'user_already_busy'.tr();
+          SnackBarHelper.showBlocked(context, errorMsg);
+          ref.read(hapticsActionsProvider)?.mediumImpact();
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(errorMsg),
+              backgroundColor: AppColors.red,
+            ),
+          );
+        }
       }
     }
   }

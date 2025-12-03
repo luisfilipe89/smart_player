@@ -17,6 +17,26 @@ class GamesMyScreenNotifier extends StateNotifier<GamesMyScreenState> {
   GamesMyScreenNotifier(this._ref, String? highlightGameId)
       : super(GamesMyScreenState.initial(highlightGameId));
 
+  /// Safely update state, ignoring errors if notifier is disposed
+  void _safeUpdateState(GamesMyScreenState Function(GamesMyScreenState) updater) {
+    try {
+      state = updater(state);
+    } on StateError catch (e) {
+      // Ignore errors if notifier is disposed (e.g., user navigated away)
+      if (e.message.contains('dispose') || e.message.contains('mounted')) {
+        return;
+      }
+      rethrow;
+    } catch (e) {
+      // Catch any other errors that might indicate disposed state
+      final errorStr = e.toString();
+      if (errorStr.contains('dispose') || errorStr.contains('mounted')) {
+        return;
+      }
+      rethrow;
+    }
+  }
+
   /// Clear highlight ID
   void clearHighlightId() {
     state = state.copyWith(highlightId: () => null);
@@ -27,7 +47,7 @@ class GamesMyScreenNotifier extends StateNotifier<GamesMyScreenState> {
   Future<void> preloadCalendarStatuses() async {
     if (state.calendarPreloadInProgress) return;
 
-    state = state.copyWith(calendarPreloadInProgress: true);
+    _safeUpdateState((s) => s.copyWith(calendarPreloadInProgress: true));
 
     // Defer heavy operation to avoid blocking UI
     Future.microtask(() async {
@@ -60,7 +80,7 @@ class GamesMyScreenNotifier extends StateNotifier<GamesMyScreenState> {
 
         // Batch check calendar status for all games
         if (allGameIds.isEmpty) {
-          state = state.copyWith(calendarPreloadInProgress: false);
+          _safeUpdateState((s) => s.copyWith(calendarPreloadInProgress: false));
           return;
         }
 
@@ -73,9 +93,9 @@ class GamesMyScreenNotifier extends StateNotifier<GamesMyScreenState> {
         for (final gameId in allGameIds) {
           statuses[gameId] = gamesInCalendarSet.contains(gameId);
         }
-        state = state
+        _safeUpdateState((s) => s
             .updateCalendarStatuses(statuses)
-            .copyWith(calendarPreloadInProgress: false);
+            .copyWith(calendarPreloadInProgress: false));
 
         NumberedLogger.i(
             'Preloaded calendar statuses for ${allGameIds.length} games (${gamesInCalendarSet.length} in calendar)');
@@ -83,7 +103,7 @@ class GamesMyScreenNotifier extends StateNotifier<GamesMyScreenState> {
         NumberedLogger.e('Error preloading calendar statuses: $e');
         NumberedLogger.d('Stack trace: $stackTrace');
         // Non-critical, continue without cache
-        state = state.copyWith(calendarPreloadInProgress: false);
+        _safeUpdateState((s) => s.copyWith(calendarPreloadInProgress: false));
       }
     });
   }
@@ -114,22 +134,22 @@ class GamesMyScreenNotifier extends StateNotifier<GamesMyScreenState> {
       await CalendarService.initialize();
 
       final isInCalendar = await CalendarService.isGameInCalendar(gameId);
-      state = state.updateCalendarStatus(gameId, isInCalendar).copyWith(
+      _safeUpdateState((s) => s.updateCalendarStatus(gameId, isInCalendar).copyWith(
         calendarLoading: {
-          ...state.calendarLoading..remove(gameId),
+          ...s.calendarLoading..remove(gameId),
         },
-      );
+      ));
       return isInCalendar;
     } catch (e, stackTrace) {
       NumberedLogger.e('Error checking calendar status: $e');
       NumberedLogger.d('Stack trace: $stackTrace');
-      state = state
+      _safeUpdateState((s) => s
           .updateCalendarStatus(gameId, false) // Default to false on error
           .copyWith(
         calendarLoading: {
-          ...state.calendarLoading..remove(gameId),
+          ...s.calendarLoading..remove(gameId),
         },
-      );
+      ));
       return false;
     }
   }
@@ -175,11 +195,11 @@ class GamesMyScreenNotifier extends StateNotifier<GamesMyScreenState> {
 
     // Update cache
     final profiles = Map<String, Map<String, String?>>.fromEntries(results);
-    state = state.updateProfiles(profiles).copyWith(
+    _safeUpdateState((s) => s.updateProfiles(profiles).copyWith(
       profileLoading: {
-        ...state.profileLoading..removeAll(missing),
+        ...s.profileLoading..removeAll(missing),
       },
-    );
+    ));
   }
 
   /// Ensure weather data is loaded for a game (cached with TTL)
@@ -195,9 +215,9 @@ class GamesMyScreenNotifier extends StateNotifier<GamesMyScreenState> {
 
     if (state.weatherLoading.contains(key)) return;
 
-    state = state.copyWith(
-      weatherLoading: {...state.weatherLoading, key},
-    );
+    _safeUpdateState((s) => s.copyWith(
+      weatherLoading: {...s.weatherLoading, key},
+    ));
 
     try {
       final weatherActions = _ref.read(weatherActionsProvider);
@@ -212,18 +232,18 @@ class GamesMyScreenNotifier extends StateNotifier<GamesMyScreenState> {
         DateTime.now(),
         expiry: GamesMyScreenState.weatherCacheTTL,
       );
-      state = state.updateWeatherCache(key, cachedData).copyWith(
+      _safeUpdateState((s) => s.updateWeatherCache(key, cachedData).copyWith(
         weatherLoading: {
-          ...state.weatherLoading..remove(key),
+          ...s.weatherLoading..remove(key),
         },
-      );
+      ));
     } catch (e) {
       NumberedLogger.e('Error fetching weather for game ${game.id}: $e');
-      state = state.copyWith(
+      _safeUpdateState((s) => s.copyWith(
         weatherLoading: {
-          ...state.weatherLoading..remove(key),
+          ...s.weatherLoading..remove(key),
         },
-      );
+      ));
     }
   }
 

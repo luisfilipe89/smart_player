@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:move_young/features/agenda/models/event_model.dart';
 import 'package:move_young/features/agenda/services/events_provider.dart';
 import 'package:move_young/features/auth/services/auth_provider.dart';
+import 'package:move_young/features/profile/services/profile_settings_provider.dart';
 import 'package:move_young/features/welcome/screens/welcome_screen.dart';
 import 'package:move_young/theme/tokens.dart';
 import 'package:move_young/navigation/main_scaffold.dart';
@@ -43,12 +44,6 @@ class _HomeScreenNewState extends ConsumerState<HomeScreenNew> {
     // Watch real-time pending invites count
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _watchPendingInvites();
-    });
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      precacheImage(
-        const AssetImage('assets/images/general_public.jpg'),
-        context,
-      );
     });
   }
 
@@ -367,9 +362,24 @@ class _HomeScreenNewState extends ConsumerState<HomeScreenNew> {
                 Builder(
                   builder: (_) {
                     final user = userAsync.value;
-                    final displayName =
-                        user?.displayName ?? user?.email ?? 'User';
+                    final profileAsync = ref.watch(currentUserProfileProvider);
                     final email = user?.email ?? '';
+
+                    // Get displayName from database profile, fallback to Firebase Auth
+                    final displayName = profileAsync.when(
+                      data: (profile) {
+                        if (profile != null && profile['displayName'] != null) {
+                          final dbName =
+                              profile['displayName'].toString().trim();
+                          if (dbName.isNotEmpty) return dbName;
+                        }
+                        return user?.displayName ?? user?.email ?? 'User';
+                      },
+                      loading: () => user?.displayName ?? user?.email ?? 'User',
+                      error: (_, __) =>
+                          user?.displayName ?? user?.email ?? 'User',
+                    );
+
                     return Padding(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 24,
@@ -685,7 +695,7 @@ class _QuickTilesRow extends ConsumerWidget {
           child: SizedBox(
             height: 168,
             child: _HomeImageTile(
-              image: const AssetImage('assets/images/games2.jpg'),
+              image: const AssetImage('assets/images/organize_a_match.jpg'),
               title: 'organize_a_game'.tr(),
               subtitle: 'start_a_game'.tr(),
               onTap: onTapOrganize,
@@ -700,7 +710,7 @@ class _QuickTilesRow extends ConsumerWidget {
               clipBehavior: Clip.none,
               children: [
                 _HomeImageTile(
-                  image: const AssetImage('assets/images/games3.jpg'),
+                  image: const AssetImage('assets/images/join_a_game.jpg'),
                   title: 'join_a_game'.tr(),
                   subtitle: 'choose_a_game'.tr(),
                   onTap: onTapJoin,

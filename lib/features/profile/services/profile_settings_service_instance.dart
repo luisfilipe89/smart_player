@@ -124,6 +124,14 @@ class ProfileSettingsServiceInstance {
     }).asBroadcastStream();
   }
 
+  /// Get user profile stream
+  Stream<Map<String, dynamic>?> userProfileStream(String uid) {
+    return _database.ref(DbPaths.userProfile(uid)).onValue.map((e) {
+      if (!e.snapshot.exists) return null;
+      return Map<String, dynamic>.from(e.snapshot.value as Map);
+    });
+  }
+
   /// Get user profile data
   Future<Map<String, dynamic>?> getUserProfile(String uid) async {
     final snap = await _database.ref(DbPaths.userProfile(uid)).get();

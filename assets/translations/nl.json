@@ -445,6 +445,7 @@
     "you": "Jij",
     "please_select_future_time": "Kies een tijdstip in de toekomst",
     "time_slot_unavailable": "Dat tijdslot is al bezet",
+    "user_already_busy": "Je hebt al een wedstrijd gepland op deze datum en tijd. Je kunt niet op twee plekken tegelijk zijn!",
     "game_created_share_prompt": "Game gemaakt! Vrienden uitnodigen?",
     "join_my_game": "Doe mee met mijn game",
     "invite_friends": "Vrienden uitnodigen",

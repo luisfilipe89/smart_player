@@ -47,10 +47,11 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
     _tab =
         TabController(length: 3, vsync: this, initialIndex: widget.initialTab);
     // Create periodic stream once in initState to avoid creating new streams on every rebuild
+    // Use broadcast stream to allow multiple listeners (one per game tile)
     _periodicMinuteStream = Stream.periodic(
       const Duration(minutes: 1),
       (i) => i,
-    );
+    ).asBroadcastStream();
 
     // Auto-refresh when user switches to the Joining tab (index 0)
     _tab.addListener(() {
@@ -156,10 +157,14 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
 
               if (missing.isNotEmpty) {
                 // Load in background without blocking UI
-                ref
-                    .read(gamesMyScreenNotifierProvider(widget.highlightGameId)
-                        .notifier)
-                    .loadMissingProfiles(missing);
+                // Defer to avoid modifying provider during build
+                Future.microtask(() {
+                  ref
+                      .read(
+                          gamesMyScreenNotifierProvider(widget.highlightGameId)
+                              .notifier)
+                      .loadMissingProfiles(missing);
+                });
               }
 
               if (profiles.isEmpty) {
@@ -766,8 +771,8 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
 
         // If cache is empty or missing some games, reload
         if (screenNotifier.needsCalendarPreload(allGameIds)) {
-          // Trigger preload without blocking UI
-          screenNotifier.preloadCalendarStatuses();
+          // Trigger preload without blocking UI - delay until after build completes
+          Future(() => screenNotifier.preloadCalendarStatuses());
         }
       }
     }
@@ -1175,7 +1180,8 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
               children: [
                 // Weather icon with a subtle divider to separate from avatars
                 Builder(builder: (context) {
-                  _ensureWeatherForGame(game);
+                  // Defer weather loading until after build completes
+                  Future(() => _ensureWeatherForGame(game));
                   String time = game.formattedTime.padLeft(5, '0');
                   if (!time.endsWith(':00')) {
                     time = '${time.substring(0, 2)}:00';

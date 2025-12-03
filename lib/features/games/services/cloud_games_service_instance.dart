@@ -72,9 +72,10 @@ class CloudGamesServiceInstance {
   // Format HHmm in local time for time partitioning (avoid ':' in keys)
   String _timeKey(DateTime dt) {
     final local = dt.toLocal();
+    // Round down to nearest hour for 1-hour slots only
+    // This ensures all times in the same hour map to the same slot (e.g., 10:00, 10:15, 10:30 all -> 1000)
     final h = local.hour.toString().padLeft(2, '0');
-    final m = local.minute.toString().padLeft(2, '0');
-    return '$h$m';
+    return '${h}00'; // Always use :00 minutes for 1-hour slots
   }
 
   // Helper function to check if two 1-hour time slots overlap
@@ -229,6 +230,75 @@ class CloudGamesServiceInstance {
     }
   }
 
+  // Check if user already has a game at the same date+time (for conflict prevention)
+  Future<Game?> _checkUserTimeConflict(String userId, DateTime dateTime) async {
+    try {
+      final now = DateTime.now();
+      final targetDateKey = _dateKey(dateTime);
+      final targetTimeKey = _timeKey(dateTime);
+
+      // Check organized games
+      final organizedSnapshot =
+          await _gamesRef.orderByChild('organizerId').equalTo(userId).get();
+
+      if (organizedSnapshot.exists) {
+        final data = Map<dynamic, dynamic>.from(organizedSnapshot.value as Map);
+        for (final entry in data.values) {
+          try {
+            final game = Game.fromJson(Map<String, dynamic>.from(entry));
+            // Only check upcoming active games
+            if (game.isActive &&
+                game.dateTime.isAfter(now) &&
+                _dateKey(game.dateTime) == targetDateKey &&
+                _timeSlotsOverlap(_timeKey(game.dateTime), targetTimeKey)) {
+              return game;
+            }
+          } catch (e) {
+            NumberedLogger.w(
+                'Error parsing game when checking time conflict: $e');
+          }
+        }
+      }
+
+      // Check joined games
+      final joinedGamesSnapshot =
+          await _usersRef.child(DbPaths.userJoinedGames(userId)).get();
+
+      if (joinedGamesSnapshot.exists) {
+        final joinedData =
+            Map<dynamic, dynamic>.from(joinedGamesSnapshot.value as Map);
+        final gameIds = joinedData.keys.map((k) => k.toString()).toList();
+
+        // Batch fetch joined games
+        for (final gameId in gameIds) {
+          try {
+            final gameSnapshot = await _gamesRef.child(gameId).get();
+            if (!gameSnapshot.exists) continue;
+            final game = Game.fromJson(
+                Map<String, dynamic>.from(gameSnapshot.value as Map));
+            // Only check upcoming active games where user is actually a player
+            if (game.isActive &&
+                game.dateTime.isAfter(now) &&
+                game.players.contains(userId) &&
+                _dateKey(game.dateTime) == targetDateKey &&
+                _timeSlotsOverlap(_timeKey(game.dateTime), targetTimeKey)) {
+              return game;
+            }
+          } catch (e) {
+            NumberedLogger.w(
+                'Error checking joined game $gameId for conflict: $e');
+          }
+        }
+      }
+
+      return null; // No conflict found
+    } catch (e) {
+      NumberedLogger.e('Error checking user time conflict: $e');
+      // On error, return null to allow the operation (fail open to avoid blocking users)
+      return null;
+    }
+  }
+
   // Create a new game in the cloud
   Future<String> createGame(Game game) async {
     try {
@@ -239,6 +309,15 @@ class CloudGamesServiceInstance {
 
       // Ensure the user has a profile
       await _ensureUserProfile(userId);
+
+      // Check if user already has a game at the same date+time
+      final conflictingGame =
+          await _checkUserTimeConflict(userId, game.dateTime);
+      if (conflictingGame != null) {
+        NumberedLogger.w(
+            'User $userId already has a game at ${game.dateTime} (conflicts with game ${conflictingGame.id})');
+        throw ValidationException('user_already_busy');
+      }
 
       // Compute unique slot keys
       final dateKey = _dateKey(game.dateTime);
@@ -285,11 +364,42 @@ class CloudGamesServiceInstance {
               'Slot $dateKey/$fieldKey/$timeKey is occupied (transaction aborted)');
           throw ValidationException('new_slot_unavailable');
         }
-        // If not occupied, it was a race condition with another transaction
-        // This is rare but can happen - treat as unavailable
-        NumberedLogger.w(
-            'Slot $dateKey/$fieldKey/$timeKey transaction failed (race condition)');
-        throw ValidationException('new_slot_unavailable');
+
+        // If not occupied, check if slot has a stale value (from cancelled game or failed transaction)
+        final slotSnapshot = await slotRef.get();
+        if (slotSnapshot.exists && slotSnapshot.value == true) {
+          // Stale slot - clean it up and retry transaction once
+          NumberedLogger.i(
+              'Cleaning up stale slot $dateKey/$fieldKey/$timeKey and retrying transaction');
+          await slotRef.set(null);
+
+          // Retry the transaction once after cleanup
+          final retryResult = await slotRef.runTransaction((current) {
+            try {
+              final slotValue = (current as dynamic)?.value;
+              if (slotValue == true) {
+                return Transaction.abort();
+              }
+            } catch (_) {
+              return Transaction.abort();
+            }
+            return Transaction.success(true);
+          });
+
+          if (!retryResult.committed) {
+            // Still failed after cleanup - likely a real race condition
+            NumberedLogger.w(
+                'Slot $dateKey/$fieldKey/$timeKey transaction failed after cleanup (race condition)');
+            throw ValidationException('new_slot_unavailable');
+          }
+          // Transaction succeeded after cleanup - continue with game creation
+        } else {
+          // Transaction failed but slot is null/doesn't exist - likely a race condition
+          // This is rare but can happen - treat as unavailable
+          NumberedLogger.w(
+              'Slot $dateKey/$fieldKey/$timeKey transaction failed (race condition)');
+          throw ValidationException('new_slot_unavailable');
+        }
       }
 
       // Create the game id now for an atomic multi-location update
@@ -2048,6 +2158,15 @@ class CloudGamesServiceInstance {
         throw AlreadyExistsException('Already joined this game');
       }
 
+      // Check if user already has a game at the same date+time
+      final conflictingGame =
+          await _checkUserTimeConflict(userId, game.dateTime);
+      if (conflictingGame != null) {
+        NumberedLogger.w(
+            'User $userId already has a game at ${game.dateTime} (conflicts with game ${conflictingGame.id})');
+        throw ValidationException('user_already_busy');
+      }
+
       // Allow joining even if game is full - players beyond maxPlayers will be on the bench
       // No restriction - users can join and will be marked as benched if beyond maxPlayers
 
@@ -2385,6 +2504,8 @@ class CloudGamesServiceInstance {
   ///
   /// Returns a set of booked times in "HH:mm" format.
   /// Verifies slots against active games to filter out cancelled games.
+  /// Note: Slots are shared across sports for the same field, so this method
+  /// returns all booked times for the field regardless of sport.
   Future<Set<String>> getBookedSlots({
     required DateTime date,
     required Map<String, dynamic>? field,

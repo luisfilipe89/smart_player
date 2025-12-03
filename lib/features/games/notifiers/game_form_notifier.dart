@@ -43,6 +43,8 @@ class GameFormNotifier extends StateNotifier<GameFormState> {
   /// Select sport and load fields
   void selectSport(String sport) {
     state = state.copyWith(sport: sport);
+    // Clear booked slots and weather when sport changes (different sports might share fields but have different availability)
+    state = state.copyWith(bookedTimes: {}, weatherData: {});
     _loadFields();
   }
 
@@ -64,7 +66,13 @@ class GameFormNotifier extends StateNotifier<GameFormState> {
 
   /// Select field
   void selectField(Map<String, dynamic> field) {
-    state = state.copyWith(field: field);
+    // Clear booked slots and weather immediately to prevent showing stale data from previous field
+    state = state.copyWith(field: field, bookedTimes: {}, weatherData: {});
+    // Reload booked slots and weather when field changes (if date is already selected)
+    if (state.date != null) {
+      _loadBookedSlots();
+      _loadWeather();
+    }
   }
 
   /// Set max players
@@ -238,6 +246,7 @@ class GameFormNotifier extends StateNotifier<GameFormState> {
   /// Load weather data for selected field and date
   Future<void> _loadWeather() async {
     if (state.field == null || state.date == null) {
+      NumberedLogger.d('🌤️ Weather: Skipping load - field=${state.field != null}, date=${state.date != null}');
       state = state.copyWith(weatherData: {});
       return;
     }
@@ -246,10 +255,12 @@ class GameFormNotifier extends StateNotifier<GameFormState> {
     final lon = safeToDouble(state.field!['longitude']);
 
     if (lat == null || lon == null) {
+      NumberedLogger.d('🌤️ Weather: Skipping load - missing coordinates (lat=$lat, lon=$lon)');
       state = state.copyWith(weatherData: {});
       return;
     }
 
+    NumberedLogger.d('🌤️ Weather: Starting load for date=${state.date}, lat=$lat, lon=$lon');
     state = state.copyWith(isLoadingWeather: true);
 
     try {
@@ -260,12 +271,13 @@ class GameFormNotifier extends StateNotifier<GameFormState> {
         longitude: lon,
       );
 
+      NumberedLogger.d('🌤️ Weather: Loaded ${weather.length} hours of data');
       state = state.copyWith(
         weatherData: weather,
         isLoadingWeather: false,
       );
     } catch (e) {
-      NumberedLogger.e('Failed to load weather: $e');
+      NumberedLogger.e('🌤️ Weather: Failed to load weather: $e');
       state = state.copyWith(
         weatherData: {},
         isLoadingWeather: false,
@@ -358,6 +370,11 @@ class GameFormNotifier extends StateNotifier<GameFormState> {
   /// Set success state
   void setSuccess(bool showSuccess) {
     state = state.copyWith(showSuccess: showSuccess);
+  }
+
+  /// Reset form to initial state (useful when creating a new game)
+  void reset() {
+    state = GameFormState.initial();
   }
 
   @override

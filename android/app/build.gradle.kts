@@ -11,9 +11,9 @@ android {
     namespace = "com.example.sportappdenbosch"
     // Use compileSdk 36 as required by plugins (plugins require SDK 36)
     compileSdk = 36
-    // Let Flutter manage NDK version to avoid mismatch with local toolchains
-    // Pin to highest required version to satisfy integration_test plugin
-    ndkVersion = "27.0.12077973"
+    // Use highest NDK version required by plugins (backward compatible)
+    // integration_test requires 28.2.13676358, which is backward compatible with all other plugins
+    ndkVersion = "28.2.13676358"
 
     compileOptions {
         // Use Java 17 to eliminate Java 8 toolchain warnings

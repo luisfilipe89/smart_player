@@ -43,7 +43,6 @@ class CalendarSyncService {
           name: 'CalendarSyncService', error: e, stackTrace: stackTrace);
     }
   }
-
 }
 
 /// Provider that watches games and syncs calendar events
@@ -55,12 +54,13 @@ final calendarSyncProvider = Provider.autoDispose<void>((ref) {
   myGamesAsync.whenData((games) async {
     // Get all games in calendar
     final gamesInCalendar = await CalendarService.getAllGamesInCalendar();
-    
+
     if (gamesInCalendar.isEmpty) {
       return;
     }
 
-    // Create a set of game IDs in calendar for quick lookup
+    // Create a set of game IDs from user's games for quick lookup
+    final myGameIds = games.map((g) => g.id).toSet();
     final calendarGameIds = gamesInCalendar.toSet();
 
     // Sync each game that's both in user's games and in calendar
@@ -69,8 +69,26 @@ final calendarSyncProvider = Provider.autoDispose<void>((ref) {
         await CalendarSyncService.syncGameCalendarEvent(game);
       }
     }
+
+    // Clean up orphaned calendar events (games in calendar but not in user's games)
+    // This handles cases where games were cancelled/removed but calendar events weren't cleaned up
+    final orphanedGameIds = calendarGameIds.difference(myGameIds);
+    if (orphanedGameIds.isNotEmpty) {
+      developer.log(
+          'Found ${orphanedGameIds.length} orphaned calendar events, removing...',
+          name: 'CalendarSyncService');
+      for (final gameId in orphanedGameIds) {
+        try {
+          developer.log('Removing orphaned calendar event for game $gameId',
+              name: 'CalendarSyncService');
+          await CalendarService.removeGameFromCalendar(gameId);
+        } catch (e) {
+          developer.log('Error removing orphaned calendar event $gameId: $e',
+              name: 'CalendarSyncService', error: e);
+        }
+      }
+    }
   });
 
   // Return void (provider doesn't need to return anything)
 });
-

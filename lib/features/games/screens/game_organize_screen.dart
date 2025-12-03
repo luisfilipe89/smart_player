@@ -44,9 +44,37 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
   // Search for fields (still local for TextEditingController)
   final TextEditingController _fieldSearchController = TextEditingController();
 
+  // Track if we've reset the form for new game creation
+  bool _hasResetForNewGame = false;
+
   void _showSignInInlinePrompt() {
     if (!mounted) return;
     SnackBarHelper.showError(context, 'please_sign_in');
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Reset form state when creating a new game (initialGame is null)
+    // This ensures we don't show leftover state from previous game creation
+    if (widget.initialGame == null && !_hasResetForNewGame) {
+      _hasResetForNewGame = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          final notifier = ref.read(gameFormNotifierProvider(null).notifier);
+          final currentState = ref.read(gameFormNotifierProvider(null));
+          // Always reset if there's any leftover state (especially showSuccess)
+          if (currentState.showSuccess ||
+              currentState.sport != null ||
+              currentState.date != null ||
+              currentState.time != null ||
+              currentState.field != null) {
+            // Reset to initial state - this clears success overlay and all form data
+            notifier.reset();
+          }
+        }
+      });
+    }
   }
 
   @override
@@ -80,31 +108,20 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
 
   List<String> get _availableTimes {
     final now = DateTime.now();
+    // Only 1-hour slots on the hour for simplicity
     final allTimes = [
       '09:00',
-      '09:30',
       '10:00',
-      '10:30',
       '11:00',
-      '11:30',
       '12:00',
-      '12:30',
       '13:00',
-      '13:30',
       '14:00',
-      '14:30',
       '15:00',
-      '15:30',
       '16:00',
-      '16:30',
       '17:00',
-      '17:30',
       '18:00',
-      '18:30',
       '19:00',
-      '19:30',
       '20:00',
-      '20:30',
       '21:00',
     ];
 
@@ -429,10 +446,15 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
       final createdGame = game.copyWith(id: createdId);
 
       if (mounted) {
+        // Capture context-dependent values before any navigation
+        final scaffoldMessenger = ScaffoldMessenger.of(context);
+        final ctrl = MainScaffoldController.maybeOf(context);
+        final formNotifier = _formNotifier; // Capture notifier reference
+
         ref.read(hapticsActionsProvider)?.mediumImpact();
-        _formNotifier.setSuccess(true);
+        formNotifier.setSuccess(true);
         Future.delayed(const Duration(milliseconds: 750), () {
-          if (mounted) _formNotifier.setSuccess(false);
+          if (mounted) formNotifier.setSuccess(false);
         });
 
         // Automatically add newly created game to calendar (non-blocking)
@@ -452,22 +474,30 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
           NumberedLogger.w('Error adding game to calendar: $e');
         });
 
-        SnackBarHelper.showSuccess(context, 'game_created_successfully');
+        // Show success message using captured messenger (safe after navigation)
+        scaffoldMessenger.showSnackBar(
+          SnackBar(
+            content: Text('game_created_successfully'.tr()),
+            backgroundColor: AppColors.green,
+            duration: const Duration(seconds: 3),
+          ),
+        );
 
         // Navigate to My Games → Organized and highlight the created game
-        // Navigate immediately for consistent UX transition regardless of invite status
-        final ctrl = MainScaffoldController.maybeOf(context);
-        ctrl?.openMyGames(
-          initialTab: 1,
-          highlightGameId: createdId,
-          popToRoot: true,
-        );
+        // Use post-frame callback to ensure navigation happens safely after build
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && ctrl != null) {
+            ctrl.openMyGames(
+              initialTab: 1,
+              highlightGameId: createdId,
+              popToRoot: true,
+            );
+          }
+        });
 
         // Send in-app invites to selected friends in the background (non-blocking)
         // This ensures consistent transition timing whether friends are invited or not
-        if (_formState.selectedFriendUids.isNotEmpty && mounted) {
-          // Capture messenger before async operation to avoid BuildContext warning
-          final messenger = ScaffoldMessenger.of(context);
+        if (_formState.selectedFriendUids.isNotEmpty) {
           ref
               .read(cloudGamesActionsProvider)
               .sendGameInvitesToFriends(
@@ -482,7 +512,7 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
             NumberedLogger.d('Stack trace: $stackTrace');
             // Show error to user so they know invites weren't sent (if still mounted)
             if (mounted) {
-              messenger.showSnackBar(
+              scaffoldMessenger.showSnackBar(
                 SnackBar(
                   content: Row(
                     children: [
@@ -516,8 +546,13 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
         final es = e.toString();
         final isSlotUnavailable = es.contains('new_slot_unavailable') ||
             es.contains('time_slot_unavailable');
+        final isUserBusy = es.contains('user_already_busy');
 
-        if (isSlotUnavailable) {
+        if (isUserBusy) {
+          errorMsg = 'user_already_busy'.tr();
+          SnackBarHelper.showBlocked(context, errorMsg);
+          ref.read(hapticsActionsProvider)?.mediumImpact();
+        } else if (isSlotUnavailable) {
           errorMsg = 'time_slot_unavailable'.tr();
           SnackBarHelper.showBlocked(context, errorMsg);
           ref.read(hapticsActionsProvider)?.mediumImpact();
@@ -875,6 +910,16 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
   Widget build(BuildContext context) {
     // Form state is managed by GameFormNotifier - no need to pre-fill here
     // The notifier handles initialization from initialGame
+
+    // Immediately clear success overlay if showing (for new game creation)
+    if (widget.initialGame == null && _formState.showSuccess) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _formNotifier.setSuccess(false);
+        }
+      });
+    }
+
     return Scaffold(
       appBar: AppBar(
         leadingWidth: 48,

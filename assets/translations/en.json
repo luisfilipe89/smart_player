@@ -445,6 +445,7 @@
     "you": "You",
     "please_select_future_time": "Please select a time in the future",
     "time_slot_unavailable": "That time slot is already taken",
+    "user_already_busy": "You already have a game scheduled at this date and time. You can't be in two places at once!",
     "game_created_share_prompt": "Game created! Invite friends to join?",
     "join_my_game": "Join my game",
     "invite_friends": "Invite friends",

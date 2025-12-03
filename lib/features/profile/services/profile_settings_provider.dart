@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'profile_settings_service_instance.dart';
 import 'package:move_young/providers/infrastructure/firebase_providers.dart';
+import 'package:move_young/features/auth/services/auth_provider.dart';
 
 // ProfileSettingsService provider with dependency injection
 final profileSettingsServiceProvider =
@@ -59,8 +60,20 @@ class ProfileSettingsActions {
       _profileSettingsService.settingsStream(uid);
 
   // Profile data operations
+  Stream<Map<String, dynamic>?> userProfileStream(String uid) =>
+      _profileSettingsService.userProfileStream(uid);
   Future<Map<String, dynamic>?> getUserProfile(String uid) =>
       _profileSettingsService.getUserProfile(uid);
   Future<void> updateUserProfile(String uid, Map<String, dynamic> data) =>
       _profileSettingsService.updateUserProfile(uid, data);
 }
+
+// Current user profile stream provider
+final currentUserProfileProvider = StreamProvider<Map<String, dynamic>?>((ref) {
+  final uid = ref.watch(currentUserIdProvider);
+  if (uid == null) {
+    return Stream.value(null);
+  }
+  final profileSettingsService = ref.watch(profileSettingsServiceProvider);
+  return profileSettingsService.userProfileStream(uid);
+});
