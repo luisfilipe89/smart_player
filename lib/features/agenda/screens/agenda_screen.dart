@@ -41,16 +41,26 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
   bool _didInit = false;
   _LoadState _loadState = _LoadState.idle;
   final Map<String, GlobalKey> _itemKeys = {};
+  final ScrollController _scrollController = ScrollController();
+  bool _hasScrolledToEvent = false;
 
   @override
   void initState() {
     super.initState();
+    NumberedLogger.d(
+        'AgendaScreen initState called, highlightEventTitle: ${widget.highlightEventTitle}');
     // Schedule scroll to highlighted event after first frame (similar to games screen)
     if (widget.highlightEventTitle != null) {
-      NumberedLogger.d('AgendaScreen initState with highlightEventTitle: ${widget.highlightEventTitle}');
+      NumberedLogger.d(
+          'AgendaScreen initState: Scheduling scroll to: ${widget.highlightEventTitle}');
       WidgetsBinding.instance.addPostFrameCallback((_) {
+        NumberedLogger.d(
+            'AgendaScreen initState: PostFrameCallback executing, calling _scrollToHighlightedEvent');
         _scrollToHighlightedEvent();
       });
+    } else {
+      NumberedLogger.d(
+          'AgendaScreen initState: No highlightEventTitle, skipping scroll');
     }
   }
 
@@ -63,16 +73,26 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
       _loadFavorites();
     }
   }
-  
+
   @override
   void didUpdateWidget(AgendaScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
+    NumberedLogger.d(
+        'AgendaScreen didUpdateWidget: old=${oldWidget.highlightEventTitle}, new=${widget.highlightEventTitle}');
+    // Reset scroll flag if highlightEventTitle changed
+    if (widget.highlightEventTitle != oldWidget.highlightEventTitle) {
+      _hasScrolledToEvent = false;
+    }
     // If highlightEventTitle changed and events are already loaded, scroll to it
     if (widget.highlightEventTitle != null &&
         widget.highlightEventTitle != oldWidget.highlightEventTitle &&
         filteredEvents.isNotEmpty) {
+      NumberedLogger.d(
+          'AgendaScreen didUpdateWidget: Scheduling scroll to: ${widget.highlightEventTitle}');
       WidgetsBinding.instance.addPostFrameCallback((_) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
+          NumberedLogger.d(
+              'AgendaScreen didUpdateWidget: PostFrameCallback executing, calling _scrollToHighlightedEvent');
           _scrollToHighlightedEvent();
         });
       });
@@ -83,6 +103,9 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
   void dispose() {
     _debounce?.cancel();
     _searchController.dispose();
+    _scrollController.dispose();
+    // Clear keys to prevent duplicate key errors when screen is replaced
+    _itemKeys.clear();
     super.dispose();
   }
 
@@ -106,13 +129,17 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
         _loadState = _LoadState.success;
         _applyFilters();
       });
-      
+
       // Scroll to highlighted event after loading - wait for list to be built
       if (widget.highlightEventTitle != null) {
+        NumberedLogger.d(
+            'AgendaScreen loadEvents: Scheduling scroll to: ${widget.highlightEventTitle}');
         // Use multiple nested callbacks to ensure CustomScrollView is fully built
         WidgetsBinding.instance.addPostFrameCallback((_) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             WidgetsBinding.instance.addPostFrameCallback((_) {
+              NumberedLogger.d(
+                  'AgendaScreen loadEvents: PostFrameCallback executing, calling _scrollToHighlightedEvent');
               _scrollToHighlightedEvent();
             });
           });
@@ -223,10 +250,15 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
       return true;
     }).toList();
 
+    // Pre-create keys for all filtered events to ensure they exist when we try to scroll
+    for (final event in events) {
+      _itemKeys.putIfAbsent(event.title, () => GlobalKey());
+    }
+
     setState(() {
       filteredEvents = events;
     });
-    
+
     // Scroll to highlighted event after filtering if needed
     if (widget.highlightEventTitle != null && events.isNotEmpty) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -238,31 +270,40 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
     // Note: Image preloading removed from filter changes to avoid unnecessary network requests
     // Images are preloaded only on initial load in loadEvents() method
   }
-  
+
   void _scrollToHighlightedEvent({int attempts = 0}) {
-    if (widget.highlightEventTitle == null || !mounted) {
+    if (widget.highlightEventTitle == null || !mounted || _hasScrolledToEvent) {
       if (widget.highlightEventTitle == null) {
-        NumberedLogger.d('_scrollToHighlightedEvent: highlightEventTitle is null');
+        NumberedLogger.d(
+            '_scrollToHighlightedEvent: highlightEventTitle is null');
+      } else if (_hasScrolledToEvent) {
+        NumberedLogger.d(
+            '_scrollToHighlightedEvent: Already scrolled, skipping');
       }
       return;
     }
-    
-    NumberedLogger.d('_scrollToHighlightedEvent: attempt $attempts, looking for: ${widget.highlightEventTitle}');
-    NumberedLogger.d('_scrollToHighlightedEvent: filteredEvents count: ${filteredEvents.length}, allEvents count: ${allEvents.length}');
-    
+
+    NumberedLogger.d(
+        '_scrollToHighlightedEvent: attempt $attempts, looking for: ${widget.highlightEventTitle}');
+    NumberedLogger.d(
+        '_scrollToHighlightedEvent: filteredEvents count: ${filteredEvents.length}, allEvents count: ${allEvents.length}');
+
     // Check if the highlighted event is in the filtered list
     final eventIndex = filteredEvents.indexWhere(
       (event) => event.title == widget.highlightEventTitle,
     );
     final eventExists = eventIndex >= 0;
-    
+
     if (eventExists) {
-      NumberedLogger.d('_scrollToHighlightedEvent: event found at index $eventIndex in filteredEvents');
+      NumberedLogger.d(
+          '_scrollToHighlightedEvent: event found at index $eventIndex in filteredEvents');
     } else {
-      NumberedLogger.d('_scrollToHighlightedEvent: event NOT found in filteredEvents');
+      NumberedLogger.d(
+          '_scrollToHighlightedEvent: event NOT found in filteredEvents');
       // Log first few event titles for debugging
       if (filteredEvents.isNotEmpty) {
-        NumberedLogger.d('_scrollToHighlightedEvent: first 3 event titles: ${filteredEvents.take(3).map((e) => e.title).toList()}');
+        NumberedLogger.d(
+            '_scrollToHighlightedEvent: first 3 event titles: ${filteredEvents.take(3).map((e) => e.title).toList()}');
       }
     }
     if (!eventExists) {
@@ -311,10 +352,11 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
       }
       return;
     }
-    
+
     final key = _itemKeys[widget.highlightEventTitle!];
-    NumberedLogger.d('_scrollToHighlightedEvent: key exists: ${key != null}, key: $key');
-    
+    NumberedLogger.d(
+        '_scrollToHighlightedEvent: key exists: ${key != null}, key: $key');
+
     if (key == null) {
       // Key not created yet, retry (keys are created lazily in _buildEventCard)
       NumberedLogger.d('_scrollToHighlightedEvent: key is null, retrying...');
@@ -325,20 +367,24 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
       }
       return;
     }
-    
+
     final ctx = key.currentContext;
-    NumberedLogger.d('_scrollToHighlightedEvent: context exists: ${ctx != null}, context: $ctx');
-    
+    NumberedLogger.d(
+        '_scrollToHighlightedEvent: context exists: ${ctx != null}, context: $ctx');
+
     if (ctx != null && mounted) {
       try {
-        NumberedLogger.d('_scrollToHighlightedEvent: attempting Scrollable.ensureVisible...');
+        NumberedLogger.d(
+            '_scrollToHighlightedEvent: attempting Scrollable.ensureVisible...');
         Scrollable.ensureVisible(
           ctx,
           duration: const Duration(milliseconds: 450),
           curve: Curves.easeOutCubic,
           alignment: 0.15,
         );
-        NumberedLogger.d('Successfully scrolled to event: ${widget.highlightEventTitle}');
+        NumberedLogger.d(
+            'Successfully scrolled to event: ${widget.highlightEventTitle}');
+        _hasScrolledToEvent = true; // Mark as scrolled to prevent retries
         return;
       } catch (e, stack) {
         // If scroll fails, retry
@@ -350,14 +396,44 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
         }
       }
     } else {
-      // Context not available yet, retry with more attempts
-      NumberedLogger.d('_scrollToHighlightedEvent: context is null or not mounted, retrying... (attempts: $attempts)');
-      if (attempts < 15) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          _scrollToHighlightedEvent(attempts: attempts + 1);
+      // Context not available yet - item hasn't been rendered (not visible)
+      // Try scrolling to approximate position first to make it visible
+      if (eventExists && (attempts == 0 || attempts == 1)) {
+        // Estimate scroll position: header height (~240) + approximate item height (~300) * index
+        final estimatedItemHeight =
+            300.0; // Approximate height of each event card
+        final headerHeight = 240.0; // Height of pinned header
+        final estimatedScrollPosition =
+            headerHeight + (eventIndex * estimatedItemHeight);
+
+        NumberedLogger.d(
+            '_scrollToHighlightedEvent: context null, scrolling to estimated position: $estimatedScrollPosition (index: $eventIndex)');
+
+        if (_scrollController.hasClients && mounted) {
+          _scrollController.animateTo(
+            estimatedScrollPosition.clamp(
+                0.0, _scrollController.position.maxScrollExtent),
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOut,
+          );
+        }
+      }
+
+      // Retry with more attempts to wait for item to be rendered after scrolling
+      NumberedLogger.d(
+          '_scrollToHighlightedEvent: context is null or not mounted, retrying... (attempts: $attempts)');
+      if (attempts < 20) {
+        // Wait a bit longer for the item to render after scrolling
+        Future.delayed(Duration(milliseconds: attempts < 3 ? 150 : 200), () {
+          if (mounted) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              _scrollToHighlightedEvent(attempts: attempts + 1);
+            });
+          }
         });
       } else {
-        NumberedLogger.w('_scrollToHighlightedEvent: giving up after $attempts attempts');
+        NumberedLogger.w(
+            '_scrollToHighlightedEvent: giving up after $attempts attempts');
       }
     }
   }
@@ -648,105 +724,114 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
   }
 
   Widget _buildEventCard(Event event) {
-    // Use putIfAbsent to ensure key is created only once, like games screen
-    final key = _itemKeys.putIfAbsent(event.title, () => GlobalKey());
-    
+    // Key should already be created in _applyFilters
+    // Only get it, don't create it here to avoid duplicates
+    final key = _itemKeys[event.title];
+    final widgetKey = key ?? ValueKey('event_${event.title}');
+
+    if (key == null) {
+      // This shouldn't happen if _applyFilters ran, but if it does, use ValueKey as fallback
+      // Don't create a GlobalKey here to avoid duplicates
+      NumberedLogger.w(
+          '_buildEventCard: Key missing for event: ${event.title}, using ValueKey fallback');
+    }
+
     return KeyedSubtree(
-      key: key,
+      key: widgetKey,
       child: Container(
-      margin: AppPaddings.topBottom,
-      padding: AppPaddings.allMedium,
-      decoration: BoxDecoration(
-        color: AppColors.white,
-        borderRadius: BorderRadius.circular(AppRadius.card),
-        boxShadow: AppShadows.md,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(AppRadius.image),
-            child: _buildImageOrPlaceholder(event.imageUrl),
-          ),
-          const SizedBox(height: AppHeights.reg),
-          Text(
-            event.title,
-            style: AppTextStyles.cardTitle,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-          ),
-          const SizedBox(height: AppHeights.reg),
-          _metaRow(Icons.access_time, event.dateTime),
-          const SizedBox(height: AppHeights.small),
-          _metaRow(Icons.location_on, event.location),
-          const SizedBox(height: AppHeights.small),
-          _metaRow(Icons.group, event.targetGroup),
-          const SizedBox(height: AppHeights.small),
-          _metaRow(Icons.euro, event.cost.replaceAll('€', '').trim(),
-              muted: true),
-          const SizedBox(height: AppHeights.big),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-              Semantics(
-                label: _favoriteTitles.contains(event.title)
-                    ? 'Remove from favorites'
-                    : 'Add to favorites',
-                button: true,
-                child: IconButton(
-                  tooltip: 'favorite'.tr(),
-                  icon: Icon(
-                    _favoriteTitles.contains(event.title)
-                        ? Icons.favorite
-                        : Icons.favorite_border,
-                  ),
-                  color: _favoriteTitles.contains(event.title)
-                      ? AppColors.red
-                      : AppColors.blackIcon,
-                  onPressed: () => _toggleFavorite(event.title),
-                ),
-              ),
-              Semantics(
-                label: 'Share event',
-                button: true,
-                child: IconButton(
-                  tooltip: 'share'.tr(),
-                  icon: const Icon(Icons.share),
-                  onPressed: () => _shareEvent(event),
-                ),
-              ),
-              Semantics(
-                label: 'Get directions to ${event.location}',
-                button: true,
-                child: IconButton(
-                  tooltip: 'directions'.tr(),
-                  icon: const Icon(Icons.directions),
-                  onPressed: () => _openDirections(context, event.location),
-                ),
-              ),
-              if (event.url != null && event.url!.trim().isNotEmpty)
+        margin: AppPaddings.topBottom,
+        padding: AppPaddings.allMedium,
+        decoration: BoxDecoration(
+          color: AppColors.white,
+          borderRadius: BorderRadius.circular(AppRadius.card),
+          boxShadow: AppShadows.md,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(AppRadius.image),
+              child: _buildImageOrPlaceholder(event.imageUrl),
+            ),
+            const SizedBox(height: AppHeights.reg),
+            Text(
+              event.title,
+              style: AppTextStyles.cardTitle,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(height: AppHeights.reg),
+            _metaRow(Icons.access_time, event.dateTime),
+            const SizedBox(height: AppHeights.small),
+            _metaRow(Icons.location_on, event.location),
+            const SizedBox(height: AppHeights.small),
+            _metaRow(Icons.group, event.targetGroup),
+            const SizedBox(height: AppHeights.small),
+            _metaRow(Icons.euro, event.cost.replaceAll('€', '').trim(),
+                muted: true),
+            const SizedBox(height: AppHeights.big),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
                 Semantics(
-                  label: 'Enroll in event',
+                  label: _favoriteTitles.contains(event.title)
+                      ? 'Remove from favorites'
+                      : 'Add to favorites',
                   button: true,
-                  child: ElevatedButton.icon(
-                    onPressed: () => _openUrl(event.url!.trim()),
-                    icon: const Icon(Icons.open_in_new),
-                    label: Text('to_enroll'.tr()),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.green,
-                      foregroundColor: AppColors.white,
-                      padding: AppPaddings.symmSmall,
-                      shape: RoundedRectangleBorder(
-                        borderRadius:
-                            BorderRadius.circular(AppRadius.smallCard),
+                  child: IconButton(
+                    tooltip: 'favorite'.tr(),
+                    icon: Icon(
+                      _favoriteTitles.contains(event.title)
+                          ? Icons.favorite
+                          : Icons.favorite_border,
+                    ),
+                    color: _favoriteTitles.contains(event.title)
+                        ? AppColors.red
+                        : AppColors.blackIcon,
+                    onPressed: () => _toggleFavorite(event.title),
+                  ),
+                ),
+                Semantics(
+                  label: 'Share event',
+                  button: true,
+                  child: IconButton(
+                    tooltip: 'share'.tr(),
+                    icon: const Icon(Icons.share),
+                    onPressed: () => _shareEvent(event),
+                  ),
+                ),
+                Semantics(
+                  label: 'Get directions to ${event.location}',
+                  button: true,
+                  child: IconButton(
+                    tooltip: 'directions'.tr(),
+                    icon: const Icon(Icons.directions),
+                    onPressed: () => _openDirections(context, event.location),
+                  ),
+                ),
+                if (event.url != null && event.url!.trim().isNotEmpty)
+                  Semantics(
+                    label: 'Enroll in event',
+                    button: true,
+                    child: ElevatedButton.icon(
+                      onPressed: () => _openUrl(event.url!.trim()),
+                      icon: const Icon(Icons.open_in_new),
+                      label: Text('to_enroll'.tr()),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.green,
+                        foregroundColor: AppColors.white,
+                        padding: AppPaddings.symmSmall,
+                        shape: RoundedRectangleBorder(
+                          borderRadius:
+                              BorderRadius.circular(AppRadius.smallCard),
+                        ),
                       ),
                     ),
                   ),
-                ),
-            ],
-          ),
-        ],
-      ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -758,6 +843,7 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
     return RefreshIndicator(
       onRefresh: loadEvents,
       child: CustomScrollView(
+        controller: _scrollController,
         key: const PageStorageKey('agenda'),
         keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
         slivers: [

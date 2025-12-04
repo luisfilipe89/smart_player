@@ -124,6 +124,7 @@ class MainScaffoldState extends ConsumerState<MainScaffold> {
       switchToTab(kTabFriends, popToRoot: true);
     } else if (intent is AgendaIntent) {
       _highlightEventTitle = intent.highlightEventTitle;
+      NumberedLogger.d('MainScaffold: Handling AgendaIntent with highlightEventTitle: $_highlightEventTitle');
       switchToTab(kTabAgenda, popToRoot: true);
       // Note: AgendaScreen will receive highlightEventTitle via widget parameter
       // and will scroll to it when events are loaded
@@ -405,7 +406,7 @@ class _HomeFlow extends StatelessWidget {
   }
 }
 
-class _AgendaFlow extends StatelessWidget {
+class _AgendaFlow extends StatefulWidget {
   const _AgendaFlow({
     required this.navigatorKey,
     this.highlightEventTitle,
@@ -414,17 +415,75 @@ class _AgendaFlow extends StatelessWidget {
   final String? highlightEventTitle;
 
   @override
+  State<_AgendaFlow> createState() => _AgendaFlowState();
+}
+
+class _AgendaFlowState extends State<_AgendaFlow> {
+  @override
+  void initState() {
+    super.initState();
+    // If we have a highlightEventTitle on initial build, push it after first frame
+    if (widget.highlightEventTitle != null) {
+      NumberedLogger.d('_AgendaFlow initState: highlightEventTitle=${widget.highlightEventTitle}, will push after first frame');
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final nav = widget.navigatorKey.currentState;
+        if (nav != null && mounted) {
+          NumberedLogger.d('_AgendaFlow initState: Pushing route with highlightEventTitle=${widget.highlightEventTitle}');
+          nav.pushReplacement(
+            MaterialPageRoute(
+              builder: (_) => AgendaScreen(
+                key: ValueKey('agenda_${widget.highlightEventTitle}'),
+                highlightEventTitle: widget.highlightEventTitle,
+              ),
+            ),
+          );
+        }
+      });
+    }
+  }
+
+  @override
+  void didUpdateWidget(_AgendaFlow oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    NumberedLogger.d('_AgendaFlow didUpdateWidget: old=${oldWidget.highlightEventTitle}, new=${widget.highlightEventTitle}');
+    // If highlightEventTitle changed from null to a value, or changed to a different value, push a new route
+    if (widget.highlightEventTitle != null &&
+        widget.highlightEventTitle != oldWidget.highlightEventTitle) {
+      NumberedLogger.d('_AgendaFlow didUpdateWidget: highlightEventTitle changed, pushing new route');
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final nav = widget.navigatorKey.currentState;
+        if (nav != null && mounted) {
+          NumberedLogger.d('_AgendaFlow didUpdateWidget: Executing pushReplacement with highlightEventTitle=${widget.highlightEventTitle}');
+          nav.pushReplacement(
+            MaterialPageRoute(
+              builder: (_) => AgendaScreen(
+                key: ValueKey('agenda_${widget.highlightEventTitle}'),
+                highlightEventTitle: widget.highlightEventTitle,
+              ),
+            ),
+          );
+        } else {
+          NumberedLogger.w('_AgendaFlow didUpdateWidget: Navigator is null or widget not mounted');
+        }
+      });
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    NumberedLogger.d('_AgendaFlow build: highlightEventTitle=${widget.highlightEventTitle}');
     return Navigator(
-      key: navigatorKey,
+      key: widget.navigatorKey,
       onGenerateRoute: (settings) {
         // Use a key based on highlightEventTitle to force rebuild when it changes
+        final key = widget.highlightEventTitle != null 
+            ? ValueKey('agenda_${widget.highlightEventTitle}')
+            : const ValueKey('agenda');
+        NumberedLogger.d('_AgendaFlow onGenerateRoute: creating AgendaScreen with key=$key, highlightEventTitle=${widget.highlightEventTitle}');
         return MaterialPageRoute(
           builder: (_) => AgendaScreen(
-            key: highlightEventTitle != null 
-                ? ValueKey('agenda_$highlightEventTitle')
-                : const ValueKey('agenda'),
-            highlightEventTitle: highlightEventTitle,
+            key: key,
+            highlightEventTitle: widget.highlightEventTitle,
           ),
           settings: settings,
         );
