@@ -22,6 +22,7 @@ import 'package:move_young/services/notifications/notification_provider.dart';
 import 'package:move_young/services/calendar/calendar_sync_service.dart';
 import 'package:move_young/services/system/sync_provider.dart';
 import 'package:move_young/features/agenda/services/cached_events_provider.dart';
+import 'package:move_young/services/system/notification_settings_provider.dart';
 
 // Global navigator key for navigation from notifications
 // Note: This is still needed for Firebase notification callbacks in background
@@ -359,6 +360,21 @@ class _MoveYoungAppState extends ConsumerState<MoveYoungApp>
               NumberedLogger.w(
                   'Sync service initialization error (non-critical): $e');
               NumberedLogger.d('Stack trace: $stack');
+            }
+          });
+        }
+
+        // Initialize notification settings service after SharedPreferences is ready
+        // This ensures preferences are loaded early
+        final notificationSettingsActions = ref.read(notificationSettingsActionsProvider);
+        if (notificationSettingsActions != null) {
+          // Initialize asynchronously without blocking
+          Future.microtask(() async {
+            try {
+              await notificationSettingsActions.initialize();
+              NumberedLogger.d('Notification settings initialized');
+            } catch (e) {
+              NumberedLogger.w('Notification settings initialization error (non-critical): $e');
             }
           });
         }

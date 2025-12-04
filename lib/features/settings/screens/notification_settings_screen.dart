@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:move_young/theme/_theme.dart';
+import 'package:move_young/services/system/notification_settings_provider.dart';
+import 'package:move_young/widgets/app_back_button.dart';
 
 class NotificationSettingsScreen extends ConsumerStatefulWidget {
   const NotificationSettingsScreen({super.key});
@@ -23,15 +25,43 @@ class _NotificationSettingsScreenState
   @override
   void initState() {
     super.initState();
-    _loadSettings();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadSettings();
+    });
   }
 
   Future<void> _loadSettings() async {
-    // Settings are stored in local state only (no persistence implemented)
-    if (mounted) {
-      setState(() {
-        _isLoading = false;
-      });
+    final settingsActions = ref.read(notificationSettingsActionsProvider);
+    if (settingsActions != null) {
+      try {
+        // Initialize the service to load saved preferences
+        await settingsActions.initialize();
+        final settings = settingsActions.getSettings();
+        
+        if (mounted) {
+          setState(() {
+            _notificationsEnabled = settings['notificationsEnabled'] ?? true;
+            _gameReminders = settings['gameReminders'] ?? true;
+            _friendRequests = settings['friendRequests'] ?? true;
+            _gameInvites = settings['gameInvites'] ?? true;
+            _gameUpdates = settings['gameUpdates'] ?? true;
+            _isLoading = false;
+          });
+        }
+      } catch (e) {
+        // Settings will use defaults
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+          });
+        }
+      }
+    } else {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -39,22 +69,60 @@ class _NotificationSettingsScreenState
     setState(() {
       _notificationsEnabled = value;
     });
+    
+    final settingsActions = ref.read(notificationSettingsActionsProvider);
+    if (settingsActions != null) {
+      try {
+        await settingsActions.setNotificationsEnabled(value);
+      } catch (e) {
+        // Revert on error
+        if (mounted) {
+          setState(() {
+            _notificationsEnabled = !value;
+          });
+        }
+      }
+    }
   }
 
   Future<void> _toggleCategory(String category, bool value) async {
-    // Settings are stored in local state only (no persistence implemented)
-    // This method is called but doesn't persist anywhere
+    final settingsActions = ref.read(notificationSettingsActionsProvider);
+    if (settingsActions != null) {
+      try {
+        await settingsActions.setCategory(category, value);
+      } catch (e) {
+        // Revert on error - determine which state to revert based on category
+        if (mounted) {
+          setState(() {
+            switch (category) {
+              case 'game_reminders':
+                _gameReminders = !value;
+                break;
+              case 'friend_requests':
+                _friendRequests = !value;
+                break;
+              case 'game_invites':
+                _gameInvites = !value;
+                break;
+              case 'game_updates':
+                _gameUpdates = !value;
+                break;
+            }
+          });
+        }
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        leadingWidth: 48,
+        leading: const AppBackButton(),
         title: Text('settings_notifications'.tr()),
         backgroundColor: AppColors.white,
-        foregroundColor: AppColors.text,
         elevation: 0,
-        centerTitle: true,
       ),
       backgroundColor: AppColors.background,
       body: _isLoading
@@ -125,19 +193,6 @@ class _NotificationSettingsScreenState
                         ),
                         const SizedBox(height: 16),
                         _buildCategoryToggle(
-                          icon: Icons.schedule,
-                          title: 'settings_notif_game_reminders'.tr(),
-                          description: 'settings_notif_reminders_desc'.tr(),
-                          value: _gameReminders,
-                          onChanged: (value) {
-                            setState(() {
-                              _gameReminders = value;
-                            });
-                            _toggleCategory('game_reminders', value);
-                          },
-                        ),
-                        const SizedBox(height: 12),
-                        _buildCategoryToggle(
                           icon: Icons.people,
                           title: 'settings_notif_friend_requests'.tr(),
                           description: 'settings_notif_friends_desc'.tr(),
@@ -160,6 +215,19 @@ class _NotificationSettingsScreenState
                               _gameInvites = value;
                             });
                             _toggleCategory('game_invites', value);
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                        _buildCategoryToggle(
+                          icon: Icons.schedule,
+                          title: 'settings_notif_game_reminders'.tr(),
+                          description: 'settings_notif_reminders_desc'.tr(),
+                          value: _gameReminders,
+                          onChanged: (value) {
+                            setState(() {
+                              _gameReminders = value;
+                            });
+                            _toggleCategory('game_reminders', value);
                           },
                         ),
                         const SizedBox(height: 12),

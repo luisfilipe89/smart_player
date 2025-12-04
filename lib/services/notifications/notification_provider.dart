@@ -5,6 +5,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:move_young/navigation/main_scaffold.dart';
 import 'package:move_young/navigation/deep_links.dart';
 import 'package:move_young/navigation/route_registry.dart';
+import 'package:move_young/services/system/notification_settings_provider.dart';
 
 // Flutter Local Notifications plugin provider
 final flutterLocalNotificationsProvider =
@@ -126,8 +127,9 @@ final fcmTokenProvider = FutureProvider.autoDispose<String?>((ref) async {
 // Helper class for notification actions
 class NotificationActions {
   final NotificationServiceInstance _notificationService;
+  final NotificationSettingsActions? _settingsActions;
 
-  NotificationActions(this._notificationService);
+  NotificationActions(this._notificationService, this._settingsActions);
 
   Future<void> initialize({
     Function(Map<String, dynamic>)? onDeepLinkNavigation,
@@ -152,12 +154,32 @@ class NotificationActions {
         body: body,
         payload: payload,
       );
-  Future<void> sendFriendRequestNotification(String toUid, String fromUid) =>
-      _notificationService.sendFriendRequestNotification(toUid, fromUid);
-  Future<void> sendFriendAcceptedNotification(String toUid, String fromUid) =>
-      _notificationService.sendFriendAcceptedNotification(toUid, fromUid);
-  Future<void> sendGameReminderNotification(String gameId, DateTime gameTime) =>
-      _notificationService.sendGameReminderNotification(gameId, gameTime);
+  Future<void> sendFriendRequestNotification(String toUid, String fromUid) async {
+    // Check if friend request notifications are enabled
+    if (_settingsActions != null && 
+        !_settingsActions!.isNotificationTypeEnabled('friend_requests')) {
+      return; // User has disabled friend request notifications
+    }
+    await _notificationService.sendFriendRequestNotification(toUid, fromUid);
+  }
+  
+  Future<void> sendFriendAcceptedNotification(String toUid, String fromUid) async {
+    // Check if friend request notifications are enabled (friend accepted is part of friend requests)
+    if (_settingsActions != null && 
+        !_settingsActions!.isNotificationTypeEnabled('friend_requests')) {
+      return; // User has disabled friend request notifications
+    }
+    await _notificationService.sendFriendAcceptedNotification(toUid, fromUid);
+  }
+  
+  Future<void> sendGameReminderNotification(String gameId, DateTime gameTime) async {
+    // Check if game reminder notifications are enabled
+    if (_settingsActions != null && 
+        !_settingsActions!.isNotificationTypeEnabled('game_reminders')) {
+      return; // User has disabled game reminder notifications
+    }
+    await _notificationService.sendGameReminderNotification(gameId, gameTime);
+  }
   Future<void> sendFriendRemovedNotification({
     required String removedUserUid,
     required String removerUid,
@@ -166,14 +188,28 @@ class NotificationActions {
         removedUserUid: removedUserUid,
         removerUid: removerUid,
       );
-  Future<void> sendGameEditedNotification(String gameId) =>
-      _notificationService.sendGameEditedNotification(gameId);
-  Future<void> sendGameCancelledNotification(String gameId) =>
-      _notificationService.sendGameCancelledNotification(gameId);
+  Future<void> sendGameEditedNotification(String gameId) async {
+    // Check if game update notifications are enabled
+    if (_settingsActions != null && 
+        !_settingsActions!.isNotificationTypeEnabled('game_updates')) {
+      return; // User has disabled game update notifications
+    }
+    await _notificationService.sendGameEditedNotification(gameId);
+  }
+  
+  Future<void> sendGameCancelledNotification(String gameId) async {
+    // Check if game update notifications are enabled
+    if (_settingsActions != null && 
+        !_settingsActions!.isNotificationTypeEnabled('game_updates')) {
+      return; // User has disabled game update notifications
+    }
+    await _notificationService.sendGameCancelledNotification(gameId);
+  }
 }
 
 // Notification actions provider (for notification operations)
 final notificationActionsProvider = Provider<NotificationActions>((ref) {
   final notificationService = ref.watch(notificationServiceProvider);
-  return NotificationActions(notificationService);
+  final settingsActions = ref.watch(notificationSettingsActionsProvider);
+  return NotificationActions(notificationService, settingsActions);
 });

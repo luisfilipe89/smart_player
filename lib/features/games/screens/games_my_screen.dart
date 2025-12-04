@@ -834,13 +834,13 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
               children: [
                 const SizedBox(height: 24),
                 Expanded(
-                  child: myGamesAsync.when(
-                    loading: () => const Center(child: CircularProgressIndicator()),
-                    error: (error, stack) => ErrorRetryWidget(
-                      message: myGamesAsync.errorMessage ?? 'Failed to load games',
-                      onRetry: _refreshData,
-                    ),
-                    data: (games) => Container(
+            child: myGamesAsync.when(
+              loading: () => const Center(child: CircularProgressIndicator()),
+              error: (error, stack) => ErrorRetryWidget(
+                message: myGamesAsync.errorMessage ?? 'Failed to load games',
+                onRetry: _refreshData,
+              ),
+              data: (games) => Container(
                 decoration: BoxDecoration(
                   color: AppColors.white,
                   borderRadius: BorderRadius.circular(AppRadius.container),
@@ -926,7 +926,7 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
                     ],
                   ),
                 ),
-                    ),
+              ),
                   ),
                 ),
               ],

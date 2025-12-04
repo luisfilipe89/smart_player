@@ -5,10 +5,13 @@ import 'package:move_young/theme/tokens.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:move_young/widgets/app_back_button.dart';
 import 'package:move_young/services/system/haptics_provider.dart';
-import 'package:move_young/services/system/accessibility_provider.dart';
 import 'package:move_young/features/settings/screens/notification_settings_screen.dart';
 import 'package:move_young/models/infrastructure/service_error.dart';
 import 'package:move_young/services/firebase_error_handler.dart';
+import 'package:move_young/features/profile/services/profile_settings_provider.dart';
+import 'package:move_young/providers/infrastructure/firebase_providers.dart';
+import 'package:move_young/db/db_paths.dart';
+import 'package:move_young/utils/logger.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -20,16 +23,67 @@ class SettingsScreen extends ConsumerStatefulWidget {
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   bool _submitting = false;
   bool _haptics = true;
-  bool _highContrast = false;
+  String _visibility = 'public';
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadProfileSettings();
+      _loadHapticsSettings();
+    });
+  }
+
+  Future<void> _loadHapticsSettings() async {
+    final hapticsActions = ref.read(hapticsActionsProvider);
+    if (hapticsActions != null) {
+      try {
+        final hapticsService = ref.read(hapticsServiceProvider);
+        if (hapticsService != null) {
+          // Initialize the service to load saved preferences
+          await hapticsService.initialize();
+          final isEnabled = await hapticsActions.isEnabled();
+          if (mounted) {
+            setState(() {
+              _haptics = isEnabled;
+            });
+          }
+        }
+      } catch (e) {
+        // Settings will use defaults
+      }
+    }
+  }
 
   @override
   void dispose() {
     super.dispose();
   }
 
+  Future<void> _loadProfileSettings() async {
+    final uid = ref.read(currentUserIdProvider);
+    if (uid == null) return;
+
+    final profileActions = ref.read(profileSettingsActionsProvider);
+    try {
+      final visibility = await profileActions.getVisibility(uid);
+
+      if (mounted) {
+        setState(() {
+          _visibility = visibility;
+        });
+      }
+    } catch (e) {
+      // Settings will use defaults
+    }
+  }
+
   Future<void> _deleteAccount({bool allowReauthRetry = true}) async {
     setState(() => _submitting = true);
     try {
+      // Get user ID before deletion (will be null after deletion)
+      final uid = ref.read(currentUserIdProvider);
+      
       final authActions = ref.read(authActionsProvider);
       final result = await authActions.deleteAccount();
       if (!mounted) return;
@@ -37,6 +91,18 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       final navigator = Navigator.of(context);
 
       if (result.isSuccess) {
+        // Delete user's database entry to trigger cleanup Cloud Function
+        if (uid != null) {
+          try {
+            final database = ref.read(firebaseDatabaseProvider);
+            await database.ref('${DbPaths.users}/$uid').remove();
+          } catch (e) {
+            // Log error but don't fail the deletion - auth is already deleted
+            // The database entry will remain, but auth is gone
+            NumberedLogger.w('Failed to delete user database entry: $e');
+          }
+        }
+        
         scaffoldMessenger.showSnackBar(
           SnackBar(content: Text('settings_account_deleted'.tr())),
         );
@@ -262,6 +328,119 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     await _deleteAccount();
   }
 
+  Future<void> _handleVisibilityChange(String newVisibility) async {
+    final uid = ref.read(currentUserIdProvider);
+    if (uid == null) return;
+
+    try {
+      final profileActions = ref.read(profileSettingsActionsProvider);
+      await profileActions.setVisibility(newVisibility);
+      
+      if (mounted) {
+        setState(() {
+          _visibility = newVisibility;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('settings_prefs_saved'.tr())),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('settings_save_error'.tr()),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _showVisibilityDialog() async {
+    final selectedVisibility = ValueNotifier<String>(_visibility);
+    
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('settings_profile_visibility'.tr()),
+        content: ValueListenableBuilder<String>(
+          valueListenable: selectedVisibility,
+          builder: (context, value, child) => Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Icon(
+                  value == 'public' ? Icons.radio_button_checked : Icons.radio_button_unchecked,
+                  color: value == 'public' ? AppColors.primary : AppColors.grey,
+                ),
+                title: Text('settings_profile_public'.tr()),
+                subtitle: Text('settings_profile_public_desc'.tr()),
+                onTap: () {
+                  selectedVisibility.value = 'public';
+                },
+              ),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Icon(
+                  value == 'friends' ? Icons.radio_button_checked : Icons.radio_button_unchecked,
+                  color: value == 'friends' ? AppColors.primary : AppColors.grey,
+                ),
+                title: Text('settings_profile_friends'.tr()),
+                subtitle: Text('settings_profile_friends_desc'.tr()),
+                onTap: () {
+                  selectedVisibility.value = 'friends';
+                },
+              ),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Icon(
+                  value == 'private' ? Icons.radio_button_checked : Icons.radio_button_unchecked,
+                  color: value == 'private' ? AppColors.primary : AppColors.grey,
+                ),
+                title: Text('settings_profile_private'.tr()),
+                subtitle: Text('settings_profile_private_desc'.tr()),
+                onTap: () {
+                  selectedVisibility.value = 'private';
+                },
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text('cancel'.tr()),
+          ),
+          ValueListenableBuilder<String>(
+            valueListenable: selectedVisibility,
+            builder: (context, value, child) => ElevatedButton(
+              onPressed: () => Navigator.of(context).pop(value),
+              child: Text('ok'.tr()),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (result != null && result != _visibility) {
+      await _handleVisibilityChange(result);
+    }
+  }
+
+  String _getVisibilityLabel() {
+    switch (_visibility) {
+      case 'public':
+        return 'settings_profile_public'.tr();
+      case 'friends':
+        return 'settings_profile_friends'.tr();
+      case 'private':
+        return 'settings_profile_private'.tr();
+      default:
+        return 'settings_profile_public'.tr();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     // Watch haptics enabled state reactively
@@ -272,23 +451,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         }
       });
     });
-    // Watch high contrast enabled state reactively
-    ref.listen(highContrastModeProvider, (previous, next) {
-      next.whenData((isEnabled) {
-        if (mounted && isEnabled != _highContrast) {
-          setState(() => _highContrast = isEnabled);
-        }
-      });
-    });
-    // Initialize high contrast state from provider
-    final currentHighContrast = ref.read(isHighContrastEnabledProvider);
-    if (_highContrast != currentHighContrast) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          setState(() => _highContrast = currentHighContrast);
-        }
-      });
-    }
+
     return Scaffold(
       appBar: AppBar(
         leadingWidth: 48,
@@ -296,7 +459,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         title: Text('settings'.tr()),
         backgroundColor: AppColors.white,
         elevation: 0,
-        actions: const [],
       ),
       body: SafeArea(
         child: ListView(
@@ -305,31 +467,47 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             bottom: AppSpacing.lg,
           ),
           children: [
-            const SizedBox(height: AppSpacing.lg),
             _buildSectionCard(
-              title: 'settings_notifications'.tr(),
-              child: ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.notifications_outlined),
-                title: Text('settings_notifications'.tr()),
-                subtitle: Text('settings_notifications_enabled_desc'.tr()),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const NotificationSettingsScreen(),
-                    ),
-                  );
-                },
+              child: Column(
+                children: [
+                  _buildLinkTile(
+                    icon: Icons.notifications_outlined,
+                    title: 'settings_notifications'.tr(),
+                    subtitle: 'settings_notifications_enabled_desc'.tr(),
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const NotificationSettingsScreen(),
+                        ),
+                      );
+                    },
+                    trailingChevron: true,
+                  ),
+                ],
               ),
             ),
             const SizedBox(height: AppSpacing.lg),
             _buildSectionCard(
-              title: 'settings_games_preferences'.tr(),
               child: Column(
                 children: [
-                  SwitchListTile(
+                  _buildLinkTile(
+                    icon: Icons.visibility_outlined,
+                    title: 'settings_profile_visibility'.tr(),
+                    subtitle: _getVisibilityLabel(),
+                    onTap: _showVisibilityDialog,
+                    trailingChevron: true,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            _buildSectionCard(
+              child: Column(
+                children: [
+                  _buildSwitchTile(
+                    icon: Icons.vibration,
+                    title: 'settings_haptics'.tr(),
                     value: _haptics,
                     onChanged: (v) async {
                       setState(() => _haptics = v);
@@ -338,41 +516,22 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         await hapticsActions.setEnabled(v);
                       }
                     },
-                    title: Text('settings_haptics'.tr()),
-                    contentPadding: EdgeInsets.zero,
-                  ),
-                  SwitchListTile(
-                    value: _highContrast,
-                    onChanged: (v) async {
-                      setState(() => _highContrast = v);
-                      final accessibilityActions =
-                          ref.read(accessibilityActionsProvider);
-                      if (accessibilityActions != null) {
-                        await accessibilityActions.setHighContrastEnabled(v);
-                      }
-                    },
-                    title: Text('settings_high_contrast'.tr()),
-                    subtitle: Text('settings_high_contrast_desc'.tr()),
-                    contentPadding: EdgeInsets.zero,
                   ),
                 ],
               ),
             ),
             const SizedBox(height: AppSpacing.lg),
             _buildSectionCard(
-              title: 'settings_account_actions'.tr(),
-              child: SizedBox(
-                width: double.infinity,
-                height: 48,
-                child: OutlinedButton.icon(
-                  onPressed: _submitting ? null : _handleDeleteTapped,
-                  icon: const Icon(Icons.delete_forever, color: Colors.red),
-                  label: Text('settings_delete_account'.tr()),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.red,
-                    side: const BorderSide(color: Colors.red),
+              child: Column(
+                children: [
+                  _buildLinkTile(
+                    icon: Icons.delete_forever_outlined,
+                    title: 'settings_delete_account'.tr(),
+                    onTap: _submitting ? null : _handleDeleteTapped,
+                    iconColor: AppColors.red,
+                    titleColor: AppColors.red,
                   ),
-                ),
+                ],
               ),
             ),
           ],
@@ -381,7 +540,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
   }
 
-  Widget _buildSectionCard({required String title, required Widget child}) {
+  Widget _buildSectionCard({String? title, required Widget child}) {
     return Container(
       decoration: BoxDecoration(
         color: AppColors.white,
@@ -392,10 +551,57 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title, style: AppTextStyles.h3),
-          const SizedBox(height: AppSpacing.sm),
+          if (title != null) ...[
+            Text(title, style: AppTextStyles.h3),
+            const SizedBox(height: AppSpacing.sm),
+          ],
           child,
         ],
+      ),
+    );
+  }
+
+  Widget _buildLinkTile({
+    required IconData icon,
+    required String title,
+    String? subtitle,
+    required VoidCallback? onTap,
+    bool trailingChevron = false,
+    Color? iconColor,
+    Color? titleColor,
+  }) {
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      leading: Icon(icon, color: iconColor ?? AppColors.primary),
+      title: Text(title, style: AppTextStyles.body.copyWith(
+        color: titleColor,
+      )),
+      subtitle: subtitle != null
+          ? Text(subtitle, style: AppTextStyles.small)
+          : null,
+      trailing: trailingChevron ? const Icon(Icons.chevron_right) : null,
+      onTap: onTap,
+    );
+  }
+
+  Widget _buildSwitchTile({
+    required IconData icon,
+    required String title,
+    String? subtitle,
+    required bool value,
+    required ValueChanged<bool>? onChanged,
+  }) {
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      leading: Icon(icon, color: AppColors.primary),
+      title: Text(title, style: AppTextStyles.body),
+      subtitle: subtitle != null
+          ? Text(subtitle, style: AppTextStyles.small)
+          : null,
+      trailing: Switch(
+        value: value,
+        onChanged: onChanged,
+        activeColor: AppColors.primary,
       ),
     );
   }

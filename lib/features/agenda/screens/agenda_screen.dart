@@ -10,6 +10,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:move_young/features/agenda/models/event_model.dart';
 import 'package:move_young/features/agenda/services/events_provider.dart';
 import 'package:move_young/features/agenda/services/cached_events_provider.dart';
+import 'package:move_young/features/agenda/utils/age_group_parser.dart';
+import 'package:move_young/features/agenda/utils/cost_parser.dart';
 import 'package:move_young/theme/_theme.dart';
 import 'package:move_young/widgets/app_back_button.dart';
 import 'package:move_young/widgets/error_retry_widget.dart';
@@ -34,6 +36,9 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
   List<Event> filteredEvents = [];
 
   String _searchQuery = '';
+  AgeGroup? _selectedAgeGroup;
+  bool? _isRecurringFilter; // null = all, true = recurring, false = one-time
+  CostType? _selectedCostType;
   Timer? _debounce;
   bool _didInit = false;
   _LoadState _loadState = _LoadState.idle;
@@ -262,9 +267,33 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
   // --------------------------------------------
   void _applyFilters() {
     final events = allEvents.where((event) {
+      // Search filter
       final queryMatch =
           event.title.toLowerCase().contains(_searchQuery.toLowerCase());
       if (!queryMatch) return false;
+
+      // Age group filter
+      if (_selectedAgeGroup != null) {
+        final matchesAge = AgeGroupParser.matchesAgeGroup(
+          event.targetGroup,
+          _selectedAgeGroup,
+        );
+        if (!matchesAge) return false;
+      }
+
+      // Recurring filter
+      if (_isRecurringFilter != null) {
+        if (event.isRecurring != _isRecurringFilter) return false;
+      }
+
+      // Cost filter
+      if (_selectedCostType != null) {
+        final matchesCost = CostParser.matchesCostType(
+          event.cost,
+          _selectedCostType,
+        );
+        if (!matchesCost) return false;
+      }
 
       return true;
     }).toList();
@@ -530,9 +559,48 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
           filled: true,
           fillColor: AppColors.lightgrey,
           prefixIcon: const Icon(Icons.search),
-          suffixIcon: (_searchQuery.isEmpty)
-              ? null
-              : Semantics(
+          suffixIcon: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Semantics(
+                label: 'Open filters',
+                button: true,
+                child: IconButton(
+                  icon: Stack(
+                    children: [
+                      const Icon(Icons.tune),
+                      if (_getActiveFilterCount() > 0)
+                        Positioned(
+                          right: 0,
+                          top: 0,
+                          child: Container(
+                            padding: const EdgeInsets.all(2),
+                            decoration: const BoxDecoration(
+                              color: AppColors.red,
+                              shape: BoxShape.circle,
+                            ),
+                            constraints: const BoxConstraints(
+                              minWidth: 16,
+                              minHeight: 16,
+                            ),
+                            child: Text(
+                              '${_getActiveFilterCount()}',
+                              style: const TextStyle(
+                                color: AppColors.white,
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                  onPressed: () => _showFilterBottomSheet(),
+                ),
+              ),
+              if (_searchQuery.isNotEmpty)
+                Semantics(
                   label: 'Clear search',
                   button: true,
                   child: IconButton(
@@ -546,12 +614,49 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
                     },
                   ),
                 ),
+            ],
+          ),
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(AppRadius.image),
             borderSide: BorderSide.none,
           ),
         ),
         onChanged: _onSearchChanged,
+      ),
+    );
+  }
+
+  bool _hasActiveFilters() {
+    return _selectedAgeGroup != null ||
+        _isRecurringFilter != null ||
+        _selectedCostType != null;
+  }
+
+  int _getActiveFilterCount() {
+    int count = 0;
+    if (_selectedAgeGroup != null) count++;
+    if (_isRecurringFilter != null) count++;
+    if (_selectedCostType != null) count++;
+    return count;
+  }
+
+  void _showFilterBottomSheet() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => _FilterBottomSheet(
+        selectedAgeGroup: _selectedAgeGroup,
+        isRecurringFilter: _isRecurringFilter,
+        selectedCostType: _selectedCostType,
+        onApply: (ageGroup, isRecurring, costType) {
+          setState(() {
+            _selectedAgeGroup = ageGroup;
+            _isRecurringFilter = isRecurring;
+            _selectedCostType = costType;
+            _applyFilters();
+          });
+        },
       ),
     );
   }
@@ -770,7 +875,7 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
         key: const PageStorageKey('agenda'),
         keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
         slivers: [
-          // Pinned header (headline + search + chips)
+          // Pinned header (headline + search + filters)
           SliverPersistentHeader(
             pinned: true,
             delegate: _PinnedHeaderDelegate(
@@ -782,7 +887,6 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
                     padding: AppPaddings.symmHorizontalReg,
                     child: _buildSearchField(),
                   ),
-                  const SizedBox(height: AppHeights.small),
                 ],
               ),
             ),
@@ -836,21 +940,24 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
                         style: AppTextStyles.cardTitle,
                       ),
                       const SizedBox(height: AppHeights.small),
-                      if (_searchQuery.isNotEmpty)
+                      if (_searchQuery.isNotEmpty || _selectedAgeGroup != null)
                         Text(
                           'empty_state_adjust_search_filters'.tr(),
                           textAlign: TextAlign.center,
                           style: AppTextStyles.bodyMuted,
                         ),
-                      if (_searchQuery.isNotEmpty) ...[
+                      if (_searchQuery.isNotEmpty || _hasActiveFilters()) ...[
                         const SizedBox(height: AppHeights.reg),
                         Semantics(
-                          label: 'Clear search',
+                          label: 'Clear filters',
                           button: true,
                           child: TextButton.icon(
                             onPressed: () {
                               setState(() {
                                 _searchQuery = '';
+                                _selectedAgeGroup = null;
+                                _isRecurringFilter = null;
+                                _selectedCostType = null;
                                 _searchController.clear();
                                 _applyFilters();
                               });
@@ -867,7 +974,11 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
             )
           else
             SliverPadding(
-              padding: AppPaddings.symmHorizontalReg,
+              padding: const EdgeInsets.only(
+                top: 12, // Match bottom margin between cards (from AppPaddings.topBottom)
+                left: 16, // From AppPaddings.symmHorizontalReg
+                right: 16, // From AppPaddings.symmHorizontalReg
+              ),
               sliver: SliverList(
                 delegate: SliverChildBuilderDelegate(
                   (context, index) => _buildEventCard(filteredEvents[index]),
@@ -934,9 +1045,9 @@ class _PinnedHeaderDelegate extends SliverPersistentHeaderDelegate {
 
   @override
   double get maxExtent =>
-      140; // Header: PanelHeader (~58px) + Search field (~56px) + spacing (~4px) + buffer
+      128; // PanelHeader (~58px) + Search field (~56px) + spacing (~14px buffer)
   @override
-  double get minExtent => 140;
+  double get minExtent => 128;
 
   @override
   Widget build(
@@ -945,11 +1056,228 @@ class _PinnedHeaderDelegate extends SliverPersistentHeaderDelegate {
       color: AppColors.white,
       surfaceTintColor: Colors.transparent,
       elevation: overlapsContent ? 4 : 0,
-      child: child,
+      child: ClipRect(
+        child: child,
+      ),
     );
   }
 
   @override
   bool shouldRebuild(covariant SliverPersistentHeaderDelegate oldDelegate) =>
       true;
+}
+
+// --------------------------------------------
+// Filter Bottom Sheet
+// --------------------------------------------
+class _FilterBottomSheet extends StatefulWidget {
+  final AgeGroup? selectedAgeGroup;
+  final bool? isRecurringFilter;
+  final CostType? selectedCostType;
+  final void Function(AgeGroup?, bool?, CostType?) onApply;
+
+  const _FilterBottomSheet({
+    required this.selectedAgeGroup,
+    required this.isRecurringFilter,
+    required this.selectedCostType,
+    required this.onApply,
+  });
+
+  @override
+  State<_FilterBottomSheet> createState() => _FilterBottomSheetState();
+}
+
+class _FilterBottomSheetState extends State<_FilterBottomSheet> {
+  late AgeGroup? _selectedAgeGroup;
+  late bool? _isRecurringFilter;
+  late CostType? _selectedCostType;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedAgeGroup = widget.selectedAgeGroup;
+    _isRecurringFilter = widget.isRecurringFilter;
+    _selectedCostType = widget.selectedCostType;
+  }
+
+  String _getAgeGroupLabel(AgeGroup ageGroup) {
+    switch (ageGroup) {
+      case AgeGroup.all:
+        return 'age_group_all'.tr();
+      case AgeGroup.toddlers:
+        return 'age_group_toddlers'.tr();
+      case AgeGroup.kids:
+        return 'age_group_kids'.tr();
+      case AgeGroup.youth:
+        return 'age_group_youth'.tr();
+      case AgeGroup.young:
+        return 'age_group_young'.tr();
+      case AgeGroup.adult:
+        return 'age_group_adult'.tr();
+      case AgeGroup.senior:
+        return 'age_group_senior'.tr();
+      case AgeGroup.seniorPlus:
+        return 'age_group_senior_plus'.tr();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        color: AppColors.white,
+        borderRadius: BorderRadius.only(
+          topLeft: Radius.circular(20),
+          topRight: Radius.circular(20),
+        ),
+      ),
+      child: SafeArea(
+        child: Padding(
+          padding: AppPaddings.allReg,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Handle bar
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: 16),
+                  decoration: BoxDecoration(
+                    color: AppColors.grey.withValues(alpha: 0.3),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+
+              // Title
+              Text(
+                'filters'.tr(),
+                style: AppTextStyles.h3,
+              ),
+              const SizedBox(height: AppHeights.reg),
+
+              // Age Group Filter
+              Text(
+                'age_group'.tr(),
+                style: AppTextStyles.cardTitle,
+              ),
+              const SizedBox(height: AppHeights.small),
+              Wrap(
+                spacing: AppWidths.small,
+                runSpacing: AppHeights.small,
+                children: [
+                  for (final ageGroup in AgeGroup.values)
+                    FilterChip(
+                      label: Text(_getAgeGroupLabel(ageGroup)),
+                      selected: _selectedAgeGroup == ageGroup,
+                      onSelected: (selected) {
+                        setState(() {
+                          _selectedAgeGroup = selected ? ageGroup : null;
+                        });
+                      },
+                      selectedColor: AppColors.blue.withValues(alpha: 0.2),
+                      checkmarkColor: AppColors.blue,
+                    ),
+                ],
+              ),
+              const SizedBox(height: AppHeights.reg),
+
+              // Recurring Filter
+              Text(
+                'event_type'.tr(),
+                style: AppTextStyles.cardTitle,
+              ),
+              const SizedBox(height: AppHeights.small),
+              Wrap(
+                spacing: AppWidths.small,
+                runSpacing: AppHeights.small,
+                children: [
+                  FilterChip(
+                    label: Text('recurring_events'.tr()),
+                    selected: _isRecurringFilter == true,
+                    onSelected: (selected) {
+                      setState(() {
+                        _isRecurringFilter = selected ? true : null;
+                      });
+                    },
+                    selectedColor: AppColors.blue.withValues(alpha: 0.2),
+                    checkmarkColor: AppColors.blue,
+                  ),
+                  FilterChip(
+                    label: Text('one_time_events'.tr()),
+                    selected: _isRecurringFilter == false,
+                    onSelected: (selected) {
+                      setState(() {
+                        _isRecurringFilter = selected ? false : null;
+                      });
+                    },
+                    selectedColor: AppColors.blue.withValues(alpha: 0.2),
+                    checkmarkColor: AppColors.blue,
+                  ),
+                ],
+              ),
+              const SizedBox(height: AppHeights.reg),
+
+              // Cost Filter
+              Text(
+                'cost'.tr(),
+                style: AppTextStyles.cardTitle,
+              ),
+              const SizedBox(height: AppHeights.small),
+              Wrap(
+                spacing: AppWidths.small,
+                runSpacing: AppHeights.small,
+                children: [
+                  FilterChip(
+                    label: Text('free'.tr()),
+                    selected: _selectedCostType == CostType.free,
+                    onSelected: (selected) {
+                      setState(() {
+                        _selectedCostType = selected ? CostType.free : null;
+                      });
+                    },
+                    selectedColor: AppColors.blue.withValues(alpha: 0.2),
+                    checkmarkColor: AppColors.blue,
+                  ),
+                  FilterChip(
+                    label: Text('paid'.tr()),
+                    selected: _selectedCostType == CostType.paid,
+                    onSelected: (selected) {
+                      setState(() {
+                        _selectedCostType = selected ? CostType.paid : null;
+                      });
+                    },
+                    selectedColor: AppColors.blue.withValues(alpha: 0.2),
+                    checkmarkColor: AppColors.blue,
+                  ),
+                ],
+              ),
+              const SizedBox(height: AppHeights.reg),
+
+              // Apply Button
+              ElevatedButton(
+                onPressed: () {
+                  widget.onApply(
+                    _selectedAgeGroup,
+                    _isRecurringFilter,
+                    _selectedCostType,
+                  );
+                  Navigator.of(context).pop();
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.blue,
+                  foregroundColor: AppColors.white,
+                  padding: AppPaddings.symmReg,
+                ),
+                child: Text('apply_filters'.tr()),
+              ),
+              const SizedBox(height: AppHeights.small),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }

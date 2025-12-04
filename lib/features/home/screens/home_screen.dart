@@ -201,7 +201,20 @@ class _HomeScreenNewState extends ConsumerState<HomeScreenNew> {
           icon: Icon(Icons.person_outline, color: AppColors.blackIcon),
           onPressed: () => _showUserMenu(context),
         ),
-        title: const Text('SMARTPLAYER'),
+        title: Row(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Text('SMARTPLAYER'),
+            const SizedBox(width: 8),
+            Image.asset(
+              'assets/images/logo.jpg',
+              height: 24,
+              width: 24,
+              fit: BoxFit.contain,
+            ),
+          ],
+        ),
         centerTitle: true,
         actions: [
           TextButton.icon(

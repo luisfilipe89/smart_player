@@ -80,7 +80,7 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> {
 
                     // Subtitle
                     Text(
-                      'join_sports_event'.tr(),
+                      'introduction'.tr(),
                       style: AppTextStyles.body.copyWith(
                         color: AppColors.grey,
                         fontSize: 16,
