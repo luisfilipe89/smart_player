@@ -3,6 +3,7 @@ import 'package:device_calendar/device_calendar.dart';
 import 'package:timezone/timezone.dart' as tz;
 import 'package:timezone/data/latest_all.dart' as tz_data;
 import 'package:move_young/features/games/models/game.dart';
+import 'package:move_young/features/agenda/models/event_model.dart' as agenda;
 import 'package:move_young/db/calendar_events_db.dart';
 
 class CalendarService {
@@ -391,6 +392,207 @@ class CalendarService {
       developer.log('Error getting all games in calendar: $e',
           name: 'CalendarService', error: e);
       return [];
+    }
+  }
+
+  // --------------------------------------------
+  // Event (Agenda) Calendar Methods
+  // Use event title as identifier (prefixed with "event_")
+  // --------------------------------------------
+
+  /// Get event identifier for database storage
+  static String _getEventId(String eventTitle) {
+    return 'event_$eventTitle';
+  }
+
+  /// Build description from agenda event
+  static String _buildEventDescription(agenda.Event event) {
+    final descriptionParts = <String>[];
+
+    // Add event details
+    descriptionParts.add('Target Group: ${event.targetGroup}');
+    descriptionParts.add('Cost: ${event.cost}');
+    descriptionParts.add('Date/Time: ${event.dateTime}');
+
+    // Add URL if available
+    if (event.url != null && event.url!.isNotEmpty) {
+      descriptionParts.add('More info: ${event.url}');
+    }
+
+    return descriptionParts.join('\n\n');
+  }
+
+  /// Parse dateTime string to DateTime, or return default
+  static DateTime _parseEventDateTime(String dateTimeStr) {
+    // Try to parse common date formats
+    final now = DateTime.now();
+    
+    // Try ISO format first
+    final isoParsed = DateTime.tryParse(dateTimeStr);
+    if (isoParsed != null) return isoParsed;
+
+    // For now, use today's date with a default time (18:00)
+    // Since event dateTime strings are often descriptive (e.g., "Every Monday")
+    return DateTime(now.year, now.month, now.day, 18, 0);
+  }
+
+  /// Add an agenda event to the device calendar
+  /// Returns event ID if successful, null otherwise
+  static Future<String?> addEventToCalendar(agenda.Event event) async {
+    try {
+      // Request permissions
+      final hasPermissions = await requestPermissions();
+      if (!hasPermissions) {
+        developer.log('Calendar permissions not granted',
+            name: 'CalendarService');
+        return null;
+      }
+
+      // Get default calendar
+      final calendar = await _getDefaultCalendar();
+      if (calendar == null) {
+        developer.log('No calendar available', name: 'CalendarService');
+        return null;
+      }
+
+      // Parse dateTime or use default
+      final startDateTime = _parseEventDateTime(event.dateTime);
+      // Default duration: 2 hours for events
+      final endDateTime = startDateTime.add(const Duration(hours: 2));
+
+      // Build description
+      final description = _buildEventDescription(event);
+
+      // Convert DateTime to TZDateTime
+      tz.TZDateTime startTZ;
+      tz.TZDateTime endTZ;
+      try {
+        final local = tz.local;
+        startTZ = tz.TZDateTime.from(startDateTime, local);
+        endTZ = tz.TZDateTime.from(endDateTime, local);
+      } catch (e) {
+        // Fallback to UTC if local timezone not available
+        final utc = tz.UTC;
+        startTZ = tz.TZDateTime.from(startDateTime, utc);
+        endTZ = tz.TZDateTime.from(endDateTime, utc);
+      }
+
+      // Create calendar event
+      final calendarEvent = Event(calendar.id);
+      calendarEvent.title = event.title;
+      calendarEvent.description = description;
+      calendarEvent.location = event.location;
+      calendarEvent.start = startTZ;
+      calendarEvent.end = endTZ;
+      calendarEvent.reminders = [
+        Reminder(
+          minutes: 15, // 15 minutes before
+        ),
+      ];
+
+      // Add to calendar
+      final createEventResult =
+          await _deviceCalendarPlugin.createOrUpdateEvent(calendarEvent);
+      if (createEventResult != null &&
+          createEventResult.isSuccess &&
+          createEventResult.data != null) {
+        final eventId = createEventResult.data!;
+        if (eventId.isEmpty) {
+          developer.log('Event ID is empty for event ${event.title}',
+              name: 'CalendarService');
+          return null;
+        }
+        developer.log(
+            'Event ${event.title} added to calendar with event ID: $eventId',
+            name: 'CalendarService');
+
+        // Store event ID for tracking (use prefixed title as identifier)
+        try {
+          final calendarId = calendar.id;
+          if (calendarId != null && calendarId.isNotEmpty) {
+            final eventIdentifier = _getEventId(event.title);
+            final success = await _db?.insertCalendarEvent(
+                    eventIdentifier, eventId, calendarId) ??
+                false;
+            if (!success) {
+              developer.log('Failed to store calendar event ID in database',
+                  name: 'CalendarService');
+            }
+          } else {
+            developer.log('Calendar ID is null or empty',
+                name: 'CalendarService');
+            return eventId; // Return eventId even if we can't store it
+          }
+        } catch (e) {
+          developer.log('Error storing calendar event ID: $e',
+              name: 'CalendarService', error: e);
+        }
+
+        return eventId;
+      } else {
+        developer.log(
+            'Failed to add event ${event.title} to calendar: ${createEventResult?.errors ?? "Unknown error"}',
+            name: 'CalendarService');
+        return null;
+      }
+    } catch (e, stackTrace) {
+      developer.log('Error adding event to calendar: $e',
+          name: 'CalendarService', error: e, stackTrace: stackTrace);
+      return null;
+    }
+  }
+
+  /// Remove agenda event from calendar
+  static Future<bool> removeEventFromCalendar(String eventTitle) async {
+    try {
+      final eventIdentifier = _getEventId(eventTitle);
+      // Get stored event ID
+      final eventInfo = await _db?.getCalendarEvent(eventIdentifier);
+      if (eventInfo == null) {
+        developer.log('No calendar event found for event $eventTitle',
+            name: 'CalendarService');
+        return false;
+      }
+
+      // Delete event from calendar
+      final deleteResult = await _deviceCalendarPlugin.deleteEvent(
+        eventInfo.calendarId,
+        eventInfo.eventId,
+      );
+
+      if (deleteResult.isSuccess) {
+        developer.log('Event $eventTitle calendar event deleted successfully',
+            name: 'CalendarService');
+        // Remove from tracking
+        await _db?.deleteCalendarEvent(eventIdentifier);
+        return true;
+      } else {
+        developer.log('Failed to delete calendar event: ${deleteResult.errors}',
+            name: 'CalendarService');
+        // Remove from tracking anyway (event might have been deleted by user)
+        await _db?.deleteCalendarEvent(eventIdentifier);
+        return false;
+      }
+    } catch (e, stackTrace) {
+      developer.log('Error removing event from calendar: $e',
+          name: 'CalendarService', error: e, stackTrace: stackTrace);
+      // Remove from tracking on error (event might have been deleted by user)
+      final eventIdentifier = _getEventId(eventTitle);
+      await _db?.deleteCalendarEvent(eventIdentifier);
+      return false;
+    }
+  }
+
+  /// Check if agenda event is added to calendar
+  static Future<bool> isEventInCalendar(String eventTitle) async {
+    try {
+      final eventIdentifier = _getEventId(eventTitle);
+      final eventInfo = await _db?.getCalendarEvent(eventIdentifier);
+      return eventInfo != null;
+    } catch (e) {
+      developer.log('Error checking if event is in calendar: $e',
+          name: 'CalendarService', error: e);
+      return false;
     }
   }
 }

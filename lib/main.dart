@@ -21,6 +21,7 @@ import 'package:move_young/utils/logger.dart';
 import 'package:move_young/services/notifications/notification_provider.dart';
 import 'package:move_young/services/calendar/calendar_sync_service.dart';
 import 'package:move_young/services/system/sync_provider.dart';
+import 'package:move_young/features/agenda/services/cached_events_provider.dart';
 
 // Global navigator key for navigation from notifications
 // Note: This is still needed for Firebase notification callbacks in background
@@ -331,6 +332,9 @@ class _MoveYoungAppState extends ConsumerState<MoveYoungApp>
         // Watch calendar sync provider to automatically sync calendar events
         // This provider watches games and syncs calendar events when games change
         ref.watch(calendarSyncProvider);
+        
+        // Watch events preload provider to preload events in background when user logs in
+        ref.watch(eventsPreloadProvider);
 
         // Initialize sync service after SharedPreferences is ready
         // Only initialize once (build() can be called multiple times)

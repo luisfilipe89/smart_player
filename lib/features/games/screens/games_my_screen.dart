@@ -793,11 +793,15 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
     final historicGames = historicGamesAsync.valueOrNull ?? [];
 
     return Scaffold(
+      backgroundColor: AppColors.white,
+      extendBodyBehindAppBar: true,
       appBar: AppBar(
+        leadingWidth: 48,
         leading: const AppBackButton(goHome: true),
         title: Text('my_games'.tr()),
-        backgroundColor: AppColors.white,
+        backgroundColor: Colors.transparent,
         elevation: 0,
+        centerTitle: true,
         bottom: TabBar(
           controller: _tab,
           labelColor: AppColors.primary,
@@ -821,18 +825,22 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
           ],
         ),
       ),
-      backgroundColor: AppColors.white,
       body: CachedDataIndicator(
         child: SafeArea(
           child: Padding(
             padding: AppPaddings.symmHorizontalReg,
-            child: myGamesAsync.when(
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (error, stack) => ErrorRetryWidget(
-                message: myGamesAsync.errorMessage ?? 'Failed to load games',
-                onRetry: _refreshData,
-              ),
-              data: (games) => Container(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const SizedBox(height: 24),
+                Expanded(
+                  child: myGamesAsync.when(
+                    loading: () => const Center(child: CircularProgressIndicator()),
+                    error: (error, stack) => ErrorRetryWidget(
+                      message: myGamesAsync.errorMessage ?? 'Failed to load games',
+                      onRetry: _refreshData,
+                    ),
+                    data: (games) => Container(
                 decoration: BoxDecoration(
                   color: AppColors.white,
                   borderRadius: BorderRadius.circular(AppRadius.container),
@@ -918,7 +926,10 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
                     ],
                   ),
                 ),
-              ),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ),

@@ -4,12 +4,12 @@ import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
-import 'package:move_young/services/cache/favorites_provider.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:move_young/features/agenda/models/event_model.dart';
 import 'package:move_young/features/agenda/services/events_provider.dart';
+import 'package:move_young/features/agenda/services/cached_events_provider.dart';
 import 'package:move_young/theme/_theme.dart';
 import 'package:move_young/widgets/app_back_button.dart';
 import 'package:move_young/widgets/error_retry_widget.dart';
@@ -28,15 +28,12 @@ class AgendaScreen extends ConsumerStatefulWidget {
 enum _LoadState { idle, loading, success, error }
 
 class _AgendaScreenState extends ConsumerState<AgendaScreen> {
-  Set<String> _favoriteTitles = {};
   final TextEditingController _searchController = TextEditingController();
 
   List<Event> allEvents = [];
   List<Event> filteredEvents = [];
 
   String _searchQuery = '';
-  bool _showRecurring = true;
-  bool _showOneTime = true;
   Timer? _debounce;
   bool _didInit = false;
   _LoadState _loadState = _LoadState.idle;
@@ -69,8 +66,37 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
     super.didChangeDependencies();
     if (!_didInit) {
       _didInit = true;
-      loadEvents();
-      _loadFavorites();
+      final currentLang = context.locale.languageCode;
+
+      // Check if events are already cached
+      final cachedEventsAsync = ref.read(cachedEventsProvider(currentLang));
+
+      if (cachedEventsAsync.hasValue &&
+          cachedEventsAsync.valueOrNull?.isNotEmpty == true) {
+        // Events are cached - use them immediately without loading state
+        final cachedEvents = cachedEventsAsync.value!;
+        NumberedLogger.d(
+            'AgendaScreen: Using cached events (${cachedEvents.length} events)');
+        setState(() {
+          allEvents = cachedEvents;
+          _loadState =
+              _LoadState.success; // Set directly to success, skip loading
+          _applyFilters();
+        });
+
+        // Scroll to highlighted event if needed
+        if (widget.highlightEventTitle != null) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              _scrollToHighlightedEvent();
+            });
+          });
+        }
+      } else {
+        // No cache available - load events normally (will show loading)
+        NumberedLogger.d('AgendaScreen: No cached events, loading...');
+        loadEvents();
+      }
     }
   }
 
@@ -83,7 +109,23 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
     if (widget.highlightEventTitle != oldWidget.highlightEventTitle) {
       _hasScrolledToEvent = false;
     }
-    // If highlightEventTitle changed and events are already loaded, scroll to it
+    // If highlightEventTitle changed from a value to null, scroll to top
+    if (oldWidget.highlightEventTitle != null &&
+        widget.highlightEventTitle == null &&
+        _scrollController.hasClients) {
+      NumberedLogger.d(
+          'AgendaScreen didUpdateWidget: highlightEventTitle cleared, scrolling to top');
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _scrollController.hasClients) {
+          _scrollController.animateTo(
+            0.0,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOut,
+          );
+        }
+      });
+    }
+    // If highlightEventTitle changed to a new value and events are already loaded, scroll to it
     if (widget.highlightEventTitle != null &&
         widget.highlightEventTitle != oldWidget.highlightEventTitle &&
         filteredEvents.isNotEmpty) {
@@ -123,6 +165,9 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
       final eventsService = ref.read(eventsServiceProvider);
       final loaded = await eventsService.loadEvents(lang: currentLang);
       if (!mounted) return;
+
+      // Invalidate cache to update it with fresh data
+      ref.invalidate(cachedEventsProvider(currentLang));
 
       setState(() {
         allEvents = loaded;
@@ -212,28 +257,6 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
     }
   }
 
-  Future<void> _loadFavorites() async {
-    final favoritesService = ref.read(favoritesServiceProvider);
-    if (favoritesService == null) return;
-    final favorites = await favoritesService.getFavorites();
-    setState(() {
-      _favoriteTitles = favorites;
-    });
-  }
-
-  Future<void> _toggleFavorite(String title) async {
-    final favoritesService = ref.read(favoritesServiceProvider);
-    if (favoritesService == null) return;
-    await favoritesService.toggleFavorite(title);
-    setState(() {
-      if (_favoriteTitles.contains(title)) {
-        _favoriteTitles.remove(title);
-      } else {
-        _favoriteTitles.add(title);
-      }
-    });
-  }
-
   // --------------------------------------------
   // Filters + search
   // --------------------------------------------
@@ -242,10 +265,6 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
       final queryMatch =
           event.title.toLowerCase().contains(_searchQuery.toLowerCase());
       if (!queryMatch) return false;
-
-      final isRecurring = event.isRecurring;
-      if (isRecurring && !_showRecurring) return false;
-      if (!isRecurring && !_showOneTime) return false;
 
       return true;
     }).toList();
@@ -329,8 +348,6 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
         setState(() {
           _searchQuery = '';
           _searchController.clear();
-          _showRecurring = true;
-          _showOneTime = true;
           _applyFilters();
         });
         if (attempts < 5) {
@@ -459,7 +476,17 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
   }
 
   Future<void> _openUrl(String url) async {
-    final uri = Uri.parse(url);
+    // Normalize URL - handle relative URLs from scraper
+    String normalized = url.trim();
+    if (normalized.startsWith('//')) {
+      normalized = 'https:$normalized';
+    } else if (normalized.startsWith('/')) {
+      normalized = 'https://www.aanbod.s-port.nl$normalized';
+    } else if (!normalized.startsWith('http')) {
+      normalized = 'https://www.aanbod.s-port.nl/$normalized';
+    }
+
+    final uri = Uri.parse(normalized);
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     } else if (mounted) {
@@ -525,92 +552,6 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
           ),
         ),
         onChanged: _onSearchChanged,
-      ),
-    );
-  }
-
-  Widget _buildFilterChipsRow() {
-    final theme = Theme.of(context);
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      padding: AppPaddings.symmHorizontalReg,
-      child: ChipTheme(
-        data: theme.chipTheme.copyWith(
-          backgroundColor: AppColors.superlightgrey,
-          selectedColor: AppColors.superlightgrey,
-          disabledColor: AppColors.superlightgrey,
-          labelStyle: AppTextStyles.small.copyWith(color: AppColors.blackText),
-          secondaryLabelStyle:
-              AppTextStyles.small.copyWith(color: AppColors.blackText),
-          side: const BorderSide(color: Colors.transparent),
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-          shape: const StadiumBorder(),
-        ),
-        child: Row(
-          children: [
-            // Recurring
-            Padding(
-              padding: AppPaddings.rightSmall,
-              child: Semantics(
-                label: _showRecurring
-                    ? 'Hide recurring events'
-                    : 'Show recurring events',
-                button: true,
-                child: FilterChip(
-                  showCheckmark: false,
-                  selected: _showRecurring,
-                  avatar: Icon(
-                    _showRecurring ? Icons.repeat : Icons.repeat_on_outlined,
-                    color: _showRecurring ? AppColors.amber : AppColors.grey,
-                    size: 18,
-                  ),
-                  label: Text(
-                    'recurring'.tr(),
-                    style: AppTextStyles.small
-                        .copyWith(color: AppColors.blackText),
-                  ),
-                  onSelected: (selected) {
-                    setState(() {
-                      _showRecurring = selected;
-                      _applyFilters();
-                    });
-                  },
-                ),
-              ),
-            ),
-
-            // One-time
-            Padding(
-              padding: AppPaddings.rightSmall,
-              child: Semantics(
-                label: _showOneTime
-                    ? 'Hide one-time events'
-                    : 'Show one-time events',
-                button: true,
-                child: FilterChip(
-                  showCheckmark: false,
-                  selected: _showOneTime,
-                  avatar: Icon(
-                    _showOneTime ? Icons.event_available : Icons.event_note,
-                    color: _showOneTime ? AppColors.amber : AppColors.grey,
-                    size: 18,
-                  ),
-                  label: Text(
-                    'one_time'.tr(),
-                    style: AppTextStyles.small
-                        .copyWith(color: AppColors.blackText),
-                  ),
-                  onSelected: (selected) {
-                    setState(() {
-                      _showOneTime = selected;
-                      _applyFilters();
-                    });
-                  },
-                ),
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }
@@ -774,24 +715,6 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
                 Semantics(
-                  label: _favoriteTitles.contains(event.title)
-                      ? 'Remove from favorites'
-                      : 'Add to favorites',
-                  button: true,
-                  child: IconButton(
-                    tooltip: 'favorite'.tr(),
-                    icon: Icon(
-                      _favoriteTitles.contains(event.title)
-                          ? Icons.favorite
-                          : Icons.favorite_border,
-                    ),
-                    color: _favoriteTitles.contains(event.title)
-                        ? AppColors.red
-                        : AppColors.blackIcon,
-                    onPressed: () => _toggleFavorite(event.title),
-                  ),
-                ),
-                Semantics(
                   label: 'Share event',
                   button: true,
                   child: IconButton(
@@ -859,8 +782,6 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
                     padding: AppPaddings.symmHorizontalReg,
                     child: _buildSearchField(),
                   ),
-                  const SizedBox(height: AppHeights.reg),
-                  _buildFilterChipsRow(),
                   const SizedBox(height: AppHeights.small),
                 ],
               ),
@@ -915,30 +836,22 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
                         style: AppTextStyles.cardTitle,
                       ),
                       const SizedBox(height: AppHeights.small),
-                      if (_searchQuery.isNotEmpty ||
-                          !_showRecurring ||
-                          !_showOneTime)
+                      if (_searchQuery.isNotEmpty)
                         Text(
-                          _searchQuery.isNotEmpty
-                              ? 'empty_state_adjust_search_filters'.tr()
-                              : 'empty_state_adjust_filters'.tr(),
+                          'empty_state_adjust_search_filters'.tr(),
                           textAlign: TextAlign.center,
                           style: AppTextStyles.bodyMuted,
                         ),
-                      if (_searchQuery.isNotEmpty ||
-                          !_showRecurring ||
-                          !_showOneTime) ...[
+                      if (_searchQuery.isNotEmpty) ...[
                         const SizedBox(height: AppHeights.reg),
                         Semantics(
-                          label: 'Clear all filters and search',
+                          label: 'Clear search',
                           button: true,
                           child: TextButton.icon(
                             onPressed: () {
                               setState(() {
                                 _searchQuery = '';
                                 _searchController.clear();
-                                _showRecurring = true;
-                                _showOneTime = true;
                                 _applyFilters();
                               });
                             },
@@ -1021,9 +934,9 @@ class _PinnedHeaderDelegate extends SliverPersistentHeaderDelegate {
 
   @override
   double get maxExtent =>
-      240; // increased to prevent overflow on smaller screens
+      140; // Header: PanelHeader (~58px) + Search field (~56px) + spacing (~4px) + buffer
   @override
-  double get minExtent => 240;
+  double get minExtent => 140;
 
   @override
   Widget build(

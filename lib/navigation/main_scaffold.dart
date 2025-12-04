@@ -327,6 +327,7 @@ class MainScaffoldState extends ConsumerState<MainScaffold> {
                         HeroMode(
                             enabled: currentIndex == kTabAgenda,
                             child: _AgendaFlow(
+                                key: ValueKey('agenda_flow_${_highlightEventTitle ?? 'null'}'),
                                 navigatorKey: _agendaKey,
                                 highlightEventTitle: _highlightEventTitle)),
                       ],
@@ -343,6 +344,14 @@ class MainScaffoldState extends ConsumerState<MainScaffold> {
                         if (index == currentIndex) {
                           _popToRoot(index);
                         } else {
+                          // Clear highlightEventTitle when switching to agenda tab directly
+                          // (not via handleRouteIntent)
+                          if (index == kTabAgenda && _highlightEventTitle != null) {
+                            _highlightEventTitle = null;
+                            NumberedLogger.d('MainScaffold: Cleared highlightEventTitle on direct agenda tab click');
+                            // Pop to root to ensure we start fresh
+                            _popToRoot(kTabAgenda);
+                          }
                           ref.read(mainTabIndexProvider.notifier).state = index;
                           _currentIndexNotifier.value = index;
                         }
@@ -408,6 +417,7 @@ class _HomeFlow extends StatelessWidget {
 
 class _AgendaFlow extends StatefulWidget {
   const _AgendaFlow({
+    super.key,
     required this.navigatorKey,
     this.highlightEventTitle,
   });
@@ -446,18 +456,22 @@ class _AgendaFlowState extends State<_AgendaFlow> {
   void didUpdateWidget(_AgendaFlow oldWidget) {
     super.didUpdateWidget(oldWidget);
     NumberedLogger.d('_AgendaFlow didUpdateWidget: old=${oldWidget.highlightEventTitle}, new=${widget.highlightEventTitle}');
-    // If highlightEventTitle changed from null to a value, or changed to a different value, push a new route
-    if (widget.highlightEventTitle != null &&
-        widget.highlightEventTitle != oldWidget.highlightEventTitle) {
+    // If highlightEventTitle changed (from null to value, value to null, or value to different value), push a new route
+    if (widget.highlightEventTitle != oldWidget.highlightEventTitle) {
       NumberedLogger.d('_AgendaFlow didUpdateWidget: highlightEventTitle changed, pushing new route');
+      // Pop to root first to clear any existing routes
+      widget.navigatorKey.currentState?.popUntil((r) => r.isFirst);
       WidgetsBinding.instance.addPostFrameCallback((_) {
         final nav = widget.navigatorKey.currentState;
         if (nav != null && mounted) {
+          final key = widget.highlightEventTitle != null 
+              ? ValueKey('agenda_${widget.highlightEventTitle}')
+              : const ValueKey('agenda');
           NumberedLogger.d('_AgendaFlow didUpdateWidget: Executing pushReplacement with highlightEventTitle=${widget.highlightEventTitle}');
           nav.pushReplacement(
             MaterialPageRoute(
               builder: (_) => AgendaScreen(
-                key: ValueKey('agenda_${widget.highlightEventTitle}'),
+                key: key,
                 highlightEventTitle: widget.highlightEventTitle,
               ),
             ),

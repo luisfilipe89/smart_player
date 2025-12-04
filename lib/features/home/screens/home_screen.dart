@@ -3,9 +3,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:move_young/features/agenda/models/event_model.dart';
 import 'package:move_young/features/agenda/services/events_provider.dart';
+import 'package:move_young/features/agenda/services/cached_events_provider.dart';
 import 'package:move_young/features/auth/services/auth_provider.dart';
 import 'package:move_young/features/profile/services/profile_settings_provider.dart';
 import 'package:move_young/features/welcome/screens/welcome_screen.dart';
+import 'package:move_young/features/activities/screens/fitness_screen.dart'
+    show ActivitiesScreen;
 import 'package:move_young/theme/tokens.dart';
 import 'package:move_young/navigation/main_scaffold.dart';
 import 'package:move_young/navigation/route_registry.dart';
@@ -37,6 +40,7 @@ class _HomeScreenNewState extends ConsumerState<HomeScreenNew> {
   int _pendingInvites = 0;
   StreamSubscription<int>? _invitesSub;
   bool _didInit = false;
+  final ScrollController _scrollController = ScrollController();
 
   @override
   void initState() {
@@ -45,6 +49,14 @@ class _HomeScreenNewState extends ConsumerState<HomeScreenNew> {
     // Watch real-time pending invites count
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _watchPendingInvites();
+    });
+    // Prevent scrolling by keeping scroll position at 0
+    // The NotificationListener handles blocking scroll updates,
+    // but this is a backup to ensure position stays at 0
+    _scrollController.addListener(() {
+      if (_scrollController.hasClients && _scrollController.offset > 0) {
+        _scrollController.jumpTo(0);
+      }
     });
   }
 
@@ -60,15 +72,34 @@ class _HomeScreenNewState extends ConsumerState<HomeScreenNew> {
   @override
   void dispose() {
     _invitesSub?.cancel();
+    _scrollController.dispose();
     super.dispose();
   }
 
   Future<void> _fetch() async {
+    final currentLang = context.locale.languageCode;
+
+    // Check if events are already cached
+    final cachedEventsAsync = ref.read(cachedEventsProvider(currentLang));
+
+    if (cachedEventsAsync.hasValue &&
+        cachedEventsAsync.valueOrNull?.isNotEmpty == true) {
+      // Use cached events immediately
+      final cachedEvents = cachedEventsAsync.value!;
+      if (!mounted) return;
+      setState(() {
+        events = cachedEvents;
+        _state = _LoadState.success;
+      });
+      return;
+    }
+
+    // No cache available - load events
     setState(() => _state = _LoadState.loading);
     try {
       final eventsService = ref.read(eventsServiceProvider);
       final loaded = await eventsService.loadEvents(
-        lang: context.locale.languageCode,
+        lang: currentLang,
       );
       if (!mounted) return;
       setState(() {
@@ -167,7 +198,7 @@ class _HomeScreenNewState extends ConsumerState<HomeScreenNew> {
         backgroundColor: AppColors.white,
         elevation: 0,
         leading: IconButton(
-          icon: Icon(Icons.account_circle_outlined, color: AppColors.blackIcon),
+          icon: Icon(Icons.person_outline, color: AppColors.blackIcon),
           onPressed: () => _showUserMenu(context),
         ),
         title: const Text('SMARTPLAYER'),
@@ -220,76 +251,108 @@ class _HomeScreenNewState extends ConsumerState<HomeScreenNew> {
               }
             }
           },
-          child: ListView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            padding: AppPaddings.symmHorizontalReg.copyWith(
-              bottom: kBottomNavigationBarHeight +
-                  MediaQuery.of(context).padding.bottom +
-                  16,
-            ),
-            children: [
-              // Outer white container with rounded corners & shadow
-              Container(
-                decoration: BoxDecoration(
-                  color: AppColors.white,
-                  borderRadius: BorderRadius.circular(AppRadius.container),
-                  boxShadow: AppShadows.md,
-                ),
-                padding: AppPaddings.allBig.copyWith(top: 10),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _HomeGreeting(ref),
-                    const SizedBox(height: AppHeights.small),
-                    const SizedBox(height: AppHeights.huge),
-                    _QuickTilesRow(
-                      pendingInvites: _pendingInvites,
-                      ref: ref,
-                      onTapOrganize: () {
-                        final haptics = ref.read(hapticsServiceProvider);
-                        haptics?.lightImpact();
-                        if (!isSignedIn) {
-                          _showUserBottomSheet(context, showSignInPrompt: true);
-                          return;
-                        }
-                        Navigator.of(context).pushNamed('/organize-game');
-                      },
-                      onTapJoin: () async {
-                        ref.read(hapticsActionsProvider)?.lightImpact();
-                        await Navigator.of(
-                          context,
-                        ).pushNamed('/discover-games');
-                        if (mounted) {
-                          await _refreshInvites();
-                        }
-                      },
-                    ),
-                    const SizedBox(height: AppHeights.huge),
-                    _UpcomingEventsCard(
-                      state: _state,
-                      events: events,
-                      ref: ref,
-                      onRetry: _fetch,
-                      onSeeAll: () {
-                        final haptics = ref.read(hapticsServiceProvider);
-                        haptics?.selectionClick();
-                        MainScaffold.maybeOf(
-                          context,
-                        )?.switchToTab(kTabAgenda, popToRoot: true);
-                      },
-                      onEventTap: (event) {
-                        final haptics = ref.read(hapticsServiceProvider);
-                        haptics?.selectionClick();
-                        MainScaffold.maybeOf(context)?.handleRouteIntent(
-                          AgendaIntent(highlightEventTitle: event.title),
-                        );
-                      },
-                    ),
-                    const SizedBox(height: AppHeights.huge),
-                  ],
-                ),
+          child: NotificationListener<ScrollUpdateNotification>(
+            onNotification: (notification) {
+              // Block scroll updates to prevent scrolling
+              // But allow overscroll notifications for RefreshIndicator
+              if (notification.scrollDelta != null &&
+                  notification.scrollDelta != 0) {
+                // Only block if trying to scroll down (positive delta)
+                // Allow negative delta (overscroll up) for RefreshIndicator
+                if (notification.scrollDelta! > 0) {
+                  return true; // Consume to prevent scrolling down
+                }
+              }
+              return false;
+            },
+            child: ListView(
+              controller: _scrollController,
+              physics: const ClampingScrollPhysics(),
+              padding: AppPaddings.symmHorizontalReg.copyWith(
+                bottom: kBottomNavigationBarHeight +
+                    MediaQuery.of(context).padding.bottom +
+                    16,
               ),
-            ],
+              children: [
+                // Outer white container with rounded corners & shadow
+                Container(
+                  decoration: BoxDecoration(
+                    color: AppColors.white,
+                    borderRadius: BorderRadius.circular(AppRadius.container),
+                    boxShadow: AppShadows.md,
+                  ),
+                  padding: AppPaddings.allBig.copyWith(top: 10),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _HomeGreeting(ref),
+                      const SizedBox(height: AppHeights.reg),
+                      SizedBox(
+                        height: 168,
+                        child: _FitnessFieldsTile(
+                          onTap: () {
+                            final haptics = ref.read(hapticsServiceProvider);
+                            haptics?.lightImpact();
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => const ActivitiesScreen(),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                      const SizedBox(height: AppHeights.huge),
+                      _QuickTilesRow(
+                        pendingInvites: _pendingInvites,
+                        ref: ref,
+                        onTapOrganize: () {
+                          final haptics = ref.read(hapticsServiceProvider);
+                          haptics?.lightImpact();
+                          if (!isSignedIn) {
+                            _showUserBottomSheet(context,
+                                showSignInPrompt: true);
+                            return;
+                          }
+                          Navigator.of(context).pushNamed('/organize-game');
+                        },
+                        onTapJoin: () async {
+                          ref.read(hapticsActionsProvider)?.lightImpact();
+                          await Navigator.of(
+                            context,
+                          ).pushNamed('/discover-games');
+                          if (mounted) {
+                            await _refreshInvites();
+                          }
+                        },
+                      ),
+                      const SizedBox(height: AppHeights.huge),
+                      _UpcomingEventsCard(
+                        state: _state,
+                        events: events,
+                        ref: ref,
+                        onRetry: _fetch,
+                        onSeeAll: () {
+                          final haptics = ref.read(hapticsServiceProvider);
+                          haptics?.selectionClick();
+                          MainScaffold.maybeOf(
+                            context,
+                          )?.switchToTab(kTabAgenda, popToRoot: true);
+                        },
+                        onEventTap: (event) {
+                          final haptics = ref.read(hapticsServiceProvider);
+                          haptics?.selectionClick();
+                          MainScaffold.maybeOf(context)?.handleRouteIntent(
+                            AgendaIntent(highlightEventTitle: event.title),
+                          );
+                        },
+                      ),
+                      const SizedBox(height: AppHeights.huge),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -330,18 +393,10 @@ class _HomeScreenNewState extends ConsumerState<HomeScreenNew> {
               Container(
                 width: 40,
                 height: 4,
-                margin: const EdgeInsets.symmetric(vertical: 12),
+                margin: const EdgeInsets.only(top: 8, bottom: 4),
                 decoration: BoxDecoration(
                   color: AppColors.grey.withValues(alpha: 0.3),
                   borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              Align(
-                alignment: Alignment.centerRight,
-                child: IconButton(
-                  icon: const Icon(Icons.close),
-                  color: AppColors.grey,
-                  onPressed: () => Navigator.of(context).pop(),
                 ),
               ),
 
@@ -391,7 +446,7 @@ class _HomeScreenNewState extends ConsumerState<HomeScreenNew> {
                     return Padding(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 24,
-                        vertical: 16,
+                        vertical: 12,
                       ),
                       child: Row(
                         children: [
@@ -438,6 +493,13 @@ class _HomeScreenNewState extends ConsumerState<HomeScreenNew> {
                               ],
                             ),
                           ),
+                          IconButton(
+                            icon: const Icon(Icons.close),
+                            color: AppColors.grey,
+                            onPressed: () => Navigator.of(context).pop(),
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
+                          ),
                         ],
                       ),
                     );
@@ -447,7 +509,7 @@ class _HomeScreenNewState extends ConsumerState<HomeScreenNew> {
                 Padding(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 24,
-                    vertical: 16,
+                    vertical: 12,
                   ),
                   child: Row(
                     children: [
@@ -480,6 +542,13 @@ class _HomeScreenNewState extends ConsumerState<HomeScreenNew> {
                             ),
                           ],
                         ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close),
+                        color: AppColors.grey,
+                        onPressed: () => Navigator.of(context).pop(),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
                       ),
                     ],
                   ),
@@ -833,7 +902,7 @@ class _UpcomingEventsCard extends ConsumerWidget {
             switchOutCurve: Curves.easeIn,
             child: _buildStatefulContent(context),
           ),
-          const SizedBox(height: AppHeights.superHuge),
+          const SizedBox(height: AppHeights.huge),
         ],
       ),
     );
@@ -882,8 +951,14 @@ class _UpcomingEventsCard extends ConsumerWidget {
             ),
           );
         }
+        // Calculate responsive height based on screen size
+        // Use ~22% of screen height, with min 180 and max 240
+        // Reduced to ensure bottom boundary is visible
+        final screenHeight = MediaQuery.of(context).size.height;
+        final calculatedHeight = (screenHeight * 0.22).clamp(180.0, 240.0);
+
         return SizedBox(
-          height: 220,
+          height: calculatedHeight,
           child: ListView.separated(
             primary: false,
             physics: const BouncingScrollPhysics(),
@@ -1044,6 +1119,71 @@ class _EventsSkeleton extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _FitnessFieldsTile extends StatelessWidget {
+  final VoidCallback onTap;
+
+  const _FitnessFieldsTile({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.white,
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        boxShadow: AppShadows.md,
+      ),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        clipBehavior: Clip.antiAlias,
+        elevation: 4,
+        shadowColor: AppColors.blackShadow,
+        child: InkWell(
+          onTap: onTap,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Flexible(
+                flex: 2,
+                child: Ink.image(
+                  image: const AssetImage('assets/images/fitness_circus.jpg'),
+                  width: double.infinity,
+                  fit: BoxFit.cover,
+                ),
+              ),
+              Flexible(
+                flex: 1,
+                child: Padding(
+                  padding: AppPaddings.symmMedium,
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'check_for_fields'.tr(),
+                        style: AppTextStyles.smallCardTitle,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'discover_closest_fitness'.tr(),
+                        style: AppTextStyles.superSmall,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

@@ -44,7 +44,8 @@
     "cancel": "Stop",
     "canoeing": "Kanoën",
     "clear_filters": "Filters wissen",
-    "check_for_fields": "Zoek Fitness Stations & Containers",
+    "check_for_fields": "Zoek Fitness Stations & Cont(r)ainers",
+    "discover_closest_fitness": "Ontdek de dichtstbijzijnde fitnesslocaties",
     "check_location": "Bekijk deze locatie",
     "choose_a_game": "Kies & speel",
     "choose_date": "Kies de Datum",
@@ -578,5 +579,12 @@
     "privacy_rights_content": "U kunt toegang, correctie, verwijdering of export van uw gegevens aanvragen, en bezwaar maken tegen of bepaalde verwerkingen beperken, indien van toepassing. Gebruik de optie Account verwijderen in de app of neem contact op met ondersteuning.",
     "privacy_contact_title": "Contact",
     "privacy_contact_email": "E-mail: luisfccfigueiredo@gmail.com",
-    "terms_content": "Door SmartPlayer te gebruiken, gaat u akkoord met deze voorwaarden.\n\nGebruik van de service: U gebruikt de app op een wettige manier en respecteert andere gebruikers.\nInhoud: U bent verantwoordelijk voor inhoud die u maakt of deelt.\nAansprakelijkheid: De app wordt geleverd zoals deze is, zonder garanties.\n\nVoor vragen of geschillen, neem contact op met ondersteuning."
+    "terms_content": "Door SmartPlayer te gebruiken, gaat u akkoord met deze voorwaarden.\n\nGebruik van de service: U gebruikt de app op een wettige manier en respecteert andere gebruikers.\nInhoud: U bent verantwoordelijk voor inhoud die u maakt of deelt.\nAansprakelijkheid: De app wordt geleverd zoals deze is, zonder garanties.\n\nVoor vragen of geschillen, neem contact op met ondersteuning.",
+    "action_failed": "Actie mislukt",
+    "error_loading_content": "Inhoud laden mislukt",
+    "invalid_time_format": "Ongeldig tijdformaat",
+    "leave_game": "Spel Verlaten",
+    "not_authorized": "Niet geautoriseerd",
+    "please_select_field": "Selecteer een veld",
+    "sign_out_failed": "Uitloggen mislukt"
 }
