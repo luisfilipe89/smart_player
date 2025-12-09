@@ -1,6 +1,7 @@
 import * as admin from "firebase-admin";
 import { setGlobalOptions } from "firebase-functions/v2";
-// import { onUserDeleted } from "firebase-functions/v2/auth"; // Temporarily disabled - v2/auth not available in current firebase-functions version
+// Note: onUserDeleted from v2/auth may not be available in current firebase-functions version
+// Using onValueDeleted("/users/{uid}") instead, which triggers when user data is deleted
 import { onDocumentCreated } from "firebase-functions/v2/firestore";
 import { onValueCreated, onValueDeleted, onValueWritten } from "firebase-functions/v2/database";
 import { onSchedule } from "firebase-functions/v2/scheduler";
@@ -438,83 +439,88 @@ function deriveNameLowerFromEmail(email?: string | null): string | null {
   return base.toLowerCase();
 }
 
-// Temporarily disabled - onUserDeleted import not available
-/*
-export const cleanupAuthUserDelete = onUserDeleted(async (event) => {
-  const uid = event.data?.uid;
-  if (!uid) return;
+// Note: We use onValueDeleted("/users/{uid}") instead of onUserDeleted from v2/auth
+// because the v2/auth trigger may not be available in the current firebase-functions version.
+// The app deletes /users/{uid} after auth deletion, which triggers this function.
 
+// Cleanup when a user is deleted: remove all user-related data
+// This triggers when /users/{uid} is deleted (which happens after auth deletion in the app)
+// Note: Since Auth account is deleted first, we may not be able to fetch email/displayName
+// for index cleanup, but that's acceptable - orphaned indexes won't cause functional issues
+export const onUserDelete = onValueDeleted("/users/{uid}", async (event) => {
+  const uid = event.params.uid as string;
   const db = admin.database();
-  const updates: Record<string, any> = {
-    [`/users/${uid}`]: null,
-    [`/publicProfiles/${uid}`]: null,
-  };
 
-  const rawEmail = event.data?.email;
-  const email =
-    typeof rawEmail === "string" && rawEmail.trim().length
-      ? rawEmail.trim().toLowerCase()
-      : undefined;
-  if (email) {
-    const emailHash = createHash("sha256").update(email).digest("hex");
-    updates[`/usersByEmailHash/${emailHash}`] = null;
+  console.log(`Starting comprehensive cleanup for deleted user: ${uid}`);
+
+  const updates: { [path: string]: any } = {};
+
+  // 1. Clean up public profile
+  updates[`/publicProfiles/${uid}`] = null;
+
+  // 2. Try to get user data from Firebase Auth to clean up indexes
+  // Note: Auth account may already be deleted, so we try-catch this
+  let email: string | undefined;
+  let displayName: string | undefined;
+  try {
+    const authUser = await admin.auth().getUser(uid);
+    email = authUser.email;
+    displayName = authUser.displayName || undefined;
+  } catch (error: any) {
+    // Auth account may already be deleted - that's okay, we'll skip index cleanup
+    console.log(`Could not fetch Auth user data for ${uid} (may already be deleted): ${error?.code || error}`);
   }
 
-  const displayNameLower = toDisplayNameLower(event.data?.displayName);
+  // 3. Clean up email hash index (if we have email)
+  if (email && typeof email === "string") {
+    const emailLower = email.trim().toLowerCase();
+    if (emailLower) {
+      const emailHash = createHash("sha256").update(emailLower).digest("hex");
+      updates[`/usersByEmailHash/${emailHash}`] = null;
+      console.log(`Removing email hash index for: ${emailHash.substring(0, 8)}...`);
+    }
+  }
+
+  // 4. Clean up display name indexes (if we have displayName)
+  const displayNameLower = toDisplayNameLower(displayName);
   if (displayNameLower) {
     updates[`/usersByDisplayNameLower/${displayNameLower}/${uid}`] = null;
+    console.log(`Removing display name index: ${displayNameLower}`);
   }
 
-  const derivedNameLower = deriveNameLowerFromEmail(email);
-  if (derivedNameLower) {
-    updates[`/usersByDisplayNameLower/${derivedNameLower}/${uid}`] = null;
+  if (email && typeof email === "string") {
+    const derivedNameLower = deriveNameLowerFromEmail(email);
+    if (derivedNameLower && derivedNameLower !== displayNameLower) {
+      updates[`/usersByDisplayNameLower/${derivedNameLower}/${uid}`] = null;
+      console.log(`Removing derived name index: ${derivedNameLower}`);
+    }
   }
 
+  // 5. Clean up friend tokens owned by this user
   try {
     const tokensSnap = await db.ref("/friendTokens").once("value");
     const tokens = tokensSnap.val() as Record<string, any> | null;
     if (tokens) {
+      let tokenCount = 0;
       for (const [tokenId, tokenData] of Object.entries(tokens)) {
         const owner = tokenData?.uid ?? tokenData?.ownerUid;
         if (owner === uid) {
           updates[`/friendTokens/${tokenId}`] = null;
+          tokenCount++;
         }
+      }
+      if (tokenCount > 0) {
+        console.log(`Removing ${tokenCount} friend token(s)`);
       }
     }
   } catch (error) {
-    console.error("Error loading friend tokens during auth delete cleanup:", error);
+    console.error("Error loading friend tokens during user delete cleanup:", error);
   }
 
-  try {
-    if (Object.keys(updates).length > 0) {
-      await db.ref().update(updates);
-    }
-  } catch (error) {
-    console.error("Error cleaning database during auth delete cleanup:", error);
-  }
-
-  try {
-    await admin
-      .storage()
-      .bucket()
-      .file(`users/${uid}/profile.jpg`)
-      .delete({ ignoreNotFound: true });
-  } catch (error: any) {
-    if (error?.code !== 404) {
-      console.error("Error deleting profile image during auth delete cleanup:", error);
-    }
-  }
-});
-*/
-
-// Cleanup when a user is deleted: remove invites and player entries
-export const onUserDelete = onValueDeleted("/users/{uid}", async (event) => {
-  const uid = event.params.uid as string;
-  const db = admin.database();
+  // 6. Clean up game-related data (invites and player entries)
   try {
     const gamesSnap = await db.ref("/games").once("value");
     const games = gamesSnap.val() || {};
-    const updates: { [path: string]: any } = {};
     for (const gid of Object.keys(games)) {
       updates[`/games/${gid}/invites/${uid}`] = null;
       // players may be array or object; handle both
@@ -529,10 +535,40 @@ export const onUserDelete = onValueDeleted("/users/{uid}", async (event) => {
         updates[`/games/${gid}/players/${uid}`] = null;
       }
     }
-    if (Object.keys(updates).length) await db.ref().update(updates);
   } catch (e) {
-    console.error("Error cleaning up after user delete:", e);
+    console.error("Error loading games during user delete cleanup:", e);
   }
+
+  // 7. Clean up pending invite index
+  updates[`/pendingInviteIndex/${uid}`] = null;
+
+  // 8. Apply all database deletions atomically
+  try {
+    if (Object.keys(updates).length > 0) {
+      await db.ref().update(updates);
+      console.log(`Successfully removed ${Object.keys(updates).length} database entries`);
+    }
+  } catch (error) {
+    console.error("Error cleaning database during user delete cleanup:", error);
+    throw error; // Re-throw to trigger retry
+  }
+
+  // 9. Delete profile image from Storage
+  try {
+    await admin
+      .storage()
+      .bucket()
+      .file(`users/${uid}/profile.jpg`)
+      .delete({ ignoreNotFound: true });
+    console.log(`Removed profile image for user: ${uid}`);
+  } catch (error: any) {
+    if (error?.code !== 404) {
+      console.error("Error deleting profile image during user delete cleanup:", error);
+      // Don't throw - storage deletion failure shouldn't block the rest
+    }
+  }
+
+  console.log(`Completed comprehensive cleanup for deleted user: ${uid}`);
 });
 
 // Enforce last-write-wins metadata and monotonic version on game updates
