@@ -186,7 +186,6 @@ class GamesMyScreenNotifier extends StateNotifier<GamesMyScreenState> {
             <String, String?>{
               'uid': uid,
               'displayName': null,
-              'photoURL': null,
             },
           );
         }

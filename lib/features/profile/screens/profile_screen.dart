@@ -102,9 +102,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       if (!mounted) return;
       final errorMessage = FirebaseErrorHandler.getUserMessage(e);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-            content: Text(errorMessage),
-            backgroundColor: Colors.red),
+        SnackBar(content: Text(errorMessage), backgroundColor: Colors.red),
       );
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -712,5 +710,4 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       setState(() => _dateOfBirth = picked);
     }
   }
-
 }

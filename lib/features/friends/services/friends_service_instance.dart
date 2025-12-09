@@ -21,7 +21,9 @@ class _ProfileAccess {
 
 /// Instance-based FriendsService for use with Riverpod dependency injection
 /// Uses standardized error handling mixin for consistent error handling patterns
-class FriendsServiceInstance with ServiceErrorHandlerMixin implements IFriendsService {
+class FriendsServiceInstance
+    with ServiceErrorHandlerMixin
+    implements IFriendsService {
   final FirebaseAuth _auth;
   final FirebaseDatabase _db;
   final INotificationService _notificationService;
@@ -52,10 +54,45 @@ class FriendsServiceInstance with ServiceErrorHandlerMixin implements IFriendsSe
   }
 
   Future<_ProfileAccess> _profileAccessFor(String targetUid) async {
-    return const _ProfileAccess(
-      allowed: true,
-      visibility: _visibilityPublic,
-    );
+    final String? currentUid = _auth.currentUser?.uid;
+
+    // Fetch target user's visibility (default public if missing)
+    String visibility = _visibilityPublic;
+    try {
+      final visSnap = await _safeGet(DbPaths.userVisibility(targetUid));
+      visibility = (visSnap.value as String?) ?? _visibilityPublic;
+    } catch (_) {
+      // If we cannot read visibility, fall back to public; rules will still protect
+      visibility = _visibilityPublic;
+    }
+
+    // Self can always view
+    if (currentUid != null && currentUid == targetUid) {
+      return _ProfileAccess(allowed: true, visibility: visibility);
+    }
+
+    // Public is open to anyone (including signed-out users if allowed upstream)
+    if (visibility == _visibilityPublic) {
+      return _ProfileAccess(allowed: true, visibility: visibility);
+    }
+
+    // Friends-only requires an authenticated friend relationship
+    if (visibility == 'friends') {
+      if (currentUid == null) {
+        return _ProfileAccess(allowed: false, visibility: visibility);
+      }
+      try {
+        final friendSnap =
+            await _safeGet('${DbPaths.userFriends(targetUid)}/$currentUid');
+        final isFriend = friendSnap.exists;
+        return _ProfileAccess(allowed: isFriend, visibility: visibility);
+      } catch (_) {
+        return _ProfileAccess(allowed: false, visibility: visibility);
+      }
+    }
+
+    // Private: only owner (handled above)
+    return _ProfileAccess(allowed: false, visibility: visibility);
   }
 
   // Ensure per-user indexes exist for discovery by contacts (email)
@@ -125,15 +162,16 @@ class FriendsServiceInstance with ServiceErrorHandlerMixin implements IFriendsSe
 
     return handleListQueryError(
       () async {
-      final snapshot = await _safeGet(DbPaths.userFriends(uid));
-      if (snapshot.exists) {
-        final friendsData = snapshot.value as Map<dynamic, dynamic>;
-        final friends = friendsData.keys.map((key) => key.toString()).toList();
+        final snapshot = await _safeGet(DbPaths.userFriends(uid));
+        if (snapshot.exists) {
+          final friendsData = snapshot.value as Map<dynamic, dynamic>;
+          final friends =
+              friendsData.keys.map((key) => key.toString()).toList();
 
-        // Cache the result
-        _friendsCache[cacheKey] = CachedData(friends, DateTime.now());
-        return friends;
-      }
+          // Cache the result
+          _friendsCache[cacheKey] = CachedData(friends, DateTime.now());
+          return friends;
+        }
         return <String>[];
       },
       'getting friends for $uid',
@@ -145,11 +183,11 @@ class FriendsServiceInstance with ServiceErrorHandlerMixin implements IFriendsSe
   Future<List<String>> getUserFriendRequestsSent(String uid) async {
     return handleListQueryError(
       () async {
-      final snapshot = await _safeGet(DbPaths.userFriendRequestsSent(uid));
-      if (snapshot.exists) {
-        final requestsData = snapshot.value as Map<dynamic, dynamic>;
-        return requestsData.keys.map((key) => key.toString()).toList();
-      }
+        final snapshot = await _safeGet(DbPaths.userFriendRequestsSent(uid));
+        if (snapshot.exists) {
+          final requestsData = snapshot.value as Map<dynamic, dynamic>;
+          return requestsData.keys.map((key) => key.toString()).toList();
+        }
         return <String>[];
       },
       'getting sent friend requests for $uid',
@@ -161,11 +199,12 @@ class FriendsServiceInstance with ServiceErrorHandlerMixin implements IFriendsSe
   Future<List<String>> getUserFriendRequestsReceived(String uid) async {
     return handleListQueryError(
       () async {
-      final snapshot = await _safeGet(DbPaths.userFriendRequestsReceived(uid));
-      if (snapshot.exists) {
-        final requestsData = snapshot.value as Map<dynamic, dynamic>;
-        return requestsData.keys.map((key) => key.toString()).toList();
-      }
+        final snapshot =
+            await _safeGet(DbPaths.userFriendRequestsReceived(uid));
+        if (snapshot.exists) {
+          final requestsData = snapshot.value as Map<dynamic, dynamic>;
+          return requestsData.keys.map((key) => key.toString()).toList();
+        }
         return <String>[];
       },
       'getting received friend requests for $uid',
@@ -182,31 +221,32 @@ class FriendsServiceInstance with ServiceErrorHandlerMixin implements IFriendsSe
 
     return handleBooleanError(
       () async {
-      // Check if already friends
-      final friends = await getUserFriends(fromUid);
-      if (friends.contains(toUid)) return false;
+        // Check if already friends
+        final friends = await getUserFriends(fromUid);
+        if (friends.contains(toUid)) return false;
 
-      // Check if request already sent
-      final sentRequests = await getUserFriendRequestsSent(fromUid);
-      if (sentRequests.contains(toUid)) return false;
+        // Check if request already sent
+        final sentRequests = await getUserFriendRequestsSent(fromUid);
+        if (sentRequests.contains(toUid)) return false;
 
-      // Send request
-      await _db.ref().update({
-        '${DbPaths.userFriendRequestsSent(fromUid)}/$toUid': true,
-        '${DbPaths.userFriendRequestsReceived(toUid)}/$fromUid': true,
-      });
+        // Send request
+        await _db.ref().update({
+          '${DbPaths.userFriendRequestsSent(fromUid)}/$toUid': true,
+          '${DbPaths.userFriendRequestsReceived(toUid)}/$fromUid': true,
+        });
 
-      // Record the request for rate limiting
-      await _recordFriendRequest(fromUid);
+        // Record the request for rate limiting
+        await _recordFriendRequest(fromUid);
 
-      // Send notification
-      await _notificationService.sendFriendRequestNotification(toUid, fromUid);
+        // Send notification
+        await _notificationService.sendFriendRequestNotification(
+            toUid, fromUid);
 
-      // Clear cache
-      _friendsCache.remove('friends_$fromUid');
-      _friendsCache.remove('friends_$toUid');
+        // Clear cache
+        _friendsCache.remove('friends_$fromUid');
+        _friendsCache.remove('friends_$toUid');
 
-      return true;
+        return true;
       },
       'sending friend request',
     );
@@ -222,29 +262,29 @@ class FriendsServiceInstance with ServiceErrorHandlerMixin implements IFriendsSe
 
     return handleBooleanError(
       () async {
-      // Add to friends list for both users
-      await _db.ref().update({
-        '${DbPaths.userFriends(fromUid)}/$toUid': true,
-        '${DbPaths.userFriends(toUid)}/$fromUid': true,
-      });
+        // Add to friends list for both users
+        await _db.ref().update({
+          '${DbPaths.userFriends(fromUid)}/$toUid': true,
+          '${DbPaths.userFriends(toUid)}/$fromUid': true,
+        });
 
-      // Remove from requests
-      await _db.ref().update({
-        '${DbPaths.userFriendRequestsSent(fromUid)}/$toUid': null,
-        '${DbPaths.userFriendRequestsReceived(toUid)}/$fromUid': null,
-      });
+        // Remove from requests
+        await _db.ref().update({
+          '${DbPaths.userFriendRequestsSent(fromUid)}/$toUid': null,
+          '${DbPaths.userFriendRequestsReceived(toUid)}/$fromUid': null,
+        });
 
-      // Send notification
-      await _notificationService.sendFriendAcceptedNotification(
-        fromUid,
-        toUid,
-      );
+        // Send notification
+        await _notificationService.sendFriendAcceptedNotification(
+          fromUid,
+          toUid,
+        );
 
-      // Clear cache
-      _friendsCache.remove('friends_$fromUid');
-      _friendsCache.remove('friends_$toUid');
+        // Clear cache
+        _friendsCache.remove('friends_$fromUid');
+        _friendsCache.remove('friends_$toUid');
 
-      return true;
+        return true;
       },
       'accepting friend request',
     );
@@ -260,27 +300,27 @@ class FriendsServiceInstance with ServiceErrorHandlerMixin implements IFriendsSe
 
     return handleBooleanError(
       () async {
-      // Remove the received request (allowed for current user)
-      await _db
-          .ref(DbPaths.userFriendRequestsReceived(toUid))
-          .child(fromUid)
-          .remove();
+        // Remove the received request (allowed for current user)
+        await _db
+            .ref(DbPaths.userFriendRequestsReceived(toUid))
+            .child(fromUid)
+            .remove();
 
-      // Best-effort removal from sender's "sent" list (may fail due to rules)
+        // Best-effort removal from sender's "sent" list (may fail due to rules)
         // Use handleVoidError for this nested operation since failure is acceptable
         await handleVoidError(
           () => _db
-            .ref(DbPaths.userFriendRequestsSent(fromUid))
-            .child(toUid)
+              .ref(DbPaths.userFriendRequestsSent(fromUid))
+              .child(toUid)
               .remove(),
           'removing sent request entry for $fromUid -> $toUid',
         );
 
-      // Clear cache
-      _friendsCache.remove('friends_$fromUid');
-      _friendsCache.remove('friends_$toUid');
+        // Clear cache
+        _friendsCache.remove('friends_$fromUid');
+        _friendsCache.remove('friends_$toUid');
 
-      return true;
+        return true;
       },
       'declining friend request',
     );
@@ -295,15 +335,15 @@ class FriendsServiceInstance with ServiceErrorHandlerMixin implements IFriendsSe
 
     return handleBooleanError(
       () async {
-      await _db.ref().update({
-        '${DbPaths.userFriendRequestsSent(fromUid)}/$toUid': null,
-        '${DbPaths.userFriendRequestsReceived(toUid)}/$fromUid': null,
-      });
+        await _db.ref().update({
+          '${DbPaths.userFriendRequestsSent(fromUid)}/$toUid': null,
+          '${DbPaths.userFriendRequestsReceived(toUid)}/$fromUid': null,
+        });
 
-      _friendsCache.remove('friends_$fromUid');
-      _friendsCache.remove('friends_$toUid');
+        _friendsCache.remove('friends_$fromUid');
+        _friendsCache.remove('friends_$toUid');
 
-      return true;
+        return true;
       },
       'cancelling friend request',
     );
@@ -319,23 +359,23 @@ class FriendsServiceInstance with ServiceErrorHandlerMixin implements IFriendsSe
 
     return handleBooleanError(
       () async {
-      // Remove from friends list for both users
-      await _db.ref().update({
-        '${DbPaths.userFriends(currentUid)}/$friendUid': null,
-        '${DbPaths.userFriends(friendUid)}/$currentUid': null,
-      });
+        // Remove from friends list for both users
+        await _db.ref().update({
+          '${DbPaths.userFriends(currentUid)}/$friendUid': null,
+          '${DbPaths.userFriends(friendUid)}/$currentUid': null,
+        });
 
-      // Notify the removed friend
-      await _notificationService.sendFriendRemovedNotification(
-        removedUserUid: friendUid,
-        removerUid: currentUid,
-      );
+        // Notify the removed friend
+        await _notificationService.sendFriendRemovedNotification(
+          removedUserUid: friendUid,
+          removerUid: currentUid,
+        );
 
-      // Clear cache
-      _friendsCache.remove('friends_$currentUid');
-      _friendsCache.remove('friends_$friendUid');
+        // Clear cache
+        _friendsCache.remove('friends_$currentUid');
+        _friendsCache.remove('friends_$friendUid');
 
-      return true;
+        return true;
       },
       'removing friend',
     );
@@ -351,30 +391,30 @@ class FriendsServiceInstance with ServiceErrorHandlerMixin implements IFriendsSe
 
     return handleBooleanError(
       () async {
-      // Add to blocked users list
-      await _db.ref().update({
-        'users/$currentUid/blockedUsers/$friendUid': true,
-      });
+        // Add to blocked users list
+        await _db.ref().update({
+          'users/$currentUid/blockedUsers/$friendUid': true,
+        });
 
-      // Remove from friends list if already friends
-      await _db.ref().update({
-        '${DbPaths.userFriends(currentUid)}/$friendUid': null,
-        '${DbPaths.userFriends(friendUid)}/$currentUid': null,
-      });
+        // Remove from friends list if already friends
+        await _db.ref().update({
+          '${DbPaths.userFriends(currentUid)}/$friendUid': null,
+          '${DbPaths.userFriends(friendUid)}/$currentUid': null,
+        });
 
-      // Remove any pending friend requests
-      await _db.ref().update({
-        '${DbPaths.userFriendRequestsSent(currentUid)}/$friendUid': null,
-        '${DbPaths.userFriendRequestsReceived(currentUid)}/$friendUid': null,
-        '${DbPaths.userFriendRequestsSent(friendUid)}/$currentUid': null,
-        '${DbPaths.userFriendRequestsReceived(friendUid)}/$currentUid': null,
-      });
+        // Remove any pending friend requests
+        await _db.ref().update({
+          '${DbPaths.userFriendRequestsSent(currentUid)}/$friendUid': null,
+          '${DbPaths.userFriendRequestsReceived(currentUid)}/$friendUid': null,
+          '${DbPaths.userFriendRequestsSent(friendUid)}/$currentUid': null,
+          '${DbPaths.userFriendRequestsReceived(friendUid)}/$currentUid': null,
+        });
 
-      // Clear cache
-      _friendsCache.remove('friends_$currentUid');
-      _friendsCache.remove('friends_$friendUid');
+        // Clear cache
+        _friendsCache.remove('friends_$currentUid');
+        _friendsCache.remove('friends_$friendUid');
 
-      return true;
+        return true;
       },
       'blocking friend',
     );
@@ -406,14 +446,12 @@ class FriendsServiceInstance with ServiceErrorHandlerMixin implements IFriendsSe
       if (e.code == 'permission-denied') {
         NumberedLogger.w(
             'Email search permission denied; returning fallback stub for $email');
-        final fallbackUid = crypto.sha256
-            .convert(utf8.encode('fallback_$email'))
-            .toString();
+        final fallbackUid =
+            crypto.sha256.convert(utf8.encode('fallback_$email')).toString();
         return [
           {
             'uid': fallbackUid,
             'displayName': '',
-            'photoURL': '',
             'visibility': _visibilityPublic,
             'email': email.trim().toLowerCase(),
             'isFallback': 'true',
@@ -491,8 +529,7 @@ class FriendsServiceInstance with ServiceErrorHandlerMixin implements IFriendsSe
   Future<List<Map<String, String>>> _searchUsersByDisplayNameExact(
       String nameLower) async {
     try {
-      final snapshot =
-          await _safeGet('usersByDisplayNameLower/$nameLower');
+      final snapshot = await _safeGet('usersByDisplayNameLower/$nameLower');
 
       if (!snapshot.exists) {
         return [];
@@ -524,6 +561,7 @@ class FriendsServiceInstance with ServiceErrorHandlerMixin implements IFriendsSe
   Future<Map<String, String>?> _getUserProfile(String uid) async {
     try {
       final access = await _profileAccessFor(uid);
+      if (!access.allowed) return null;
 
       final snapshot = await _safeGet('users/$uid/profile');
       if (snapshot.exists) {
@@ -531,14 +569,12 @@ class FriendsServiceInstance with ServiceErrorHandlerMixin implements IFriendsSe
         return {
           'uid': uid,
           'displayName': profileData['displayName']?.toString() ?? 'Unknown',
-          'photoURL': '',
           'visibility': access.visibility,
         };
       }
       return {
         'uid': uid,
         'displayName': '',
-        'photoURL': '',
         'visibility': access.visibility,
       };
     } catch (e) {
@@ -550,8 +586,18 @@ class FriendsServiceInstance with ServiceErrorHandlerMixin implements IFriendsSe
   // Get minimal profile for a user
   @override
   Future<Map<String, String?>> fetchMinimalProfile(String uid) async {
+    String visibility = _visibilityPublic;
     try {
       final access = await _profileAccessFor(uid);
+      visibility = access.visibility;
+      if (!access.allowed) {
+        return {
+          'uid': uid,
+          'displayName': null,
+          'visibility': access.visibility,
+          'visibilitySetting': access.visibility,
+        };
+      }
 
       final snapshot = await _safeGet('users/$uid/profile');
       if (snapshot.exists) {
@@ -559,14 +605,12 @@ class FriendsServiceInstance with ServiceErrorHandlerMixin implements IFriendsSe
         return {
           'uid': uid,
           'displayName': profileData['displayName']?.toString(),
-          'photoURL': '',
           'visibility': access.visibility,
         };
       }
       return {
         'uid': uid,
         'displayName': null,
-        'photoURL': '',
         'visibility': access.visibility,
       };
     } catch (e) {
@@ -574,9 +618,8 @@ class FriendsServiceInstance with ServiceErrorHandlerMixin implements IFriendsSe
       return {
         'uid': uid,
         'displayName': null,
-        'photoURL': '',
-        'visibility': _visibilityPublic,
-        'visibilitySetting': _visibilityPublic,
+        'visibility': visibility,
+        'visibilitySetting': visibility,
       };
     }
   }

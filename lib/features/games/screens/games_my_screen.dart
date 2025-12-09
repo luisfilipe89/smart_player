@@ -143,7 +143,6 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
                       {
                         'uid': uid,
                         'displayName': null,
-                        'photoURL': null,
                       })
                   .toList();
 
@@ -827,99 +826,113 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
               children: [
                 const SizedBox(height: 24),
                 Expanded(
-            child: myGamesAsync.when(
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (error, stack) => ErrorRetryWidget(
-                message: myGamesAsync.errorMessage ?? 'Failed to load games',
-                onRetry: _refreshData,
-              ),
-              data: (games) => Container(
-                decoration: BoxDecoration(
-                  color: AppColors.white,
-                  borderRadius: BorderRadius.circular(AppRadius.container),
-                  boxShadow: AppShadows.md,
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(AppRadius.container),
-                  child: TabBarView(
-                    controller: _tab,
-                    children: [
-                      // Registered Games (joined)
-                      RefreshIndicator(
-                        onRefresh: () async => _refreshData(),
-                        child: (joinedGames.isEmpty)
-                            ? ListView(
-                                physics: const AlwaysScrollableScrollPhysics(),
-                                padding: const EdgeInsets.only(
-                                    bottom: AppHeights.reg),
-                                children: [_emptyStateRegistered(context)],
-                              )
-                            : ListView.builder(
-                                physics: const AlwaysScrollableScrollPhysics(),
-                                padding: AppPaddings.allMedium.add(
-                                  const EdgeInsets.only(bottom: AppHeights.reg),
-                                ),
-                                itemCount: joinedGames.length,
-                                itemBuilder: (_, i) =>
-                                    _buildGameTile(joinedGames[i]),
-                              ),
+                  child: myGamesAsync.when(
+                    loading: () =>
+                        const Center(child: CircularProgressIndicator()),
+                    error: (error, stack) => ErrorRetryWidget(
+                      message:
+                          myGamesAsync.errorMessage ?? 'Failed to load games',
+                      onRetry: _refreshData,
+                    ),
+                    data: (games) => Container(
+                      decoration: BoxDecoration(
+                        color: AppColors.white,
+                        borderRadius:
+                            BorderRadius.circular(AppRadius.container),
+                        boxShadow: AppShadows.md,
                       ),
-                      // Organized Games (created)
-                      RefreshIndicator(
-                        onRefresh: () async => _refreshData(),
-                        child: (createdGames.isEmpty)
-                            ? ListView(
-                                physics: const AlwaysScrollableScrollPhysics(),
-                                padding: const EdgeInsets.only(
-                                    bottom: AppHeights.reg),
-                                children: [_emptyStateOrganized(context)],
-                              )
-                            : ListView.builder(
-                                physics: const AlwaysScrollableScrollPhysics(),
-                                padding: AppPaddings.allMedium.add(
-                                  const EdgeInsets.only(bottom: AppHeights.reg),
+                      child: ClipRRect(
+                        borderRadius:
+                            BorderRadius.circular(AppRadius.container),
+                        child: TabBarView(
+                          controller: _tab,
+                          children: [
+                            // Registered Games (joined)
+                            RefreshIndicator(
+                              onRefresh: () async => _refreshData(),
+                              child: (joinedGames.isEmpty)
+                                  ? ListView(
+                                      physics:
+                                          const AlwaysScrollableScrollPhysics(),
+                                      padding: const EdgeInsets.only(
+                                          bottom: AppHeights.reg),
+                                      children: [
+                                        _emptyStateRegistered(context)
+                                      ],
+                                    )
+                                  : ListView.builder(
+                                      physics:
+                                          const AlwaysScrollableScrollPhysics(),
+                                      padding: AppPaddings.allMedium.add(
+                                        const EdgeInsets.only(
+                                            bottom: AppHeights.reg),
+                                      ),
+                                      itemCount: joinedGames.length,
+                                      itemBuilder: (_, i) =>
+                                          _buildGameTile(joinedGames[i]),
+                                    ),
+                            ),
+                            // Organized Games (created)
+                            RefreshIndicator(
+                              onRefresh: () async => _refreshData(),
+                              child: (createdGames.isEmpty)
+                                  ? ListView(
+                                      physics:
+                                          const AlwaysScrollableScrollPhysics(),
+                                      padding: const EdgeInsets.only(
+                                          bottom: AppHeights.reg),
+                                      children: [_emptyStateOrganized(context)],
+                                    )
+                                  : ListView.builder(
+                                      physics:
+                                          const AlwaysScrollableScrollPhysics(),
+                                      padding: AppPaddings.allMedium.add(
+                                        const EdgeInsets.only(
+                                            bottom: AppHeights.reg),
+                                      ),
+                                      itemCount: createdGames.length,
+                                      itemBuilder: (_, i) =>
+                                          _buildGameTile(createdGames[i]),
+                                    ),
+                            ),
+                            // Historic Games (past games where user participated)
+                            RefreshIndicator(
+                              onRefresh: () async => _refreshData(),
+                              child: historicGamesAsync.when(
+                                loading: () => const Center(
+                                    child: CircularProgressIndicator()),
+                                error: (error, stack) => ErrorRetryWidget(
+                                  message: historicGamesAsync.errorMessage ??
+                                      'Failed to load historic games',
+                                  onRetry: _refreshData,
                                 ),
-                                itemCount: createdGames.length,
-                                itemBuilder: (_, i) =>
-                                    _buildGameTile(createdGames[i]),
+                                data: (games) => (games.isEmpty)
+                                    ? ListView(
+                                        physics:
+                                            const AlwaysScrollableScrollPhysics(),
+                                        padding: const EdgeInsets.only(
+                                            bottom: AppHeights.reg),
+                                        children: [
+                                          _emptyStateHistoric(context)
+                                        ],
+                                      )
+                                    : ListView.builder(
+                                        physics:
+                                            const AlwaysScrollableScrollPhysics(),
+                                        padding: AppPaddings.allMedium.add(
+                                          const EdgeInsets.only(
+                                              bottom: AppHeights.reg),
+                                        ),
+                                        itemCount: games.length,
+                                        itemBuilder: (_, i) =>
+                                            _buildHistoricGameTile(games[i]),
+                                      ),
                               ),
-                      ),
-                      // Historic Games (past games where user participated)
-                      RefreshIndicator(
-                        onRefresh: () async => _refreshData(),
-                        child: historicGamesAsync.when(
-                          loading: () =>
-                              const Center(child: CircularProgressIndicator()),
-                          error: (error, stack) => ErrorRetryWidget(
-                            message: historicGamesAsync.errorMessage ??
-                                'Failed to load historic games',
-                            onRetry: _refreshData,
-                          ),
-                          data: (games) => (games.isEmpty)
-                              ? ListView(
-                                  physics:
-                                      const AlwaysScrollableScrollPhysics(),
-                                  padding: const EdgeInsets.only(
-                                      bottom: AppHeights.reg),
-                                  children: [_emptyStateHistoric(context)],
-                                )
-                              : ListView.builder(
-                                  physics:
-                                      const AlwaysScrollableScrollPhysics(),
-                                  padding: AppPaddings.allMedium.add(
-                                    const EdgeInsets.only(
-                                        bottom: AppHeights.reg),
-                                  ),
-                                  itemCount: games.length,
-                                  itemBuilder: (_, i) =>
-                                      _buildHistoricGameTile(games[i]),
-                                ),
+                            ),
+                          ],
                         ),
                       ),
-                    ],
-                  ),
-                ),
-              ),
+                    ),
                   ),
                 ),
               ],

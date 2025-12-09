@@ -2,7 +2,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:easy_localization/easy_localization.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:move_young/features/games/models/game.dart';
 import 'package:move_young/theme/_theme.dart';
 import 'package:move_young/features/auth/services/auth_provider.dart';
@@ -2009,24 +2008,18 @@ class _SearchableFriendPicker extends ConsumerWidget {
                         const Divider(height: 1, color: AppColors.lightgrey),
                     itemBuilder: (context, i) {
                       final uid = filtered[i];
-                      final data = profiles[uid] ??
-                          const {'displayName': 'User', 'photoURL': null};
+                      final data =
+                          profiles[uid] ?? const {'displayName': 'User'};
                       final name = data['displayName'] ?? 'User';
-                      final photo = data['photoURL'];
                       final selected = selectedUids.contains(uid);
                       final locked = lockedUids.contains(uid);
 
                       return ListTile(
                         leading: CircleAvatar(
                           backgroundColor: AppColors.superlightgrey,
-                          backgroundImage: (photo != null && photo.isNotEmpty)
-                              ? CachedNetworkImageProvider(photo)
-                              : null,
-                          child: (photo == null || photo.isEmpty)
-                              ? Text(
-                                  name.isNotEmpty ? name[0].toUpperCase() : '?',
-                                )
-                              : null,
+                          child: Text(
+                            name.isNotEmpty ? name[0].toUpperCase() : '?',
+                          ),
                         ),
                         title: Text(
                           name,

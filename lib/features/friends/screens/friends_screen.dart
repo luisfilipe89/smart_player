@@ -1,7 +1,6 @@
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'dart:async';
 
 import 'package:move_young/features/auth/services/auth_provider.dart';
@@ -852,7 +851,6 @@ class _FriendsList extends ConsumerWidget {
                               final data = profiles[friendUid] ??
                                   const {
                                     'displayName': 'User',
-                                    'photoURL': null,
                                   };
                               final name = data['displayName'] ?? 'User';
                               return ListTile(
@@ -1074,25 +1072,17 @@ class _SentRequests extends ConsumerWidget {
                           final data = profiles[toUid] ??
                               const {
                                 'displayName': 'User',
-                                'photoURL': null,
                               };
                           final name = data['displayName'] ?? 'User';
-                          final photo = data['photoURL'];
                           return ListTile(
                             contentPadding: EdgeInsets.zero,
                             leading: CircleAvatar(
                               backgroundColor: AppColors.superlightgrey,
                               foregroundColor: AppColors.primary,
-                              backgroundImage:
-                                  (photo != null && photo.isNotEmpty)
-                                      ? CachedNetworkImageProvider(photo)
-                                      : null,
-                              child: (photo == null || photo.isEmpty)
-                                  ? const Icon(
-                                      Icons.outbox,
-                                      color: AppColors.primary,
-                                    )
-                                  : null,
+                              child: const Icon(
+                                Icons.outbox,
+                                color: AppColors.primary,
+                              ),
                             ),
                             title: Text(
                               name,
@@ -1291,8 +1281,6 @@ class _SuggestionCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final displayName = suggestion['displayName'] ?? 'Unknown User';
     final reason = suggestion['reason'] ?? '';
-    final photoURL = suggestion['photoURL'];
-
     return Container(
       width: 100,
       margin: const EdgeInsets.only(right: 12),
@@ -1302,19 +1290,14 @@ class _SuggestionCard extends StatelessWidget {
             children: [
               CircleAvatar(
                 radius: 30,
-                backgroundImage: photoURL != null && photoURL.isNotEmpty
-                    ? CachedNetworkImageProvider(photoURL)
-                    : null,
-                child: photoURL == null || photoURL.isEmpty
-                    ? Text(
-                        displayName.isNotEmpty
-                            ? displayName[0].toUpperCase()
-                            : '?',
-                        style: AppTextStyles.h3.copyWith(
-                          color: AppColors.white,
-                        ),
-                      )
-                    : null,
+                backgroundColor: _avatarBgFromName(displayName),
+                foregroundColor: Colors.white,
+                child: Text(
+                  displayName.isNotEmpty ? displayName[0].toUpperCase() : '?',
+                  style: AppTextStyles.h3.copyWith(
+                    color: Colors.white,
+                  ),
+                ),
               ),
               Positioned(
                 bottom: 0,
@@ -1645,11 +1628,9 @@ class _RequestsListState extends ConsumerState<_RequestsList> {
                                           final data = profiles[fromUid] ??
                                               const {
                                                 'displayName': 'User',
-                                                'photoURL': null,
                                               };
                                           final name =
                                               data['displayName'] ?? 'User';
-                                          final photo = data['photoURL'];
                                           return ListTile(
                                             contentPadding: EdgeInsets.zero,
                                             leading: _AvatarRing(
@@ -1657,22 +1638,11 @@ class _RequestsListState extends ConsumerState<_RequestsList> {
                                                 backgroundColor:
                                                     _avatarBgFromName(name),
                                                 foregroundColor: Colors.white,
-                                                backgroundImage: (photo !=
-                                                            null &&
-                                                        photo.isNotEmpty)
-                                                    ? CachedNetworkImageProvider(
-                                                        photo,
-                                                      )
-                                                    : null,
-                                                child: (photo == null ||
-                                                        photo.isEmpty)
-                                                    ? Text(
-                                                        name.isNotEmpty
-                                                            ? name[0]
-                                                                .toUpperCase()
-                                                            : '?',
-                                                      )
-                                                    : null,
+                                                child: Text(
+                                                  name.isNotEmpty
+                                                      ? name[0].toUpperCase()
+                                                      : '?',
+                                                ),
                                               ),
                                             ),
                                             title: Text(

@@ -135,7 +135,7 @@
             "$uid": {
                 ".read": "auth != null",
                 ".write": "auth != null && auth.uid == $uid",
-                ".validate": "newData.hasChildren(['displayName']) && newData.child('displayName').isString() && (!newData.hasChild('photoURL') || newData.child('photoURL').isString())"
+                ".validate": "newData.hasChildren(['displayName']) && newData.child('displayName').isString()"
             }
         },
         "usersByEmailHash": {
