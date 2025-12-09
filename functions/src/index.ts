@@ -553,21 +553,6 @@ export const onUserDelete = onValueDeleted("/users/{uid}", async (event) => {
     throw error; // Re-throw to trigger retry
   }
 
-  // 9. Delete profile image from Storage
-  try {
-    await admin
-      .storage()
-      .bucket()
-      .file(`users/${uid}/profile.jpg`)
-      .delete({ ignoreNotFound: true });
-    console.log(`Removed profile image for user: ${uid}`);
-  } catch (error: any) {
-    if (error?.code !== 404) {
-      console.error("Error deleting profile image during user delete cleanup:", error);
-      // Don't throw - storage deletion failure shouldn't block the rest
-    }
-  }
-
   console.log(`Completed comprehensive cleanup for deleted user: ${uid}`);
 });
 

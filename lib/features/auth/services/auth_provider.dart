@@ -96,8 +96,8 @@ class AuthActions {
           String email, String password, String displayName) =>
       _authService.createUserWithEmailAndPassword(email, password, displayName);
   Future<void> signOut() => _authService.signOut();
-  Future<void> updateProfile({String? displayName, String? photoURL}) =>
-      _authService.updateProfile(displayName: displayName, photoURL: photoURL);
+  Future<void> updateProfile({String? displayName}) =>
+      _authService.updateProfile(displayName: displayName);
   Future<void> updateEmail(String newEmail) =>
       _authService.updateEmail(newEmail);
   Future<DeleteAccountResult> deleteAccount() => _authService.deleteAccount();
@@ -117,6 +117,3 @@ class AuthActions {
       _authService.reauthenticateWithPassword(password);
   bool get hasPasswordProvider => _authService.hasPasswordProvider;
 }
-
-
-

@@ -740,21 +740,14 @@ class _FriendSearchSheetState extends ConsumerState<_FriendSearchSheet> {
                                     ? suggestion['displayName']!
                                     : 'Unknown User';
                             final email = suggestion['email'] ?? '';
-                            final photoUrl = suggestion['photoURL'];
-
                             return ListTile(
                               leading: CircleAvatar(
-                                backgroundImage:
-                                    photoUrl != null && photoUrl.isNotEmpty
-                                        ? CachedNetworkImageProvider(photoUrl)
-                                        : null,
-                                child: photoUrl == null || photoUrl.isEmpty
-                                    ? Text(
-                                        displayName.isNotEmpty
-                                            ? displayName[0].toUpperCase()
-                                            : '?',
-                                      )
-                                    : null,
+                                backgroundColor: AppColors.superlightgrey,
+                                child: Text(
+                                  displayName.isNotEmpty
+                                      ? displayName[0].toUpperCase()
+                                      : '?',
+                                ),
                               ),
                               title: Text(displayName),
                               subtitle: email.isNotEmpty ? Text(email) : null,
@@ -862,24 +855,16 @@ class _FriendsList extends ConsumerWidget {
                                     'photoURL': null,
                                   };
                               final name = data['displayName'] ?? 'User';
-                              final photo = data['photoURL'];
-
                               return ListTile(
                                 contentPadding: EdgeInsets.zero,
                                 leading: CircleAvatar(
                                   backgroundColor: AppColors.superlightgrey,
                                   foregroundColor: AppColors.primary,
-                                  backgroundImage:
-                                      (photo != null && photo.isNotEmpty)
-                                          ? CachedNetworkImageProvider(photo)
-                                          : null,
-                                  child: (photo == null || photo.isEmpty)
-                                      ? Text(
-                                          name.isNotEmpty
-                                              ? name[0].toUpperCase()
-                                              : '?',
-                                        )
-                                      : null,
+                                  child: Text(
+                                    name.isNotEmpty
+                                        ? name[0].toUpperCase()
+                                        : '?',
+                                  ),
                                 ),
                                 title: Text(name, style: AppTextStyles.body),
                                 trailing: IconButton(

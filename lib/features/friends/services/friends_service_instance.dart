@@ -82,9 +82,6 @@ class FriendsServiceInstance with ServiceErrorHandlerMixin implements IFriendsSe
         ? user.displayName!.trim()
         : _deriveNameFromEmail(user.email);
     updates[DbPaths.userProfileDisplayName(uid)] = displayName;
-    if (user.photoURL != null && user.photoURL!.isNotEmpty) {
-      updates[DbPaths.userProfilePhotoUrl(uid)] = user.photoURL;
-    }
 
     // Index by lowercase display name for prefix search
     final String displayNameLower = displayName.toLowerCase();
@@ -534,7 +531,7 @@ class FriendsServiceInstance with ServiceErrorHandlerMixin implements IFriendsSe
         return {
           'uid': uid,
           'displayName': profileData['displayName']?.toString() ?? 'Unknown',
-          'photoURL': profileData['photoURL']?.toString() ?? '',
+          'photoURL': '',
           'visibility': access.visibility,
         };
       }
@@ -562,14 +559,14 @@ class FriendsServiceInstance with ServiceErrorHandlerMixin implements IFriendsSe
         return {
           'uid': uid,
           'displayName': profileData['displayName']?.toString(),
-          'photoURL': profileData['photoURL']?.toString(),
+          'photoURL': '',
           'visibility': access.visibility,
         };
       }
       return {
         'uid': uid,
         'displayName': null,
-        'photoURL': null,
+        'photoURL': '',
         'visibility': access.visibility,
       };
     } catch (e) {
@@ -577,7 +574,7 @@ class FriendsServiceInstance with ServiceErrorHandlerMixin implements IFriendsSe
       return {
         'uid': uid,
         'displayName': null,
-        'photoURL': null,
+        'photoURL': '',
         'visibility': _visibilityPublic,
         'visibilitySetting': _visibilityPublic,
       };

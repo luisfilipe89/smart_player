@@ -1,14 +1,7 @@
-import 'dart:io';
-
 import 'package:easy_localization/easy_localization.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:image_picker/image_picker.dart';
-import 'package:cached_network_image/cached_network_image.dart';
-import 'package:image_cropper/image_cropper.dart';
-import 'package:permission_handler/permission_handler.dart';
 import 'package:move_young/features/auth/services/auth_provider.dart';
 import 'package:move_young/features/profile/services/profile_settings_provider.dart';
 import 'package:move_young/utils/profanity.dart';
@@ -28,8 +21,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   final TextEditingController _nameController = TextEditingController();
   DateTime? _dateOfBirth;
   bool _saving = false;
-  bool _uploading = false;
-  File? _localImage;
   bool _loadingDetails = true;
   bool _changingEmail = false;
 
@@ -123,7 +114,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   @override
   Widget build(BuildContext context) {
     final user = ref.watch(currentUserProvider).value;
-    final photoUrl = user?.photoURL;
     final email = user?.email ?? '';
 
     return Scaffold(
@@ -158,62 +148,20 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   bottom: AppSpacing.lg,
                 ),
                 children: [
-                  // Profile Photo Section
+                  // Profile avatar (no upload/change)
                   _buildSectionCard(
                     child: Column(
                       children: [
-                        Center(
-                          child: Stack(
-                            children: [
-                              Hero(
-                                tag: 'avatar-${user?.uid ?? 'me'}',
-                                child: Container(
-                                  padding: const EdgeInsets.all(3),
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    border: Border.all(
-                                        color: AppColors.primary, width: 2),
-                                  ),
-                                  child: CircleAvatar(
-                                    radius: 52,
-                                    backgroundColor: AppColors.lightgrey,
-                                    backgroundImage: _localImage != null
-                                        ? FileImage(_localImage!)
-                                        : (photoUrl != null
-                                            ? CachedNetworkImageProvider(
-                                                photoUrl)
-                                            : null) as ImageProvider?,
-                                    child: (photoUrl == null &&
-                                            _localImage == null)
-                                        ? const Icon(Icons.person,
-                                            size: 52, color: Colors.white)
-                                        : null,
-                                  ),
-                                ),
-                              ),
-                              Positioned(
-                                right: 0,
-                                bottom: 0,
-                                child: Material(
-                                  color: AppColors.white,
-                                  shape: const CircleBorder(),
-                                  elevation: 2,
-                                  child: IconButton(
-                                    icon: _uploading
-                                        ? const SizedBox(
-                                            width: 18,
-                                            height: 18,
-                                            child: CircularProgressIndicator(
-                                                strokeWidth: 2))
-                                        : const Icon(Icons.camera_alt,
-                                            size: 20),
-                                    onPressed:
-                                        _uploading ? null : _pickAndUploadPhoto,
-                                    tooltip: 'profile_change_photo'.tr(),
-                                  ),
-                                ),
-                              )
-                            ],
+                        Hero(
+                          tag: 'avatar-${user?.uid ?? 'me'}',
+                          child: CircleAvatar(
+                            radius: 52,
+                            backgroundColor: AppColors.lightgrey,
+                            child: const Icon(
+                              Icons.person,
+                              size: 52,
+                              color: Colors.white,
+                            ),
                           ),
                         ),
                       ],
@@ -531,202 +479,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         ),
       ),
     );
-  }
-
-  Future<void> _pickAndUploadPhoto() async {
-    try {
-      final messenger = ScaffoldMessenger.of(context);
-      final source = await showModalBottomSheet<dynamic>(
-            context: context,
-            builder: (ctx) => SafeArea(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  ListTile(
-                    leading: const Icon(Icons.photo_library_outlined),
-                    title: Text('profile_gallery'.tr()),
-                    onTap: () => Navigator.pop(ctx, ImageSource.gallery),
-                  ),
-                  const Divider(height: 1),
-                  ListTile(
-                    leading: const Icon(Icons.photo_camera_outlined),
-                    title: Text('profile_camera'.tr()),
-                    onTap: () => Navigator.pop(ctx, ImageSource.camera),
-                  ),
-                  Builder(
-                    builder: (_) {
-                      final user = ref.read(currentUserProvider).value;
-                      if (_localImage != null || (user?.photoURL != null)) {
-                        return const Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Divider(height: 1),
-                            ListTile(
-                              leading: Icon(Icons.delete_outline),
-                              title: Text('Remove photo'),
-                              onTap: null,
-                            ),
-                          ],
-                        );
-                      }
-                      return const SizedBox.shrink();
-                    },
-                  ),
-                ],
-              ),
-            ),
-          ) ??
-          ImageSource.gallery;
-
-      if (source == 'remove') {
-        await _removePhoto();
-        return;
-      }
-
-      // Request permissions based on source
-      if (source == ImageSource.camera) {
-        final cameraStatus = await Permission.camera.request();
-        if (!cameraStatus.isGranted) {
-          if (!mounted) return;
-          messenger.showSnackBar(
-            SnackBar(content: Text('permission_camera_denied'.tr())),
-          );
-          return;
-        }
-      } else {
-        final storageStatus = await Permission.storage.request();
-        if (!storageStatus.isGranted) {
-          if (!mounted) return;
-          messenger.showSnackBar(
-            SnackBar(content: Text('permission_storage_denied'.tr())),
-          );
-          return;
-        }
-      }
-
-      final picker = ImagePicker();
-      final XFile? picked = await picker.pickImage(
-        source: source as ImageSource,
-        maxWidth: 2000,
-        maxHeight: 2000,
-        imageQuality: 95,
-      );
-      if (picked == null) return;
-
-      // Check file size (max 5MB)
-      const int maxImageSizeBytes = 5 * 1024 * 1024; // 5MB
-      final fileSize = await picked.length();
-      if (fileSize > maxImageSizeBytes) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Image too large. Maximum size: 5MB'),
-              backgroundColor: AppColors.red,
-            ),
-          );
-        }
-        return;
-      }
-
-      final CroppedFile? cropped = await ImageCropper().cropImage(
-        sourcePath: picked.path,
-        aspectRatio: const CropAspectRatio(ratioX: 1, ratioY: 1),
-        uiSettings: [
-          AndroidUiSettings(
-            toolbarTitle: 'Crop',
-            toolbarColor: AppColors.primary,
-            toolbarWidgetColor: Colors.white,
-            lockAspectRatio: true,
-            hideBottomControls: false,
-            showCropGrid: true,
-          ),
-          IOSUiSettings(
-            title: 'Crop',
-            aspectRatioLockEnabled: true,
-            rotateButtonsHidden: false,
-            rotateClockwiseButtonHidden: false,
-            resetButtonHidden: false,
-          ),
-        ],
-        compressFormat: ImageCompressFormat.jpg,
-        compressQuality: 90,
-      );
-
-      if (cropped == null) return;
-
-      setState(() {
-        _localImage = File(cropped.path);
-        _uploading = true;
-      });
-
-      final uid = ref.read(currentUserIdProvider);
-      if (uid == null) throw Exception('Not signed in');
-
-      final storageRef =
-          FirebaseStorage.instance.ref().child('users/$uid/profile.jpg');
-      final file = File(cropped.path);
-      final task = await storageRef.putFile(
-          file, SettableMetadata(contentType: 'image/jpeg'));
-      String downloadUrl;
-      try {
-        downloadUrl = await task.ref.getDownloadURL();
-      } catch (_) {
-        await Future.delayed(const Duration(milliseconds: 300));
-        downloadUrl = await task.ref.getDownloadURL();
-      }
-
-      await ref.read(authActionsProvider).updateProfile(photoURL: downloadUrl);
-
-      if (!mounted) return;
-      setState(() => _uploading = false);
-      messenger.showSnackBar(
-        const SnackBar(content: Text('Photo updated')),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _uploading = false);
-      final messenger = ScaffoldMessenger.of(context);
-      final errorMessage = FirebaseErrorHandler.getUserMessage(e);
-      messenger.showSnackBar(
-        SnackBar(
-            content: Text(errorMessage),
-            backgroundColor: Colors.red),
-      );
-    }
-  }
-
-  Future<void> _removePhoto() async {
-    try {
-      setState(() => _uploading = true);
-      final uid = ref.read(currentUserIdProvider);
-      if (uid != null) {
-        final ref =
-            FirebaseStorage.instance.ref().child('users/$uid/profile.jpg');
-        try {
-          await ref.delete();
-        } catch (_) {
-          // ignore if not found
-        }
-      }
-      await ref.read(authActionsProvider).updateProfile(photoURL: '');
-      if (!mounted) return;
-      setState(() {
-        _localImage = null;
-        _uploading = false;
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Photo removed')),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _uploading = false);
-      final errorMessage = FirebaseErrorHandler.getUserMessage(e);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-            content: Text(errorMessage),
-            backgroundColor: Colors.red),
-      );
-    }
   }
 
   Future<void> _changeEmail() async {

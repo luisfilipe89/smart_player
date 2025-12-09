@@ -23,7 +23,7 @@ abstract class IAuthService {
   Future<void> signOut();
 
   // Profile
-  Future<void> updateProfile({String? displayName, String? photoURL});
+  Future<void> updateProfile({String? displayName});
   Future<void> updateEmail(String newEmail);
   Future<void> changePassword(String currentPassword, String newPassword);
   Future<void> sendPasswordResetEmail(String email);
@@ -60,6 +60,3 @@ class DeleteAccountResult {
   bool get needsReauthentication =>
       status == DeleteAccountStatus.requiresRecentLogin;
 }
-
-
-

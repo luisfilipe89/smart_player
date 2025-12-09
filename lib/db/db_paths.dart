@@ -15,8 +15,6 @@ class DbPaths {
   static String userProfile(String uid) => '$users/$uid/profile';
   static String userProfileDisplayName(String uid) =>
       '$users/$uid/profile/displayName';
-  static String userProfilePhotoUrl(String uid) =>
-      '$users/$uid/profile/photoURL';
   static String userFriends(String uid) => '$users/$uid/friends';
   static String userFriendRequestsReceived(String uid) =>
       '$users/$uid/friendRequests/received';

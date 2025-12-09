@@ -178,7 +178,7 @@ class AuthServiceInstance implements IAuthService {
 
   // Update user profile
   @override
-  Future<void> updateProfile({String? displayName, String? photoURL}) async {
+  Future<void> updateProfile({String? displayName}) async {
     try {
       final user = _auth.currentUser;
       if (user == null) {
@@ -186,9 +186,6 @@ class AuthServiceInstance implements IAuthService {
       }
 
       await user.updateDisplayName(displayName);
-      if (photoURL != null) {
-        await user.updatePhotoURL(photoURL);
-      }
 
       await user.reload();
     } catch (e) {
@@ -395,4 +392,3 @@ class AuthServiceInstance implements IAuthService {
     }
   }
 }
-

@@ -1653,7 +1653,6 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
         }
 
         final name = snap.data?['displayName'] ?? 'Friend';
-        final photo = snap.data?['photoURL'];
         final locked = widget.initialGame != null &&
             _formState.lockedInvitedUids.contains(uid);
 
@@ -1661,15 +1660,10 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
           avatar: CircleAvatar(
             radius: 12,
             backgroundColor: AppColors.superlightgrey,
-            backgroundImage: (photo != null && photo.isNotEmpty)
-                ? CachedNetworkImageProvider(photo)
-                : null,
-            child: (photo == null || photo.isEmpty)
-                ? Text(
-                    name.isNotEmpty ? name[0].toUpperCase() : '?',
-                    style: const TextStyle(fontSize: 12),
-                  )
-                : null,
+            child: Text(
+              name.isNotEmpty ? name[0].toUpperCase() : '?',
+              style: const TextStyle(fontSize: 12),
+            ),
           ),
           label: Text(name),
           deleteIcon: Icon(locked ? Icons.lock : Icons.close, size: 16),

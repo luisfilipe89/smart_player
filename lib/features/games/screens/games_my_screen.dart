@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:easy_localization/easy_localization.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:move_young/features/games/models/game.dart';
 import 'package:move_young/features/auth/services/auth_provider.dart';
 import 'package:move_young/features/games/services/games_provider.dart';
@@ -198,7 +197,6 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
                     !inPlayers &&
                     (status == 'declined' || status == 'left');
                 final name = (profiles[i]['displayName'] ?? 'User').trim();
-                final photo = profiles[i]['photoURL'];
                 final initials = _initialsFromName(name);
                 items.add(Positioned(
                   left: i * (diameter - overlap),
@@ -216,15 +214,10 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
                         child: CircleAvatar(
                           radius: radius,
                           backgroundColor: AppColors.superlightgrey,
-                          backgroundImage: (photo != null && photo.isNotEmpty)
-                              ? CachedNetworkImageProvider(photo)
-                              : null,
-                          child: (photo == null || photo.isEmpty)
-                              ? (initials == '?'
-                                  ? const Icon(Icons.person,
-                                      size: 18, color: AppColors.blackopac)
-                                  : Text(initials, style: AppTextStyles.small))
-                              : null,
+                          child: initials == '?'
+                              ? const Icon(Icons.person,
+                                  size: 18, color: AppColors.blackopac)
+                              : Text(initials, style: AppTextStyles.small),
                         ),
                       ),
                       if (isPending)
