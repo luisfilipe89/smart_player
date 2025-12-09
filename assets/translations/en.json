@@ -558,6 +558,7 @@
     "refresh_success": "Events updated successfully",
     "refresh_error": "Failed to refresh events",
     "field_report_button": "Report issue",
+    "report": "Report",
     "field_report_title": "Report issue",
     "field_report_intro": "We'll forward your message to the municipality responsible for this field.",
     "field_report_category_label": "What is the issue?",

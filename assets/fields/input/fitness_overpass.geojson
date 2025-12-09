@@ -1,0 +1,63 @@
+{
+  "type": "FeatureCollection",
+  "generator": "overpass-turbo",
+  "copyright": "The data included in this document is from www.openstreetmap.org. The data is made available under ODbL.",
+  "timestamp": "2025-12-02T19:05:00Z",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "way/1372204501",
+        "access": "yes",
+        "blind": "no",
+        "leisure": "fitness_station",
+        "sport": "fitness"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              5.2841627,
+              51.6888762
+            ],
+            [
+              5.2839192,
+              51.6889051
+            ],
+            [
+              5.2838943,
+              51.6888164
+            ],
+            [
+              5.2841329,
+              51.6887887
+            ],
+            [
+              5.2841627,
+              51.6888762
+            ]
+          ]
+        ]
+      },
+      "id": "way/1372204501"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "node/12926188337",
+        "access": "yes",
+        "leisure": "fitness_station",
+        "sport": "fitness"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          5.3050724,
+          51.7222438
+        ]
+      },
+      "id": "node/12926188337"
+    }
+  ]
+}

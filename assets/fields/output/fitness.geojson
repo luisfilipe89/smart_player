@@ -1,0 +1,95 @@
+{
+  "type": "FeatureCollection",
+  "generator": "overpass-turbo",
+  "copyright": "The data included in this document is from www.openstreetmap.org. The data is made available under ODbL.",
+  "timestamp": "2025-12-02T19:05:00Z",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "way/1372204501",
+        "access": "yes",
+        "blind": "no",
+        "leisure": "fitness_station",
+        "sport": "fitness",
+        "lat": 51.688846600000005,
+        "lon": 5.284027275,
+        "address_display_name": "Kraaikampen, Paleiskwartier, West, 's-Hertogenbosch, Noord-Brabant, Nederland, 5223 DE, Nederland",
+        "address_short": "Kraaikampen, 5223 DE, 's-Hertogenbosch, Nederland",
+        "address_super_short": "Kraaikampen, 5223 DE",
+        "address_micro_short": "Kraaikampen"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              5.2841627,
+              51.6888762
+            ],
+            [
+              5.2839192,
+              51.6889051
+            ],
+            [
+              5.2838943,
+              51.6888164
+            ],
+            [
+              5.2841329,
+              51.6887887
+            ],
+            [
+              5.2841627,
+              51.6888762
+            ]
+          ]
+        ]
+      },
+      "id": "way/1372204501"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "node/12926188337",
+        "access": "yes",
+        "leisure": "fitness_station",
+        "sport": "fitness",
+        "lat": 51.7222438,
+        "lon": 5.3050724,
+        "address_display_name": "Polsbroek, De Italiaanse Buurt, Empel, 's-Hertogenbosch, Noord-Brabant, Nederland, 5235 GL, Nederland",
+        "address_short": "Polsbroek, 5235 GL, 's-Hertogenbosch, Nederland",
+        "address_super_short": "Polsbroek, 5235 GL",
+        "address_micro_short": "Polsbroek"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          5.3050724,
+          51.7222438
+        ]
+      },
+      "id": "node/12926188337"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "leisure": "fitness_station",
+        "sport": "fitness",
+        "name": "Fitness Circus - Maaspoortweg",
+        "lat": 51.7100000,
+        "lon": 5.2950000,
+        "address_super_short": "Maaspoortweg, 5237 MT",
+        "address_micro_short": "(Circus) Maaspoortweg"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          5.2950000,
+          51.7100000
+        ]
+      },
+      "id": "fitness_circus_maaspoortweg"
+    }
+  ]
+}

@@ -1,0 +1,87 @@
+{
+    "type": "FeatureCollection",
+    "generator": "manual",
+    "copyright": "Sport containers data",
+    "timestamp": "2025-12-02T19:05:00Z",
+    "features": [
+        {
+            "type": "Feature",
+            "properties": {
+                "leisure": "sport_container",
+                "sport": "fitness",
+                "name": "SportContrainer – Oosterplasweg",
+                "lat": 51.7000000,
+                "lon": 5.2800000,
+                "address_short": "Oosterplasweg, 5215 's-Hertogenbosch, Nederland",
+                "address_super_short": "Oosterplasweg, 5215",
+                "address_micro_short": "Oosterplasweg",
+                "images": [
+                    "assets/images/sport_contrainers/oosterplasweg_1.jpg",
+                    "assets/images/sport_contrainers/oosterplasweg_2.jpg",
+                    "assets/images/sport_contrainers/oosterplasweg_3.jpg"
+                ]
+            },
+            "geometry": {
+                "type": "Point",
+                "coordinates": [
+                    5.2800000,
+                    51.7000000
+                ]
+            },
+            "id": "sport_container_oosterplasweg"
+        },
+        {
+            "type": "Feature",
+            "properties": {
+                "leisure": "sport_container",
+                "sport": "fitness",
+                "name": "SportContrainer – OSS-VOLO",
+                "lat": 51.6900000,
+                "lon": 5.2850000,
+                "address_short": "De Eendenkooi 13, 5223 KG, 's-Hertogenbosch, Nederland",
+                "address_super_short": "De Eendenkooi 13, 5223 KG",
+                "address_micro_short": "De Eendenkooi",
+                "images": [
+                    "assets/images/sport_contrainers/oss1.jpg",
+                    "assets/images/sport_contrainers/oss2.jpg",
+                    "assets/images/sport_contrainers/oss3.jpg",
+                    "assets/images/sport_contrainers/oss4.jpg"
+                ]
+            },
+            "geometry": {
+                "type": "Point",
+                "coordinates": [
+                    5.2850000,
+                    51.6900000
+                ]
+            },
+            "id": "sport_container_oss_volo"
+        },
+        {
+            "type": "Feature",
+            "properties": {
+                "leisure": "sport_container",
+                "sport": "fitness",
+                "name": "SportContrainer – Beatrixpark",
+                "lat": 51.7050000,
+                "lon": 5.2900000,
+                "address_short": "Beatrixpark, 5224 BV, 's-Hertogenbosch, Nederland",
+                "address_super_short": "Beatrixpark, 5224 BV",
+                "address_micro_short": "Beatrixpark",
+                "images": [
+                    "assets/images/sport_contrainers/beatrix_1.jpg",
+                    "assets/images/sport_contrainers/beatrix_2.jpg",
+                    "assets/images/sport_contrainers/beatrix_3.jpg"
+                ]
+            },
+            "geometry": {
+                "type": "Point",
+                "coordinates": [
+                    5.2900000,
+                    51.7050000
+                ]
+            },
+            "id": "sport_container_beatrixpark"
+        }
+    ]
+}

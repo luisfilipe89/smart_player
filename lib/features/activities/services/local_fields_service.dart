@@ -18,6 +18,7 @@ class LocalFieldsService {
       }
     }
     if (raw == null) {
+      // Debug: log which paths were tried
       return null;
     }
 
@@ -68,6 +69,20 @@ class LocalFieldsService {
                   ? rawName.toString().trim()
                   : 'Unnamed Field';
 
+          // Handle images array for sport containers
+          List<String>? images;
+          final imagesData = properties['images'];
+          if (imagesData is List) {
+            images = imagesData
+                .map((e) => e?.toString())
+                .whereType<String>()
+                .where((s) => s.isNotEmpty)
+                .toList();
+            if (images.isEmpty) {
+              images = null;
+            }
+          }
+
           return {
             'id': id,
             'name': resolvedName,
@@ -80,6 +95,7 @@ class LocalFieldsService {
             'address_super_short': properties['address_super_short'],
             'address_micro_short': properties['address_micro_short'],
             'address_display_name': properties['address_display_name'],
+            'images': images,
             'tags': properties,
           };
         })
@@ -96,6 +112,13 @@ class LocalFieldsService {
       // First check: must have valid coordinates
       if (m['lat'] == null || m['lon'] == null) {
         return false;
+      }
+
+      // For fitness and sport_container files, be very lenient - accept all items with coordinates
+      // since the file is already filtered to only contain fitness-related items
+      if (normalizedSportType == 'fitness' ||
+          normalizedSportType == 'sport_container') {
+        return true;
       }
 
       // Second check: verify sport matches (but be lenient since file is already filtered)
@@ -119,6 +142,9 @@ class LocalFieldsService {
       // If no sport specified but has coordinates, include it (file is already filtered)
       return true;
     }).toList();
+
+    // Debug: log filtered count
+    // print('DEBUG: Filtered to ${filtered.length} items for $sportType (from ${items.length} total)');
 
     return filtered;
   }
@@ -149,6 +175,12 @@ class LocalFieldsService {
       ],
       'swimming': <String>[
         'assets/fields/output/swimming.geojson',
+      ],
+      'fitness': <String>[
+        'assets/fields/output/fitness.geojson',
+      ],
+      'sport_container': <String>[
+        'assets/fields/output/sport_containers.geojson',
       ],
     };
 
@@ -205,6 +237,3 @@ class LocalFieldsService {
     return null;
   }
 }
-
-
-

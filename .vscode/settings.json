@@ -16,5 +16,8 @@
         "**/lib_old_right_after/**",
         "**/lib_old_working/**"
     ],
-    "java.configuration.maven.userSettings": null
+    "java.configuration.maven.userSettings": null,
+    "python-envs.defaultEnvManager": "ms-python.python:conda",
+    "python-envs.defaultPackageManager": "ms-python.python:conda",
+    "python-envs.pythonProjects": []
 }
