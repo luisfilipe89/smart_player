@@ -16,7 +16,6 @@ class NotificationSettingsScreen extends ConsumerStatefulWidget {
 class _NotificationSettingsScreenState
     extends ConsumerState<NotificationSettingsScreen> {
   bool _notificationsEnabled = true;
-  bool _gameReminders = true;
   bool _friendRequests = true;
   bool _gameInvites = true;
   bool _gameUpdates = true;
@@ -41,7 +40,6 @@ class _NotificationSettingsScreenState
         if (mounted) {
           setState(() {
             _notificationsEnabled = settings['notificationsEnabled'] ?? true;
-            _gameReminders = settings['gameReminders'] ?? true;
             _friendRequests = settings['friendRequests'] ?? true;
             _gameInvites = settings['gameInvites'] ?? true;
             _gameUpdates = settings['gameUpdates'] ?? true;
@@ -95,9 +93,6 @@ class _NotificationSettingsScreenState
         if (mounted) {
           setState(() {
             switch (category) {
-              case 'game_reminders':
-                _gameReminders = !value;
-                break;
               case 'friend_requests':
                 _friendRequests = !value;
                 break;
@@ -215,19 +210,6 @@ class _NotificationSettingsScreenState
                               _gameInvites = value;
                             });
                             _toggleCategory('game_invites', value);
-                          },
-                        ),
-                        const SizedBox(height: 12),
-                        _buildCategoryToggle(
-                          icon: Icons.schedule,
-                          title: 'settings_notif_game_reminders'.tr(),
-                          description: 'settings_notif_reminders_desc'.tr(),
-                          value: _gameReminders,
-                          onChanged: (value) {
-                            setState(() {
-                              _gameReminders = value;
-                            });
-                            _toggleCategory('game_reminders', value);
                           },
                         ),
                         const SizedBox(height: 12),

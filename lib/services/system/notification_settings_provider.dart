@@ -24,7 +24,6 @@ final notificationSettingsProvider = StreamProvider<Map<String, bool>>((ref) {
     // Return default settings if service is not available
     return Stream.value({
       'notificationsEnabled': true,
-      'gameReminders': true,
       'friendRequests': true,
       'gameInvites': true,
       'gameUpdates': true,
@@ -51,14 +50,12 @@ class NotificationSettingsActions {
   Future<void> initialize() => _service.initialize();
   Map<String, bool> getSettings() => _service.getSettings();
   bool get notificationsEnabled => _service.notificationsEnabled;
-  bool get gameReminders => _service.gameReminders;
   bool get friendRequests => _service.friendRequests;
   bool get gameInvites => _service.gameInvites;
   bool get gameUpdates => _service.gameUpdates;
   bool isNotificationTypeEnabled(String type) => _service.isNotificationTypeEnabled(type);
   
   Future<void> setNotificationsEnabled(bool value) => _service.setNotificationsEnabled(value);
-  Future<void> setGameReminders(bool value) => _service.setGameReminders(value);
   Future<void> setFriendRequests(bool value) => _service.setFriendRequests(value);
   Future<void> setGameInvites(bool value) => _service.setGameInvites(value);
   Future<void> setGameUpdates(bool value) => _service.setGameUpdates(value);

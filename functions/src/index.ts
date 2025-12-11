@@ -224,7 +224,6 @@ export const onMailNotificationCreate = onValueCreated(
       const toUid = (payload.toUid || "").toString();
       const fromUid = (payload.fromUid || "").toString();
       const gameId = (payload.gameId || "").toString();
-      const scheduled = (payload.scheduled || "").toString();
 
       const db = admin.database();
       // Idempotency: skip if already processed
@@ -275,28 +274,6 @@ export const onMailNotificationCreate = onValueCreated(
           timestamp: now,
           read: false,
         });
-      } else if (type === "game_reminder" && gameId) {
-        // Fan-out reminder to all players of the game
-        const gameSnap = await db.ref(`/games/${gameId}`).once("value");
-        if (gameSnap.exists()) {
-          const game = gameSnap.val() || {};
-          const players: string[] = Array.isArray(game.players)
-            ? game.players
-            : Object.values(game.players || {}).map((v: any) => String(v));
-          const updates: { [path: string]: any } = {};
-          for (const uid of players) {
-            const path = `/users/${uid}/notifications/${notificationId}`;
-            updates[path] = {
-              type: "game_reminder",
-              data: { gameId, scheduled },
-              timestamp: now,
-              read: false,
-            };
-          }
-          if (Object.keys(updates).length) {
-            await db.ref().update(updates);
-          }
-        }
       } else if ((type === "game_edited" || type === "game_cancelled") && gameId) {
         // Fan-out game edited/cancelled notifications to all players and invited users (excluding organizer)
         console.log(`[${type}] Processing notification for game ${gameId}`);
@@ -836,13 +813,6 @@ export const sendNotification = onValueCreated(
           title = "Game Cancelled";
           body = `The ${notification.data?.sport || "game"} at ${notification.data?.location || "your location"
             } has been cancelled`;
-          data.route = "/my-games";
-          data.gameId = notification.data?.gameId || "";
-          break;
-
-        case "game_player_joined":
-          title = "Player Joined Your Game";
-          body = `${notification.data?.fromName || "Someone"} joined your ${notification.data?.sport || "game"}`;
           data.route = "/my-games";
           data.gameId = notification.data?.gameId || "";
           break;

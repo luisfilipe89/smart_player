@@ -49,16 +49,6 @@ class NotificationServiceInstance implements INotificationService {
     importance: Importance.high,
   );
 
-  static const AndroidNotificationChannel _channelReminders =
-      AndroidNotificationChannel(
-    'smartplayer_reminders',
-    'Reminders',
-    description: 'Game reminders',
-    importance: Importance.high,
-    playSound: true,
-    enableVibration: true,
-  );
-
   NotificationServiceInstance(
     this._messaging,
     this._db,
@@ -117,10 +107,6 @@ class NotificationServiceInstance implements INotificationService {
           .resolvePlatformSpecificImplementation<
               AndroidFlutterLocalNotificationsPlugin>()
           ?.createNotificationChannel(_channelGames);
-      await _local
-          .resolvePlatformSpecificImplementation<
-              AndroidFlutterLocalNotificationsPlugin>()
-          ?.createNotificationChannel(_channelReminders);
     }
 
     // Request permissions (non-blocking - don't await to avoid blocking startup)
@@ -399,22 +385,6 @@ class NotificationServiceInstance implements INotificationService {
       NumberedLogger.i('Queued friend accepted notification to $toUid');
     } catch (e) {
       NumberedLogger.e('Error sending friend accepted notification: $e');
-    }
-  }
-
-  @override
-  Future<void> sendGameReminderNotification(
-      String gameId, DateTime gameTime) async {
-    try {
-      await _db.ref('mail/notifications').push().set({
-        'type': 'game_reminder',
-        'gameId': gameId,
-        'scheduled': gameTime.toIso8601String(),
-        'ts': DateTime.now().toIso8601String(),
-      });
-      NumberedLogger.i('Queued game reminder for game $gameId');
-    } catch (e) {
-      NumberedLogger.e('Error sending game reminder notification: $e');
     }
   }
 

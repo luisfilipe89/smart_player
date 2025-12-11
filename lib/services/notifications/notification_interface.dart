@@ -7,9 +7,6 @@ abstract class INotificationService {
   /// Notify that a friend request was accepted
   Future<void> sendFriendAcceptedNotification(String toUid, String fromUid);
 
-  /// Send a game reminder notification
-  Future<void> sendGameReminderNotification(String gameId, DateTime gameTime);
-
   /// Notify a user that a friend removed them
   Future<void> sendFriendRemovedNotification({
     required String removedUserUid,

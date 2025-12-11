@@ -172,14 +172,6 @@ class NotificationActions {
     await _notificationService.sendFriendAcceptedNotification(toUid, fromUid);
   }
   
-  Future<void> sendGameReminderNotification(String gameId, DateTime gameTime) async {
-    // Check if game reminder notifications are enabled
-    if (_settingsActions != null && 
-        !_settingsActions!.isNotificationTypeEnabled('game_reminders')) {
-      return; // User has disabled game reminder notifications
-    }
-    await _notificationService.sendGameReminderNotification(gameId, gameTime);
-  }
   Future<void> sendFriendRemovedNotification({
     required String removedUserUid,
     required String removerUid,
