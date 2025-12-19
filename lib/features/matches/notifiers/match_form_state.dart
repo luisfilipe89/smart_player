@@ -1,9 +1,9 @@
 import 'package:flutter/foundation.dart';
-import 'package:move_young/features/games/models/game.dart';
+import 'package:move_young/features/matches/models/match.dart';
 
-/// Immutable state class for the game form
+/// Immutable state class for the match form
 @immutable
-class GameFormState {
+class MatchFormState {
   // Form fields
   final String? sport;
   final DateTime? date;
@@ -39,11 +39,11 @@ class GameFormState {
   final int originalMaxPlayers;
   final Map<String, dynamic>? originalField;
 
-  // Initial game (for editing)
+  // Initial match (for editing)
   final bool isEditing;
-  final bool isCreatingSimilarGame;
+  final bool isCreatingSimilarMatch;
 
-  const GameFormState({
+  const MatchFormState({
     this.sport,
     this.date,
     this.time,
@@ -68,58 +68,58 @@ class GameFormState {
     this.originalMaxPlayers = 10,
     this.originalField,
     this.isEditing = false,
-    this.isCreatingSimilarGame = false,
+    this.isCreatingSimilarMatch = false,
   });
 
-  /// Create initial state from an existing game (for editing)
-  factory GameFormState.fromGame(Game game) {
-    final isHistoric = game.dateTime.isBefore(DateTime.now());
+  /// Create initial state from an existing match (for editing)
+  factory MatchFormState.fromMatch(Match match) {
+    final isHistoric = match.dateTime.isBefore(DateTime.now());
     final isEditing = !isHistoric;
 
     final fieldMap = {
-      'name': game.location,
-      'address': game.address,
-      'latitude': game.latitude,
-      'longitude': game.longitude,
-      'id': game.fieldId,
+      'name': match.location,
+      'address': match.address,
+      'latitude': match.latitude,
+      'longitude': match.longitude,
+      'id': match.fieldId,
     };
 
-    return GameFormState(
-      sport: game.sport,
+    return MatchFormState(
+      sport: match.sport,
       date: isHistoric
           ? null
           : DateTime(
-              game.dateTime.year,
-              game.dateTime.month,
-              game.dateTime.day,
+              match.dateTime.year,
+              match.dateTime.month,
+              match.dateTime.day,
             ),
-      time: isHistoric ? null : game.formattedTime,
+      time: isHistoric ? null : match.formattedTime,
       field: fieldMap,
-      maxPlayers: game.maxPlayers,
-      isPublic: game.isPublic,
-      originalSport: isEditing ? game.sport : null,
+      maxPlayers: match.maxPlayers,
+      isPublic: match.isPublic,
+      originalSport: isEditing ? match.sport : null,
       originalDate: isEditing
           ? DateTime(
-              game.dateTime.year,
-              game.dateTime.month,
-              game.dateTime.day,
+              match.dateTime.year,
+              match.dateTime.month,
+              match.dateTime.day,
             )
           : null,
-      originalTime: isEditing ? game.formattedTime : null,
-      originalMaxPlayers: isEditing ? game.maxPlayers : 10,
+      originalTime: isEditing ? match.formattedTime : null,
+      originalMaxPlayers: isEditing ? match.maxPlayers : 10,
       originalField: isEditing ? fieldMap : null,
       isEditing: isEditing,
-      isCreatingSimilarGame: isHistoric,
+      isCreatingSimilarMatch: isHistoric,
     );
   }
 
-  /// Create initial empty state (for creating new game)
-  factory GameFormState.initial() {
-    return const GameFormState();
+  /// Create initial empty state (for creating new match)
+  factory MatchFormState.initial() {
+    return const MatchFormState();
   }
 
   /// Copy with method for immutable updates
-  GameFormState copyWith({
+  MatchFormState copyWith({
     String? sport,
     DateTime? date,
     String? time,
@@ -144,9 +144,9 @@ class GameFormState {
     int Function()? originalMaxPlayers,
     Map<String, dynamic>? Function()? originalField,
     bool? isEditing,
-    bool? isCreatingSimilarGame,
+    bool? isCreatingSimilarMatch,
   }) {
-    return GameFormState(
+    return MatchFormState(
       sport: sport ?? this.sport,
       date: date ?? this.date,
       time: time ?? this.time,
@@ -176,8 +176,8 @@ class GameFormState {
       originalField:
           originalField != null ? originalField() : this.originalField,
       isEditing: isEditing ?? this.isEditing,
-      isCreatingSimilarGame:
-          isCreatingSimilarGame ?? this.isCreatingSimilarGame,
+      isCreatingSimilarMatch:
+          isCreatingSimilarMatch ?? this.isCreatingSimilarMatch,
     );
   }
 

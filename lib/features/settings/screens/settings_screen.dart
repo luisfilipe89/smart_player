@@ -607,4 +607,4 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 }
 
-// (Game invites and reminders toggles removed)
+// (Match invites and reminders toggles removed)

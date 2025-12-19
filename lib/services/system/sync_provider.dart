@@ -1,34 +1,34 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:move_young/services/system/sync_service_instance.dart';
-import 'package:move_young/features/games/services/games_provider.dart';
+import 'package:move_young/features/matches/services/match_provider.dart';
 import 'package:move_young/features/friends/services/friends_provider.dart';
 import 'package:move_young/providers/infrastructure/shared_preferences_provider.dart';
 
 // Re-export SyncServiceInstance for convenience
 // Allows importing both syncServiceProvider and SyncServiceInstance from one place
-// Used by games_provider.dart and friends_provider.dart to access priority constants
+// Used by matches_provider.dart and friends_provider.dart to access priority constants
 export 'sync_service_instance.dart' show SyncServiceInstance;
 
 // SyncService provider with dependency injection
 // Returns null if SharedPreferences is still loading or on error
 //
 // Uses ref.read() instead of ref.watch() to avoid circular dependency risks:
-// - syncServiceProvider depends on gamesServiceProvider and friendsServiceProvider
-// - gamesActionsProvider and friendsActionsProvider depend on syncActionsProvider
+// - syncServiceProvider depends on matchesServiceProvider and friendsServiceProvider
+// - matchesActionsProvider and friendsActionsProvider depend on syncActionsProvider
 // - syncActionsProvider depends on syncServiceProvider
 // By using ref.read(), we break the reactive dependency cycle while still
 // getting the required service instances for dependency injection.
 final syncServiceProvider = Provider<SyncServiceInstance?>((ref) {
   // Use ref.read() instead of ref.watch() since we don't need reactive updates
   // The services are injected once and stored in SyncServiceInstance
-  final cloudGamesService = ref.read(gamesServiceProvider);
+  final cloudMatchesService = ref.read(matchesServiceProvider);
   final friendsService = ref.read(friendsServiceProvider);
   final prefsAsync = ref.watch(sharedPreferencesProvider);
 
   return prefsAsync.when(
     data: (prefs) {
       final service = SyncServiceInstance(
-        cloudGamesService,
+        cloudMatchesService,
         friendsService,
         prefs,
       );

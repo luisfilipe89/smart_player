@@ -3,17 +3,17 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:move_young/theme/_theme.dart';
 import 'package:move_young/services/system/haptics_provider.dart';
-import 'package:move_young/features/games/models/game.dart';
-import 'package:move_young/features/games/notifiers/game_form_notifier.dart';
+import 'package:move_young/features/matches/models/match.dart';
+import 'package:move_young/features/matches/notifiers/match_form_notifier.dart';
 
 /// Widget for selecting a sport type
-class GameFormSportSelector extends ConsumerWidget {
-  final Game? initialGame;
-  final GameFormNotifier notifier;
+class MatchFormSportSelector extends ConsumerWidget {
+  final Match? initialMatch;
+  final MatchFormNotifier notifier;
 
-  const GameFormSportSelector({
+  const MatchFormSportSelector({
     super.key,
-    required this.initialGame,
+    required this.initialMatch,
     required this.notifier,
   });
 
@@ -58,8 +58,8 @@ class GameFormSportSelector extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final state = ref.watch(gameFormNotifierProvider(initialGame));
-    final isEdit = initialGame != null;
+    final state = ref.watch(matchFormNotifierProvider(initialMatch));
+    final isEdit = initialMatch != null;
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -139,9 +139,7 @@ class GameFormSportSelector extends ConsumerWidget {
               size: 32,
               color: disabled
                   ? AppColors.grey
-                  : (isSelected
-                      ? AppColors.blue
-                      : (sport['color'] as Color)),
+                  : (isSelected ? AppColors.blue : (sport['color'] as Color)),
             ),
             const SizedBox(height: 4),
             Text(
@@ -163,4 +161,3 @@ class GameFormSportSelector extends ConsumerWidget {
     );
   }
 }
-

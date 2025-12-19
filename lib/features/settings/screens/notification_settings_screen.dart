@@ -17,8 +17,8 @@ class _NotificationSettingsScreenState
     extends ConsumerState<NotificationSettingsScreen> {
   bool _notificationsEnabled = true;
   bool _friendRequests = true;
-  bool _gameInvites = true;
-  bool _gameUpdates = true;
+  bool _matchInvites = true;
+  bool _matchUpdates = true;
   bool _isLoading = true;
 
   @override
@@ -41,8 +41,8 @@ class _NotificationSettingsScreenState
           setState(() {
             _notificationsEnabled = settings['notificationsEnabled'] ?? true;
             _friendRequests = settings['friendRequests'] ?? true;
-            _gameInvites = settings['gameInvites'] ?? true;
-            _gameUpdates = settings['gameUpdates'] ?? true;
+            _matchInvites = settings['matchInvites'] ?? true;
+            _matchUpdates = settings['matchUpdates'] ?? true;
             _isLoading = false;
           });
         }
@@ -96,11 +96,11 @@ class _NotificationSettingsScreenState
               case 'friend_requests':
                 _friendRequests = !value;
                 break;
-              case 'game_invites':
-                _gameInvites = !value;
+              case 'match_invites':
+                _matchInvites = !value;
                 break;
-              case 'game_updates':
-                _gameUpdates = !value;
+              case 'match_updates':
+                _matchUpdates = !value;
                 break;
             }
           });
@@ -202,27 +202,27 @@ class _NotificationSettingsScreenState
                         const SizedBox(height: 12),
                         _buildCategoryToggle(
                           icon: Icons.sports,
-                          title: 'settings_notif_game_invites'.tr(),
-                          description: 'settings_notif_games_desc'.tr(),
-                          value: _gameInvites,
+                          title: 'settings_notif_match_invites'.tr(),
+                          description: 'settings_notif_matches_desc'.tr(),
+                          value: _matchInvites,
                           onChanged: (value) {
                             setState(() {
-                              _gameInvites = value;
+                              _matchInvites = value;
                             });
-                            _toggleCategory('game_invites', value);
+                            _toggleCategory('match_invites', value);
                           },
                         ),
                         const SizedBox(height: 12),
                         _buildCategoryToggle(
                           icon: Icons.update,
-                          title: 'settings_notif_game_updates'.tr(),
-                          description: 'settings_notif_game_updates_desc'.tr(),
-                          value: _gameUpdates,
+                          title: 'settings_notif_match_updates'.tr(),
+                          description: 'settings_notif_match_updates_desc'.tr(),
+                          value: _matchUpdates,
                           onChanged: (value) {
                             setState(() {
-                              _gameUpdates = value;
+                              _matchUpdates = value;
                             });
-                            _toggleCategory('game_updates', value);
+                            _toggleCategory('match_updates', value);
                           },
                         ),
                       ],

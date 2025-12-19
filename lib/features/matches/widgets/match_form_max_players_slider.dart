@@ -2,24 +2,24 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:move_young/theme/_theme.dart';
 import 'package:move_young/services/system/haptics_provider.dart';
-import 'package:move_young/features/games/models/game.dart';
-import 'package:move_young/features/games/notifiers/game_form_notifier.dart';
+import 'package:move_young/features/matches/models/match.dart';
+import 'package:move_young/features/matches/notifiers/match_form_notifier.dart';
 
 /// Widget for selecting maximum number of players
-class GameFormMaxPlayersSlider extends ConsumerWidget {
-  final Game? initialGame;
-  final GameFormNotifier notifier;
+class MatchFormMaxPlayersSlider extends ConsumerWidget {
+  final Match? initialMatch;
+  final MatchFormNotifier notifier;
 
-  const GameFormMaxPlayersSlider({
+  const MatchFormMaxPlayersSlider({
     super.key,
-    required this.initialGame,
+    required this.initialMatch,
     required this.notifier,
   });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final state = ref.watch(gameFormNotifierProvider(initialGame));
-    final isEdit = initialGame != null;
+    final state = ref.watch(matchFormNotifierProvider(initialMatch));
+    final isEdit = initialMatch != null;
 
     return Column(
       mainAxisSize: MainAxisSize.min,

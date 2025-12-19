@@ -394,7 +394,7 @@ class MatchFormNotifier extends StateNotifier<MatchFormState> {
 }
 
 /// Provider for MatchFormNotifier
-final gameFormNotifierProvider =
+final matchFormNotifierProvider =
     StateNotifierProvider.family<MatchFormNotifier, MatchFormState, Match?>(
   (ref, initialMatch) => MatchFormNotifier(ref, initialMatch),
 );

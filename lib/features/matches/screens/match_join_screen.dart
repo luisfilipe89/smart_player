@@ -1,33 +1,33 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:easy_localization/easy_localization.dart';
-import 'package:move_young/features/games/models/game.dart';
+import 'package:move_young/features/matches/models/match.dart';
 import 'package:move_young/theme/_theme.dart';
 import 'package:move_young/features/auth/services/auth_provider.dart';
-import 'package:move_young/features/games/services/games_provider.dart';
-import 'package:move_young/features/games/services/cloud_games_provider.dart';
+import 'package:move_young/features/matches/services/match_provider.dart';
+import 'package:move_young/features/matches/services/cloud_matches_provider.dart';
 import 'package:move_young/services/system/haptics_provider.dart';
 import 'package:move_young/utils/navigation_utils.dart';
-import 'package:move_young/features/games/screens/game_detail_screen.dart';
+import 'package:move_young/features/matches/screens/match_detail_screen.dart';
 import 'dart:async';
 import 'package:move_young/navigation/main_scaffold.dart';
 import 'package:move_young/widgets/app_back_button.dart';
 import 'package:move_young/widgets/error_retry_widget.dart';
 import 'package:move_young/widgets/cached_data_indicator.dart';
 import 'package:move_young/utils/logger.dart';
-import 'package:move_young/features/games/notifiers/games_join_screen_notifier.dart';
-import 'package:move_young/features/games/notifiers/games_join_screen_state.dart';
+import 'package:move_young/features/matches/notifiers/match_join_screen_notifier.dart';
+import 'package:move_young/features/matches/notifiers/match_join_screen_state.dart';
 import 'package:move_young/utils/snackbar_helper.dart';
 
-class GamesJoinScreen extends ConsumerStatefulWidget {
-  final String? highlightGameId;
-  const GamesJoinScreen({super.key, this.highlightGameId});
+class MatchesJoinScreen extends ConsumerStatefulWidget {
+  final String? highlightMatchId;
+  const MatchesJoinScreen({super.key, this.highlightMatchId});
 
   @override
-  ConsumerState<GamesJoinScreen> createState() => _GamesJoinScreenState();
+  ConsumerState<MatchesJoinScreen> createState() => _MatchesJoinScreenState();
 }
 
-class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
+class _MatchesJoinScreenState extends ConsumerState<MatchesJoinScreen> {
   late final TextEditingController _searchController;
   static const String _adminEmail = 'luisfccfigueiredo@gmail.com';
   final ScrollController _listController = ScrollController();
@@ -47,27 +47,27 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
   void initState() {
     super.initState();
     _searchController = TextEditingController();
-    // Load games when screen initializes
+    // Load matches when screen initializes
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final screenState =
-          ref.read(gamesJoinScreenNotifierProvider(widget.highlightGameId));
+          ref.read(matchesJoinScreenNotifierProvider(widget.highlightMatchId));
       _searchController.text = screenState.searchQuery;
       ref
-          .read(
-              gamesJoinScreenNotifierProvider(widget.highlightGameId).notifier)
-          .loadGames();
+          .read(matchesJoinScreenNotifierProvider(widget.highlightMatchId)
+              .notifier)
+          .loadMatches();
     });
-    // Schedule scroll to highlighted game after first frame
+    // Schedule scroll to highlighted match after first frame
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _scrollToHighlightedGame();
+      _scrollToHighlightedMatch();
     });
-    // Invited games now come from stream provider, no need to load manually
+    // Invited matches now come from stream provider, no need to load manually
   }
 
   // Try a few times to ensure the list is built before scrolling
-  void _scrollToHighlightedGame({int attempts = 0}) {
+  void _scrollToHighlightedMatch({int attempts = 0}) {
     final screenState =
-        ref.read(gamesJoinScreenNotifierProvider(widget.highlightGameId));
+        ref.read(matchesJoinScreenNotifierProvider(widget.highlightMatchId));
     if (!mounted || screenState.highlightId == null) return;
     final key = _itemKeys[screenState.highlightId!];
     final ctx = key?.currentContext;
@@ -81,7 +81,7 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
       Future.delayed(const Duration(seconds: 2), () {
         if (mounted) {
           ref
-              .read(gamesJoinScreenNotifierProvider(widget.highlightGameId)
+              .read(matchesJoinScreenNotifierProvider(widget.highlightMatchId)
                   .notifier)
               .clearHighlightId();
         }
@@ -90,7 +90,7 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
     }
     if (attempts < 6) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        _scrollToHighlightedGame(attempts: attempts + 1);
+        _scrollToHighlightedMatch(attempts: attempts + 1);
       });
     }
   }
@@ -102,9 +102,9 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
     super.dispose();
   }
 
-  // Invited games now come from stream provider - no manual loading needed
+  // Invited matches now come from stream provider - no manual loading needed
 
-  Future<void> _joinGame(Game game) async {
+  Future<void> _joinMatch(Match match) async {
     try {
       final currentUserId = ref.read(currentUserIdProvider) ?? '';
       if (currentUserId.isEmpty) {
@@ -119,8 +119,8 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
 
       // Check if this is a rejoin (user previously left) or previously declined
       final inviteStatuses = await ref
-          .read(cloudGamesActionsProvider)
-          .getGameInviteStatuses(game.id);
+          .read(cloudMatchesActionsProvider)
+          .getMatchInviteStatuses(match.id);
       final String? previousStatus = inviteStatuses[currentUserId];
       final bool isRejoin = previousStatus == 'left';
       final bool wasDeclined = previousStatus == 'declined';
@@ -131,29 +131,29 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
       if (mounted) {
         final ctrl = MainScaffoldController.maybeOf(context);
         if (isRejoin || isPublicUninvited) {
-          ctrl?.openMyGames(
+          ctrl?.openMyMatches(
             initialTab: 0, // Joining tab (index 0)
-            highlightGameId: game.id,
+            highlightMatchId: match.id,
             popToRoot: true,
           );
         }
       }
 
-      await ref.read(cloudGamesActionsProvider).joinGame(game.id);
+      await ref.read(cloudMatchesActionsProvider).joinMatch(match.id);
 
       ref.read(hapticsActionsProvider)?.lightImpact();
       if (mounted) {
         // Optimistically remove from lists so it disappears immediately
         ref
-            .read(gamesJoinScreenNotifierProvider(widget.highlightGameId)
+            .read(matchesJoinScreenNotifierProvider(widget.highlightMatchId)
                 .notifier)
-            .removeGame(game.id);
+            .removeMatch(match.id);
 
         // Show success message
         if (isRejoin) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Rejoined ${game.sport} game!'),
+              content: Text('Rejoined ${match.sport} match!'),
               backgroundColor: AppColors.green,
               duration: const Duration(seconds: 2),
             ),
@@ -162,16 +162,16 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
           // User previously declined, show simple message without link
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Joined ${game.sport} game!'),
+              content: Text('Joined ${match.sport} match!'),
               backgroundColor: AppColors.green,
               duration: const Duration(seconds: 2),
             ),
           );
         } else {
-          // For public uninvited games, show simple message since we already navigated
+          // For public uninvited matches, show simple message since we already navigated
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Joined ${game.sport} game!'),
+              content: Text('Joined ${match.sport} match!'),
               backgroundColor: AppColors.green,
               duration: const Duration(seconds: 2),
             ),
@@ -180,14 +180,14 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
       }
       if (mounted) {
         await ref
-            .read(gamesJoinScreenNotifierProvider(widget.highlightGameId)
+            .read(matchesJoinScreenNotifierProvider(widget.highlightMatchId)
                 .notifier)
-            .loadGames(); // Refresh the list (defensive)
+            .loadMatches(); // Refresh the list (defensive)
       }
-      // Invited games will update automatically via stream provider
+      // Invited matches will update automatically via stream provider
     } catch (e) {
       if (mounted) {
-        String errorMsg = 'Failed to join game';
+        String errorMsg = 'Failed to join match';
         final es = e.toString();
         final isUserBusy = es.contains('user_already_busy');
 
@@ -196,20 +196,20 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
           SnackBarHelper.showBlocked(context, errorMsg);
           ref.read(hapticsActionsProvider)?.mediumImpact();
         } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
               content: Text(errorMsg),
-            backgroundColor: AppColors.red,
-          ),
-        );
+              backgroundColor: AppColors.red,
+            ),
+          );
         }
       }
     }
   }
 
-  Future<void> _cancelGame(Game game) async {
+  Future<void> _cancelMatch(Match match) async {
     final currentUserId = ref.read(currentUserIdProvider);
-    final isOwner = currentUserId != null && currentUserId == game.organizerId;
+    final isOwner = currentUserId != null && currentUserId == match.organizerId;
     if (!isOwner) return;
 
     final confirmed = await showDialog<bool>(
@@ -230,24 +230,24 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
     if (confirmed != true) return;
 
     try {
-      await ref.read(gamesActionsProvider).deleteGame(game.id);
+      await ref.read(matchesActionsProvider).deleteMatch(match.id);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('game_cancelled_successfully'.tr()),
+            content: Text('match_cancelled_successfully'.tr()),
             backgroundColor: AppColors.green,
           ),
         );
       }
       await ref
-          .read(
-              gamesJoinScreenNotifierProvider(widget.highlightGameId).notifier)
-          .loadGames();
+          .read(matchesJoinScreenNotifierProvider(widget.highlightMatchId)
+              .notifier)
+          .loadMatches();
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('game_cancellation_failed'.tr()),
+            content: Text('match_cancellation_failed'.tr()),
             backgroundColor: AppColors.red,
           ),
         );
@@ -261,7 +261,7 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
       appBar: AppBar(
         leadingWidth: 48,
         leading: const AppBackButton(goHome: true),
-        title: Text('join_a_game'.tr()),
+        title: Text('join_a_match'.tr()),
         backgroundColor: AppColors.white,
         elevation: 0,
       ),
@@ -324,45 +324,46 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
     );
   }
 
-  Widget _buildGameCard(Game game, GamesJoinScreenState screenState) {
-    // Watch this specific game for real-time updates (when organizer edits)
-    final gameStream = ref.watch(gameByIdProvider(game.id));
-    // Watch invited games stream for real-time updates
-    final invitedGamesAsync = ref.watch(invitedGamesProvider);
-    // Watch invite statuses for this game in real-time (for immediate updates)
-    final inviteStatusesAsync = ref.watch(gameInviteStatusesProvider(game.id));
+  Widget _buildMatchCard(Match match, MatchesJoinScreenState screenState) {
+    // Watch this specific match for real-time updates (when organizer edits)
+    final matchStream = ref.watch(matchByIdProvider(match.id));
+    // Watch invited matches stream for real-time updates
+    final invitedMatchesAsync = ref.watch(invitedMatchesProvider);
+    // Watch invite statuses for this match in real-time (for immediate updates)
+    final inviteStatusesAsync =
+        ref.watch(matchInviteStatusesProvider(match.id));
 
-    final invitedGames = invitedGamesAsync.valueOrNull ?? [];
+    final invitedMatches = invitedMatchesAsync.valueOrNull ?? [];
     final String? myUid = ref.read(currentUserIdProvider);
     final filteredInvited = myUid == null
-        ? invitedGames
-        : invitedGames.where((g) => !g.players.contains(myUid)).toList();
+        ? invitedMatches
+        : invitedMatches.where((g) => !g.players.contains(myUid)).toList();
 
-    // Get the most up-to-date game: use the version from invitedGames stream if available
-    // (it has real-time updates including cancellations), otherwise use gameById stream,
+    // Get the most up-to-date match: use the version from invitedMatches stream if available
+    // (it has real-time updates including cancellations), otherwise use matchById stream,
     // finally fall back to the passed parameter
-    final Game? gameFromInvitedStream =
-        filteredInvited.where((g) => g.id == game.id).firstOrNull;
+    final Match? matchFromInvitedStream =
+        filteredInvited.where((g) => g.id == match.id).firstOrNull;
 
-    final Game currentGame;
-    if (gameFromInvitedStream != null) {
-      // Use the game from invitedGames stream (most up-to-date, includes cancellation status)
-      currentGame = gameFromInvitedStream;
+    final Match currentMatch;
+    if (matchFromInvitedStream != null) {
+      // Use the match from invitedMatches stream (most up-to-date, includes cancellation status)
+      currentMatch = matchFromInvitedStream;
     } else {
-      // Not an invited game, use gameById stream or fallback
-      currentGame = gameStream.valueOrNull ?? game;
+      // Not an invited match, use matchById stream or fallback
+      currentMatch = matchStream.valueOrNull ?? match;
     }
 
-    final bool isHighlighted = currentGame.id == screenState.highlightId;
+    final bool isHighlighted = currentMatch.id == screenState.highlightId;
 
     // Check invite status from multiple sources for immediate detection
     Map<String, String> inviteStatuses = inviteStatusesAsync.valueOrNull ?? {};
     final bool streamHasData = inviteStatusesAsync.hasValue;
-    final bool invitedGamesHasData = invitedGamesAsync.hasValue;
+    final bool invitedMatchesHasData = invitedMatchesAsync.hasValue;
 
-    // Check cached invite status (populated when loading games - fastest)
+    // Check cached invite status (populated when loading matches - fastest)
     final String? cachedInviteStatus =
-        screenState.gameInviteStatuses[currentGame.id];
+        screenState.matchInviteStatuses[currentMatch.id];
     final bool hasCachedPendingInvite = cachedInviteStatus == 'pending';
 
     // Merge cached status into inviteStatuses map for immediate UI updates
@@ -372,26 +373,26 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
       inviteStatuses[myUid] = cachedInviteStatus;
     }
 
-    // Check if game is in invitedGames list (this is often faster/more reliable)
-    final bool isInInvitedGames =
-        filteredInvited.any((g) => g.id == currentGame.id);
+    // Check if match is in invitedMatches list (this is often faster/more reliable)
+    final bool isInInvitedMatches =
+        filteredInvited.any((g) => g.id == currentMatch.id);
 
-    // Determine if user is invited - prioritize cached status, then invitedGames list, then stream
+    // Determine if user is invited - prioritize cached status, then invitedMatches list, then stream
     final String? myInviteStatus = myUid != null ? inviteStatuses[myUid] : null;
     final bool hasPendingInviteFromStatus = myInviteStatus == 'pending';
 
-    // If we have cached status or invitedGames has data, user is definitely invited
+    // If we have cached status or invitedMatches has data, user is definitely invited
     // Otherwise, check invite status from stream
     final bool isInvited = hasCachedPendingInvite ||
-        isInInvitedGames ||
+        isInInvitedMatches ||
         hasPendingInviteFromStatus;
 
     // Only fetch if stream hasn't emitted AND we don't have cached status
     final bool needsSyncFetch =
         !streamHasData && cachedInviteStatus == null && myUid != null;
 
-    final sportColor = _getSportColor(currentGame.sport);
-    final accentColor = currentGame.isActive
+    final sportColor = _getSportColor(currentMatch.sport);
+    final accentColor = currentMatch.isActive
         ? (isInvited ? AppColors.blue : AppColors.green)
         : AppColors.red;
 
@@ -438,7 +439,7 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
             ref.read(hapticsActionsProvider)?.selectionClick();
             Navigator.of(context).push(
               NavigationUtils.sharedAxisRoute(
-                builder: (_) => GameDetailScreen(game: game),
+                builder: (_) => MatchDetailScreen(match: match),
               ),
             );
           },
@@ -461,7 +462,7 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
                 Row(
                   children: [
                     Hero(
-                      tag: 'game-${currentGame.id}-icon',
+                      tag: 'match-${currentMatch.id}-icon',
                       child: Container(
                         padding: const EdgeInsets.all(10),
                         decoration: BoxDecoration(
@@ -469,7 +470,7 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Icon(
-                          _getSportIcon(currentGame.sport),
+                          _getSportIcon(currentMatch.sport),
                           color: sportColor,
                           size: 22,
                         ),
@@ -484,15 +485,15 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
                             children: [
                               Expanded(
                                 child: Text(
-                                  currentGame.sport.toUpperCase(),
+                                  currentMatch.sport.toUpperCase(),
                                   style: AppTextStyles.smallCardTitle.copyWith(
-                                    color: _getSportColor(currentGame.sport),
+                                    color: _getSportColor(currentMatch.sport),
                                     fontWeight: FontWeight.bold,
                                   ),
                                 ),
                               ),
                               // Show "Cancelled" (red) badge
-                              if (!currentGame.isActive)
+                              if (!currentMatch.isActive)
                                 Padding(
                                   padding: const EdgeInsets.only(left: 6),
                                   child: _buildStatusBadge(
@@ -502,9 +503,9 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
                                     showDot: false,
                                   ),
                                 ),
-                              // Show "Modified" badge for active games that have been edited
-                              if (currentGame.isActive &&
-                                  currentGame.isModified)
+                              // Show "Modified" badge for active matches that have been edited
+                              if (currentMatch.isActive &&
+                                  currentMatch.isModified)
                                 Padding(
                                   padding: const EdgeInsets.only(left: 6),
                                   child: _buildStatusBadge(
@@ -515,7 +516,7 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
                             ],
                           ),
                           Text(
-                            currentGame.location,
+                            currentMatch.location,
                             style: AppTextStyles.cardTitle.copyWith(
                               fontSize: 17,
                               fontWeight: FontWeight.w600,
@@ -523,7 +524,7 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
                             ),
                           ),
                           Text(
-                            '${currentGame.getFormattedDateLocalized((key) => key.tr())} at ${currentGame.formattedTime}',
+                            '${currentMatch.getFormattedDateLocalized((key) => key.tr())} at ${currentMatch.formattedTime}',
                             style: AppTextStyles.body.copyWith(
                               color: AppColors.grey,
                             ),
@@ -532,22 +533,23 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
                       ),
                     ),
                     _buildStatusBadge(
-                      label: currentGame.benchCount > 0
-                          ? '${currentGame.maxPlayers}/${currentGame.maxPlayers} + ${currentGame.benchCount} bench'
-                          : '${currentGame.currentPlayers}/${currentGame.maxPlayers}',
-                      color: currentGame.hasSpace
+                      label: currentMatch.benchCount > 0
+                          ? '${currentMatch.maxPlayers}/${currentMatch.maxPlayers} + ${currentMatch.benchCount} bench'
+                          : '${currentMatch.currentPlayers}/${currentMatch.maxPlayers}',
+                      color: currentMatch.hasSpace
                           ? AppColors.green
                           : AppColors.red,
-                      icon: currentGame.isPublic ? Icons.lock_open : Icons.lock,
+                      icon:
+                          currentMatch.isPublic ? Icons.lock_open : Icons.lock,
                       showDot: false,
                     ),
                     const SizedBox(width: 6),
                   ],
                 ),
                 const SizedBox(height: AppHeights.reg),
-                if (currentGame.description.isNotEmpty) ...[
+                if (currentMatch.description.isNotEmpty) ...[
                   Text(
-                    currentGame.description,
+                    currentMatch.description,
                     style: AppTextStyles.body,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
@@ -565,12 +567,12 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
                     Expanded(
                       child: Text(
                         isInvited
-                            ? 'Invited by ${currentGame.organizerName}'
+                            ? 'Invited by ${currentMatch.organizerName}'
                             : (ref.read(currentUserIdProvider) != null &&
                                     ref.read(currentUserIdProvider) ==
-                                        currentGame.organizerId)
+                                        currentMatch.organizerId)
                                 ? 'Organized by me'
-                                : 'Organized by ${currentGame.organizerName}',
+                                : 'Organized by ${currentMatch.organizerName}',
                         style: AppTextStyles.small.copyWith(
                           color: AppColors.grey,
                         ),
@@ -580,7 +582,7 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
                     const SizedBox(width: AppWidths.regular),
                     if (ref.read(currentUserIdProvider) != null &&
                         ref.read(currentUserIdProvider) ==
-                            currentGame.organizerId)
+                            currentMatch.organizerId)
                       TextButton.icon(
                         style: TextButton.styleFrom(
                           padding: const EdgeInsets.symmetric(
@@ -591,8 +593,8 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
                         onPressed: () {
                           ref.read(hapticsActionsProvider)?.selectionClick();
                           Navigator.of(context).pushNamed(
-                            '/organize-game',
-                            arguments: currentGame,
+                            '/organize-match',
+                            arguments: currentMatch,
                           );
                         },
                         icon: const Icon(Icons.edit, size: 16),
@@ -606,40 +608,40 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
                   child: needsSyncFetch
                       ? FutureBuilder<String?>(
                           future: ref
-                              .read(cloudGamesActionsProvider)
-                              .getUserInviteStatusForGame(currentGame.id),
+                              .read(cloudMatchesActionsProvider)
+                              .getUserInviteStatusForMatch(currentMatch.id),
                           builder: (context, snapshot) {
-                            // Use isInInvitedGames as initial state to avoid showing "Join game"
+                            // Use isInInvitedMatches as initial state to avoid showing "Join match"
                             // when user is actually invited but stream hasn't updated yet
                             if (!snapshot.hasData) {
                               // Still loading - merge cached status if available for immediate UI updates
                               // myUid is guaranteed to be non-null here due to needsSyncFetch check
                               final cachedStatus = screenState
-                                  .gameInviteStatuses[currentGame.id];
+                                  .matchInviteStatuses[currentMatch.id];
                               final loadingInviteStatuses =
                                   Map<String, String>.from(inviteStatuses);
                               if (cachedStatus != null) {
                                 // myUid is non-null because needsSyncFetch requires it
                                 loadingInviteStatuses[myUid] = cachedStatus;
                               }
-                              return _buildGameActions(
-                                currentGame,
+                              return _buildMatchActions(
+                                currentMatch,
                                 inviteStatuses: loadingInviteStatuses,
-                                isInvitedPending: isInInvitedGames,
+                                isInvitedPending: isInInvitedMatches,
                                 streamHasData: false,
                               );
                             }
-                            // Check user's invite status directly from their gameInvites path
+                            // Check user's invite status directly from their matchInvites path
                             final userInviteStatus = snapshot.data;
-                            final cachedStatus =
-                                screenState.gameInviteStatuses[currentGame.id];
+                            final cachedStatus = screenState
+                                .matchInviteStatuses[currentMatch.id];
                             final syncIsInvited =
                                 (userInviteStatus == 'pending') ||
-                                    isInInvitedGames ||
+                                    isInInvitedMatches ||
                                     (cachedStatus == 'pending');
 
                             // Update cached status and inviteStatuses map with the fetched status
-                            // Note: This is handled by the notifier when loading games
+                            // Note: This is handled by the notifier when loading matches
                             // We can't update it here directly, but the stream will update
 
                             // myUid is guaranteed to be non-null here due to needsSyncFetch check
@@ -649,19 +651,19 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
                               updatedInviteStatuses[myUid] = userInviteStatus;
                             }
 
-                            return _buildGameActions(
-                              currentGame,
+                            return _buildMatchActions(
+                              currentMatch,
                               inviteStatuses: updatedInviteStatuses,
                               isInvitedPending: syncIsInvited,
                               streamHasData: true,
                             );
                           },
                         )
-                      : _buildGameActions(
-                          currentGame,
+                      : _buildMatchActions(
+                          currentMatch,
                           inviteStatuses: inviteStatuses,
                           isInvitedPending: isInvited,
-                          streamHasData: streamHasData || invitedGamesHasData,
+                          streamHasData: streamHasData || invitedMatchesHasData,
                         ),
                 ),
               ],
@@ -672,20 +674,20 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
     );
   }
 
-  Widget _buildGameActions(
-    Game game, {
+  Widget _buildMatchActions(
+    Match match, {
     Map<String, String>? inviteStatuses,
     bool? isInvitedPending,
     bool streamHasData = false,
   }) {
     final currentUserId = ref.read(currentUserIdProvider);
     final isOwnerOrAdmin = currentUserId != null &&
-        (currentUserId == game.organizerId ||
+        (currentUserId == match.organizerId ||
             (ref.read(currentUserProvider).valueOrNull?.email?.toLowerCase() ==
                 _adminEmail));
 
-    // If the game was cancelled, show a disabled red indicator
-    if (!game.isActive) {
+    // If the match was cancelled, show a disabled red indicator
+    if (!match.isActive) {
       return ElevatedButton(
         onPressed: null,
         style: ElevatedButton.styleFrom(
@@ -709,7 +711,7 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
 
     if (isOwnerOrAdmin) {
       return ElevatedButton(
-        onPressed: () => _cancelGame(game),
+        onPressed: () => _cancelMatch(match),
         style: ElevatedButton.styleFrom(
           backgroundColor: AppColors.red,
           foregroundColor: Colors.white,
@@ -724,13 +726,13 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
           elevation: 0,
         ),
         child: Text(
-          'cancel_game'.tr(),
+          'cancel_match'.tr(),
         ),
       );
     }
 
     final String? myUid = ref.read(currentUserIdProvider);
-    final bool isJoined = myUid != null && game.players.contains(myUid);
+    final bool isJoined = myUid != null && match.players.contains(myUid);
 
     // Use passed invite statuses if available, otherwise watch the provider
     // If stream hasn't emitted yet and we don't have passed data, fetch synchronously
@@ -740,7 +742,7 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
     } else if (streamHasData) {
       // Stream has data, use it
       finalInviteStatuses =
-          ref.watch(gameInviteStatusesProvider(game.id)).valueOrNull ?? {};
+          ref.watch(matchInviteStatusesProvider(match.id)).valueOrNull ?? {};
     } else {
       // Stream hasn't emitted yet, use empty map and rely on isInvitedPending flag
       finalInviteStatuses = {};
@@ -756,18 +758,19 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
           myUid != null ? finalInviteStatuses[myUid] : null;
       final bool hasPendingInvite = myInviteStatus == 'pending';
 
-      final invitedGamesAsync = ref.watch(invitedGamesProvider);
-      final invitedGames = invitedGamesAsync.valueOrNull ?? [];
+      final invitedMatchesAsync = ref.watch(invitedMatchesProvider);
+      final invitedMatches = invitedMatchesAsync.valueOrNull ?? [];
       final filteredInvited = myUid == null
-          ? invitedGames
-          : invitedGames.where((g) => !g.players.contains(myUid)).toList();
-      final bool isInInvitedGames = filteredInvited.any((g) => g.id == game.id);
+          ? invitedMatches
+          : invitedMatches.where((g) => !g.players.contains(myUid)).toList();
+      final bool isInInvitedMatches =
+          filteredInvited.any((g) => g.id == match.id);
 
-      finalIsInvitedPending = hasPendingInvite || isInInvitedGames;
+      finalIsInvitedPending = hasPendingInvite || isInInvitedMatches;
     }
 
-    // Check if user previously left this game (for rejoin option)
-    final bool hasLeftGame =
+    // Check if user previously left this match (for rejoin option)
+    final bool hasLeftMatch =
         myUid != null && finalInviteStatuses[myUid] == 'left';
 
     // Check if user previously declined this invite (for join option)
@@ -775,7 +778,7 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
         myUid != null && finalInviteStatuses[myUid] == 'declined';
 
     NumberedLogger.d(
-        'Game ${game.id}: isInvitedPending=$finalIsInvitedPending, isJoined=$isJoined, hasLeftGame=$hasLeftGame, hasDeclinedInvite=$hasDeclinedInvite');
+        'Match ${match.id}: isInvitedPending=$finalIsInvitedPending, isJoined=$isJoined, hasLeftMatch=$hasLeftMatch, hasDeclinedInvite=$hasDeclinedInvite');
 
     if (finalIsInvitedPending && !isJoined) {
       return Row(
@@ -785,21 +788,21 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
               onPressed: () async {
                 // Navigate immediately BEFORE accepting to avoid transient state
                 final ctrl = MainScaffoldController.maybeOf(context);
-                ctrl?.openMyGames(
+                ctrl?.openMyMatches(
                   initialTab: 0, // Joining tab (index 0)
-                  highlightGameId: game.id,
+                  highlightMatchId: match.id,
                   popToRoot: true,
                 );
 
                 try {
                   await ref
-                      .read(cloudGamesActionsProvider)
-                      .acceptGameInvite(game.id);
+                      .read(cloudMatchesActionsProvider)
+                      .acceptMatchInvite(match.id);
 
                   if (mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
-                        content: Text('Joined ${game.sport} game!'),
+                        content: Text('Joined ${match.sport} match!'),
                         backgroundColor: AppColors.green,
                         duration: const Duration(seconds: 2),
                       ),
@@ -817,11 +820,11 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
                 }
                 if (mounted) {
                   await ref
-                      .read(gamesJoinScreenNotifierProvider(
-                              widget.highlightGameId)
+                      .read(matchesJoinScreenNotifierProvider(
+                              widget.highlightMatchId)
                           .notifier)
-                      .loadGames();
-                  // Invited games will update automatically via stream provider
+                      .loadMatches();
+                  // Invited matches will update automatically via stream provider
                 }
               },
               style: ElevatedButton.styleFrom(
@@ -847,17 +850,17 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
               onPressed: () async {
                 try {
                   await ref
-                      .read(cloudGamesActionsProvider)
-                      .declineGameInvite(game.id);
+                      .read(cloudMatchesActionsProvider)
+                      .declineMatchInvite(match.id);
                   if (mounted) {
                     // Update cached invite status immediately for instant UI update
-                    // Note: The invite status will be updated when games are reloaded
-                    // For now, we'll reload games to get the updated status
+                    // Note: The invite status will be updated when matches are reloaded
+                    // For now, we'll reload matches to get the updated status
                     ref
-                        .read(gamesJoinScreenNotifierProvider(
-                                widget.highlightGameId)
+                        .read(matchesJoinScreenNotifierProvider(
+                                widget.highlightMatchId)
                             .notifier)
-                        .loadGames();
+                        .loadMatches();
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
                         content: Text('declined'.tr()),
@@ -868,7 +871,7 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
                 } catch (e) {
                   // Silent fail
                 }
-                // Invited games will update automatically via stream provider
+                // Invited matches will update automatically via stream provider
               },
               style: OutlinedButton.styleFrom(
                 foregroundColor: AppColors.red,
@@ -894,11 +897,11 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
       return ElevatedButton(
         onPressed: () async {
           try {
-            await ref.read(cloudGamesActionsProvider).leaveGame(game.id);
+            await ref.read(cloudMatchesActionsProvider).leaveMatch(match.id);
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
-                  content: Text('You left the game'),
+                  content: Text('You left the match'),
                   backgroundColor: AppColors.grey,
                 ),
               );
@@ -915,11 +918,11 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
           }
           if (mounted) {
             await ref
-                .read(gamesJoinScreenNotifierProvider(widget.highlightGameId)
+                .read(matchesJoinScreenNotifierProvider(widget.highlightMatchId)
                     .notifier)
-                .loadGames();
+                .loadMatches();
           }
-          // Invited games will update automatically via stream provider
+          // Invited matches will update automatically via stream provider
         },
         style: ElevatedButton.styleFrom(
           backgroundColor: AppColors.red,
@@ -934,16 +937,16 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
           ),
           elevation: 0,
         ),
-        child: Text('leave_game'.tr()),
+        child: Text('leave_match'.tr()),
       );
     }
 
-    // Show "Rejoin" button if user previously left this game
-    if (hasLeftGame) {
+    // Show "Rejoin" button if user previously left this match
+    if (hasLeftMatch) {
       return ElevatedButton(
-        onPressed: game.hasSpace ? () => _joinGame(game) : null,
+        onPressed: match.hasSpace ? () => _joinMatch(match) : null,
         style: ElevatedButton.styleFrom(
-          backgroundColor: game.hasSpace ? Colors.orange : AppColors.grey,
+          backgroundColor: match.hasSpace ? Colors.orange : AppColors.grey,
           foregroundColor: Colors.white,
           minimumSize: const Size(0, 40),
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -956,7 +959,7 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
           elevation: 0,
         ),
         child: Text(
-          game.hasSpace ? 'rejoin_game'.tr() : 'game_full'.tr(),
+          match.hasSpace ? 'rejoin_match'.tr() : 'match_full'.tr(),
         ),
       );
     }
@@ -990,9 +993,9 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
             ),
           ),
           ElevatedButton(
-            onPressed: game.hasSpace ? () => _joinGame(game) : null,
+            onPressed: match.hasSpace ? () => _joinMatch(match) : null,
             style: ElevatedButton.styleFrom(
-              backgroundColor: game.hasSpace ? AppColors.blue : AppColors.grey,
+              backgroundColor: match.hasSpace ? AppColors.blue : AppColors.grey,
               foregroundColor: Colors.white,
               minimumSize: const Size(0, 40),
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -1005,16 +1008,16 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
               elevation: 0,
             ),
             child: Text(
-              game.hasSpace ? 'join_game'.tr() : 'game_full'.tr(),
+              match.hasSpace ? 'join_match'.tr() : 'match_full'.tr(),
             ),
           ),
         ],
       );
     }
 
-    // Only show "Join game" button if the game is public and user is not invited
-    // Private games require an invitation
-    if (!game.isPublic && !finalIsInvitedPending) {
+    // Only show "Join match" button if the match is public and user is not invited
+    // Private matches require an invitation
+    if (!match.isPublic && !finalIsInvitedPending) {
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
         decoration: BoxDecoration(
@@ -1030,7 +1033,7 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
             Icon(Icons.lock, size: 16, color: AppColors.grey),
             const SizedBox(width: 8),
             Text(
-              'Private game - invitation only',
+              'Private match - invitation only',
               style: AppTextStyles.small.copyWith(
                 color: AppColors.grey,
                 fontStyle: FontStyle.italic,
@@ -1042,9 +1045,9 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
     }
 
     return ElevatedButton(
-      onPressed: game.hasSpace ? () => _joinGame(game) : null,
+      onPressed: match.hasSpace ? () => _joinMatch(match) : null,
       style: ElevatedButton.styleFrom(
-        backgroundColor: game.hasSpace ? AppColors.blue : AppColors.grey,
+        backgroundColor: match.hasSpace ? AppColors.blue : AppColors.grey,
         foregroundColor: Colors.white,
         minimumSize: const Size(0, 40),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -1057,7 +1060,7 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
         elevation: 0,
       ),
       child: Text(
-        game.hasSpace ? 'join_game'.tr() : 'game_full'.tr(),
+        match.hasSpace ? 'join_match'.tr() : 'match_full'.tr(),
       ),
     );
   }
@@ -1079,7 +1082,7 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  PanelHeader('find_games'.tr()),
+                  PanelHeader('find_matches'.tr()),
                   Padding(
                     padding: AppPaddings.symmHorizontalReg,
                     child: Column(
@@ -1093,15 +1096,15 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
                                 controller: _searchController,
                                 textInputAction: TextInputAction.search,
                                 decoration: InputDecoration(
-                                  hintText: 'search_games'.tr(),
+                                  hintText: 'search_matches'.tr(),
                                   filled: true,
                                   fillColor: AppColors.lightgrey,
                                   prefixIcon: const Icon(Icons.search),
                                   suffixIcon: Consumer(
                                     builder: (context, ref, child) {
                                       final screenState = ref.watch(
-                                          gamesJoinScreenNotifierProvider(
-                                              widget.highlightGameId));
+                                          matchesJoinScreenNotifierProvider(
+                                              widget.highlightMatchId));
                                       if (screenState.searchQuery.isEmpty) {
                                         return const SizedBox.shrink();
                                       }
@@ -1111,9 +1114,9 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
                                           _searchController.clear();
                                           ref
                                               .read(
-                                                  gamesJoinScreenNotifierProvider(
+                                                  matchesJoinScreenNotifierProvider(
                                                           widget
-                                                              .highlightGameId)
+                                                              .highlightMatchId)
                                                       .notifier)
                                               .setSearchQuery('');
                                         },
@@ -1128,8 +1131,8 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
                                 ),
                                 onChanged: (value) {
                                   ref
-                                      .read(gamesJoinScreenNotifierProvider(
-                                              widget.highlightGameId)
+                                      .read(matchesJoinScreenNotifierProvider(
+                                              widget.highlightMatchId)
                                           .notifier)
                                       .setSearchQuery(value);
                                 },
@@ -1146,8 +1149,8 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
                             itemBuilder: (context, index) {
                               final sport = _sports[index];
                               final screenState = ref.watch(
-                                  gamesJoinScreenNotifierProvider(
-                                      widget.highlightGameId));
+                                  matchesJoinScreenNotifierProvider(
+                                      widget.highlightMatchId));
                               final isSelected =
                                   screenState.selectedSport == sport;
                               return Padding(
@@ -1163,8 +1166,8 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
                                   selected: isSelected,
                                   onSelected: (selected) {
                                     ref
-                                        .read(gamesJoinScreenNotifierProvider(
-                                                widget.highlightGameId)
+                                        .read(matchesJoinScreenNotifierProvider(
+                                                widget.highlightMatchId)
                                             .notifier)
                                         .setSelectedSport(sport);
                                   },
@@ -1185,33 +1188,33 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
                       padding: AppPaddings.symmHorizontalReg,
                       child: Builder(builder: (context) {
                         final screenState = ref.watch(
-                            gamesJoinScreenNotifierProvider(
-                                widget.highlightGameId));
-                        final invitedGamesAsync =
-                            ref.watch(invitedGamesProvider);
-                        final invitedGames =
-                            invitedGamesAsync.valueOrNull ?? [];
+                            matchesJoinScreenNotifierProvider(
+                                widget.highlightMatchId));
+                        final invitedMatchesAsync =
+                            ref.watch(invitedMatchesProvider);
+                        final invitedMatches =
+                            invitedMatchesAsync.valueOrNull ?? [];
                         final String? myUid = ref.read(currentUserIdProvider);
                         final filteredInvited = myUid == null
-                            ? invitedGames
-                            : invitedGames
+                            ? invitedMatches
+                            : invitedMatches
                                 .where((g) => !g.players.contains(myUid))
                                 .toList();
 
                         return screenState.isLoading
-                            ? const _GamesSkeleton()
+                            ? const _MatchesSkeleton()
                             : screenState.hasError
                                 ? ErrorRetryWidget(
                                     message: screenState.errorMessage ??
                                         'loading_error'.tr(),
                                     onRetry: () => ref
-                                        .read(gamesJoinScreenNotifierProvider(
-                                                widget.highlightGameId)
+                                        .read(matchesJoinScreenNotifierProvider(
+                                                widget.highlightMatchId)
                                             .notifier)
-                                        .loadGames(),
+                                        .loadMatches(),
                                     icon: Icons.error_outline,
                                   )
-                                : (screenState.games.isEmpty &&
+                                : (screenState.matches.isEmpty &&
                                         filteredInvited.isEmpty)
                                     ? Center(
                                         child: Column(
@@ -1224,7 +1227,7 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
                                             const SizedBox(
                                                 height: AppHeights.reg),
                                             Text(
-                                              'no_games_found'.tr(),
+                                              'no_matches_found'.tr(),
                                               style:
                                                   AppTextStyles.title.copyWith(
                                                 color: AppColors.grey,
@@ -1233,7 +1236,8 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
                                             const SizedBox(
                                                 height: AppHeights.small),
                                             Text(
-                                              'no_games_found_description'.tr(),
+                                              'no_matches_found_description'
+                                                  .tr(),
                                               style:
                                                   AppTextStyles.body.copyWith(
                                                 color: AppColors.grey,
@@ -1247,28 +1251,27 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
                                         onRefresh: () async {
                                           await ref
                                               .read(
-                                                  gamesJoinScreenNotifierProvider(
+                                                  matchesJoinScreenNotifierProvider(
                                                           widget
-                                                              .highlightGameId)
+                                                              .highlightMatchId)
                                                       .notifier)
-                                              .loadGames();
-                                          // Invited games will update automatically via stream provider
+                                              .loadMatches();
+                                          // Invited matches will update automatically via stream provider
                                         },
                                         child: Builder(builder: (context) {
                                           final currentState = ref.watch(
-                                              gamesJoinScreenNotifierProvider(
-                                                  widget.highlightGameId));
-                                          // Merge lists with invited first, then sort non-invited games chronologically
-                                          final List<Game> nonInvited =
-                                              currentState
-                                                  .games
+                                              matchesJoinScreenNotifierProvider(
+                                                  widget.highlightMatchId));
+                                          // Merge lists with invited first, then sort non-invited matches chronologically
+                                          final List<Match> nonInvited =
+                                              currentState.matches
                                                   .where((g) => !filteredInvited
                                                       .any((i) => i.id == g.id))
                                                   .toList();
-                                          // Sort non-invited games by date (earliest first)
+                                          // Sort non-invited matches by date (earliest first)
                                           nonInvited.sort((a, b) =>
                                               a.dateTime.compareTo(b.dateTime));
-                                          final List<Game> merged = [
+                                          final List<Match> merged = [
                                             ...filteredInvited,
                                             ...nonInvited,
                                           ];
@@ -1277,13 +1280,13 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
                                             padding: EdgeInsets.zero,
                                             itemCount: merged.length,
                                             itemBuilder: (context, index) {
-                                              final game = merged[index];
+                                              final match = merged[index];
                                               final key = _itemKeys.putIfAbsent(
-                                                  game.id, () => GlobalKey());
+                                                  match.id, () => GlobalKey());
                                               return KeyedSubtree(
                                                 key: key,
-                                                child: _buildGameCard(
-                                                    game, currentState),
+                                                child: _buildMatchCard(
+                                                    match, currentState),
                                               );
                                             },
                                           );
@@ -1324,8 +1327,8 @@ class _GamesJoinScreenState extends ConsumerState<GamesJoinScreen> {
   }
 }
 
-class _GamesSkeleton extends StatelessWidget {
-  const _GamesSkeleton();
+class _MatchesSkeleton extends StatelessWidget {
+  const _MatchesSkeleton();
   @override
   Widget build(BuildContext context) {
     return ListView.separated(

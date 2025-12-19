@@ -2,7 +2,7 @@ import 'dart:developer' as developer;
 import 'package:device_calendar/device_calendar.dart';
 import 'package:timezone/timezone.dart' as tz;
 import 'package:timezone/data/latest_all.dart' as tz_data;
-import 'package:move_young/features/games/models/game.dart';
+import 'package:move_young/features/matches/models/match.dart';
 import 'package:move_young/features/agenda/models/event_model.dart' as agenda;
 import 'package:move_young/db/calendar_events_db.dart';
 
@@ -91,49 +91,49 @@ class CalendarService {
     }
   }
 
-  /// Build location string from game
-  static String _buildLocation(Game game) {
-    String location = game.location;
-    if (game.address != null && game.address!.isNotEmpty) {
-      location = game.address!;
-      if (game.location.isNotEmpty && game.location != game.address) {
-        location = '${game.location}, ${game.address}';
+  /// Build location string from match
+  static String _buildLocation(Match match) {
+    String location = match.location;
+    if (match.address != null && match.address!.isNotEmpty) {
+      location = match.address!;
+      if (match.location.isNotEmpty && match.location != match.address) {
+        location = '${match.location}, ${match.address}';
       }
     }
     return location;
   }
 
-  /// Build description from game
-  static String _buildDescription(Game game) {
+  /// Build description from match
+  static String _buildDescription(Match match) {
     final descriptionParts = <String>[];
 
-    // Add game description if available
-    if (game.description.isNotEmpty) {
-      descriptionParts.add(game.description);
+    // Add match description if available
+    if (match.description.isNotEmpty) {
+      descriptionParts.add(match.description);
     }
 
     // Add metadata
-    descriptionParts.add('Sport: ${game.sport.toUpperCase()}');
-    descriptionParts.add('Players: ${game.currentPlayers}/${game.maxPlayers}');
+    descriptionParts.add('Sport: ${match.sport.toUpperCase()}');
+    descriptionParts.add('Players: ${match.currentPlayers}/${match.maxPlayers}');
 
     // Add optional fields
-    if (game.equipment != null && game.equipment!.isNotEmpty) {
-      descriptionParts.add('Equipment: ${game.equipment}');
+    if (match.equipment != null && match.equipment!.isNotEmpty) {
+      descriptionParts.add('Equipment: ${match.equipment}');
     }
-    if (game.cost != null && game.cost! > 0) {
-      descriptionParts.add('Cost: €${game.cost!.toStringAsFixed(2)}');
+    if (match.cost != null && match.cost! > 0) {
+      descriptionParts.add('Cost: €${match.cost!.toStringAsFixed(2)}');
     }
-    if (game.organizerName.isNotEmpty) {
-      descriptionParts.add('Organized by: ${game.organizerName}');
+    if (match.organizerName.isNotEmpty) {
+      descriptionParts.add('Organized by: ${match.organizerName}');
     }
-    descriptionParts.add('Game ID: ${game.id}');
+    descriptionParts.add('Match ID: ${match.id}');
 
     return descriptionParts.join('\n\n');
   }
 
-  /// Add a game to the device calendar
+  /// Add a match to the device calendar
   /// Returns event ID if successful, null otherwise
-  static Future<String?> addGameToCalendar(Game game) async {
+  static Future<String?> addMatchToCalendar(Match match) async {
     try {
       // Request permissions
       final hasPermissions = await requestPermissions();
@@ -151,11 +151,11 @@ class CalendarService {
       }
 
       // Calculate end time (default: 1.5 hours after start)
-      final endTime = game.dateTime.add(const Duration(hours: 1, minutes: 30));
+      final endTime = match.dateTime.add(const Duration(hours: 1, minutes: 30));
 
       // Build location and description
-      final location = _buildLocation(game);
-      final description = _buildDescription(game);
+      final location = _buildLocation(match);
+      final description = _buildDescription(match);
 
       // Convert DateTime to TZDateTime (device_calendar v4 requires TZDateTime)
       // Use local timezone or UTC as fallback
@@ -163,18 +163,18 @@ class CalendarService {
       tz.TZDateTime endTZ;
       try {
         final local = tz.local;
-        startTZ = tz.TZDateTime.from(game.dateTime, local);
+        startTZ = tz.TZDateTime.from(match.dateTime, local);
         endTZ = tz.TZDateTime.from(endTime, local);
       } catch (e) {
         // Fallback to UTC if local timezone not available
         final utc = tz.UTC;
-        startTZ = tz.TZDateTime.from(game.dateTime, utc);
+        startTZ = tz.TZDateTime.from(match.dateTime, utc);
         endTZ = tz.TZDateTime.from(endTime, utc);
       }
 
       // Create event
       final event = Event(calendar.id);
-      event.title = '${game.sport.toUpperCase()} Game - ${game.location}';
+      event.title = '${match.sport.toUpperCase()} Match - ${match.location}';
       event.description = description;
       event.location = location;
       event.start = startTZ;
@@ -193,12 +193,12 @@ class CalendarService {
           createEventResult.data != null) {
         final eventId = createEventResult.data!;
         if (eventId.isEmpty) {
-          developer.log('Event ID is empty for game ${game.id}',
+          developer.log('Event ID is empty for match ${match.id}',
               name: 'CalendarService');
           return null;
         }
         developer.log(
-            'Game ${game.id} added to calendar with event ID: $eventId',
+            'Match ${match.id} added to calendar with event ID: $eventId',
             name: 'CalendarService');
 
         // Store event ID for tracking
@@ -206,7 +206,7 @@ class CalendarService {
           final calendarId = calendar.id;
           if (calendarId != null && calendarId.isNotEmpty) {
             final success =
-                await _db?.insertCalendarEvent(game.id, eventId, calendarId) ??
+                await _db?.insertCalendarEvent(match.id, eventId, calendarId) ??
                     false;
             if (!success) {
               developer.log('Failed to store calendar event ID in database',
@@ -225,24 +225,24 @@ class CalendarService {
         return eventId;
       } else {
         developer.log(
-            'Failed to add game ${game.id} to calendar: ${createEventResult?.errors ?? "Unknown error"}',
+            'Failed to add match ${match.id} to calendar: ${createEventResult?.errors ?? "Unknown error"}',
             name: 'CalendarService');
         return null;
       }
     } catch (e, stackTrace) {
-      developer.log('Error adding game to calendar: $e',
+      developer.log('Error adding match to calendar: $e',
           name: 'CalendarService', error: e, stackTrace: stackTrace);
       return null;
     }
   }
 
-  /// Update a calendar event when game is edited
-  static Future<bool> updateGameInCalendar(Game game) async {
+  /// Update a calendar event when match is edited
+  static Future<bool> updateMatchInCalendar(Match match) async {
     try {
       // Get stored event ID
-      final eventInfo = await _db?.getCalendarEvent(game.id);
+      final eventInfo = await _db?.getCalendarEvent(match.id);
       if (eventInfo == null) {
-        developer.log('No calendar event found for game ${game.id}',
+        developer.log('No calendar event found for match ${match.id}',
             name: 'CalendarService');
         return false;
       }
@@ -253,13 +253,13 @@ class CalendarService {
         return false;
       }
 
-      // Get existing event - retrieve events from calendar around the game date
+      // Get existing event - retrieve events from calendar around the match date
       // We need to retrieve events in a date range to find the event
       final retrieveEventsResult = await _deviceCalendarPlugin.retrieveEvents(
         eventInfo.calendarId,
         RetrieveEventsParams(
-          startDate: game.dateTime.subtract(const Duration(days: 1)),
-          endDate: game.dateTime.add(const Duration(days: 1)),
+          startDate: match.dateTime.subtract(const Duration(days: 1)),
+          endDate: match.dateTime.add(const Duration(days: 1)),
         ),
       );
       if (!retrieveEventsResult.isSuccess ||
@@ -268,7 +268,7 @@ class CalendarService {
             'Failed to retrieve events from calendar: ${eventInfo.eventId}',
             name: 'CalendarService');
         // Event might have been deleted by user, remove from tracking
-        await _db?.deleteCalendarEvent(game.id);
+        await _db?.deleteCalendarEvent(match.id);
         return false;
       }
 
@@ -284,30 +284,30 @@ class CalendarService {
         developer.log('Event not found in calendar: ${eventInfo.eventId}',
             name: 'CalendarService');
         // Event might have been deleted by user, remove from tracking
-        await _db?.deleteCalendarEvent(game.id);
+        await _db?.deleteCalendarEvent(match.id);
         return false;
       }
 
       // Update event details
-      final endTime = game.dateTime.add(const Duration(hours: 1, minutes: 30));
-      final location = _buildLocation(game);
-      final description = _buildDescription(game);
+      final endTime = match.dateTime.add(const Duration(hours: 1, minutes: 30));
+      final location = _buildLocation(match);
+      final description = _buildDescription(match);
 
       // Convert DateTime to TZDateTime (device_calendar v4 requires TZDateTime)
       tz.TZDateTime startTZ;
       tz.TZDateTime endTZ;
       try {
         final local = tz.local;
-        startTZ = tz.TZDateTime.from(game.dateTime, local);
+        startTZ = tz.TZDateTime.from(match.dateTime, local);
         endTZ = tz.TZDateTime.from(endTime, local);
       } catch (e) {
         // Fallback to UTC if local timezone not available
         final utc = tz.UTC;
-        startTZ = tz.TZDateTime.from(game.dateTime, utc);
+        startTZ = tz.TZDateTime.from(match.dateTime, utc);
         endTZ = tz.TZDateTime.from(endTime, utc);
       }
 
-      event.title = '${game.sport.toUpperCase()} Game - ${game.location}';
+      event.title = '${match.sport.toUpperCase()} Match - ${match.location}';
       event.description = description;
       event.location = location;
       event.start = startTZ;
@@ -317,7 +317,7 @@ class CalendarService {
       final updateResult =
           await _deviceCalendarPlugin.createOrUpdateEvent(event);
       if (updateResult != null && updateResult.isSuccess) {
-        developer.log('Game ${game.id} calendar event updated successfully',
+        developer.log('Match ${match.id} calendar event updated successfully',
             name: 'CalendarService');
         return true;
       } else {
@@ -327,19 +327,19 @@ class CalendarService {
         return false;
       }
     } catch (e, stackTrace) {
-      developer.log('Error updating game in calendar: $e',
+      developer.log('Error updating match in calendar: $e',
           name: 'CalendarService', error: e, stackTrace: stackTrace);
       return false;
     }
   }
 
-  /// Remove calendar event when game is cancelled
-  static Future<bool> removeGameFromCalendar(String gameId) async {
+  /// Remove calendar event when match is cancelled
+  static Future<bool> removeMatchFromCalendar(String matchId) async {
     try {
       // Get stored event ID
-      final eventInfo = await _db?.getCalendarEvent(gameId);
+      final eventInfo = await _db?.getCalendarEvent(matchId);
       if (eventInfo == null) {
-        developer.log('No calendar event found for game $gameId',
+        developer.log('No calendar event found for match $matchId',
             name: 'CalendarService');
         return false;
       }
@@ -351,45 +351,45 @@ class CalendarService {
       );
 
       if (deleteResult.isSuccess) {
-        developer.log('Game $gameId calendar event deleted successfully',
+        developer.log('Match $matchId calendar event deleted successfully',
             name: 'CalendarService');
         // Remove from tracking
-        await _db?.deleteCalendarEvent(gameId);
+        await _db?.deleteCalendarEvent(matchId);
         return true;
       } else {
         developer.log('Failed to delete calendar event: ${deleteResult.errors}',
             name: 'CalendarService');
         // Remove from tracking anyway (event might have been deleted by user)
-        await _db?.deleteCalendarEvent(gameId);
+        await _db?.deleteCalendarEvent(matchId);
         return false;
       }
     } catch (e, stackTrace) {
-      developer.log('Error removing game from calendar: $e',
+      developer.log('Error removing match from calendar: $e',
           name: 'CalendarService', error: e, stackTrace: stackTrace);
       // Remove from tracking on error (event might have been deleted by user)
-      await _db?.deleteCalendarEvent(gameId);
+      await _db?.deleteCalendarEvent(matchId);
       return false;
     }
   }
 
-  /// Check if game is added to calendar
-  static Future<bool> isGameInCalendar(String gameId) async {
+  /// Check if match is added to calendar
+  static Future<bool> isMatchInCalendar(String matchId) async {
     try {
-      final eventInfo = await _db?.getCalendarEvent(gameId);
+      final eventInfo = await _db?.getCalendarEvent(matchId);
       return eventInfo != null;
     } catch (e) {
-      developer.log('Error checking if game is in calendar: $e',
+      developer.log('Error checking if match is in calendar: $e',
           name: 'CalendarService', error: e);
       return false;
     }
   }
 
-  /// Get all game IDs that are in calendar
-  static Future<List<String>> getAllGamesInCalendar() async {
+  /// Get all match IDs that are in calendar
+  static Future<List<String>> getAllMatchesInCalendar() async {
     try {
-      return await _db?.getAllGameIds() ?? [];
+      return await _db?.getAllMatchIds() ?? [];
     } catch (e) {
-      developer.log('Error getting all games in calendar: $e',
+      developer.log('Error getting all matches in calendar: $e',
           name: 'CalendarService', error: e);
       return [];
     }

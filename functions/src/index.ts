@@ -223,7 +223,7 @@ export const onMailNotificationCreate = onValueCreated(
       const type = (payload.type || "").toString();
       const toUid = (payload.toUid || "").toString();
       const fromUid = (payload.fromUid || "").toString();
-      const gameId = (payload.gameId || "").toString();
+      const matchId = (payload.matchId || "").toString();
 
       const db = admin.database();
       // Idempotency: skip if already processed
@@ -267,37 +267,37 @@ export const onMailNotificationCreate = onValueCreated(
           timestamp: now,
           read: false,
         });
-      } else if (type === "game_invite" && toUid && gameId) {
+      } else if (type === "match_invite" && toUid && matchId) {
         await db.ref(`/users/${toUid}/notifications/${notificationId}`).set({
-          type: "game_invite",
-          data: { gameId },
+          type: "match_invite",
+          data: { matchId },
           timestamp: now,
           read: false,
         });
-      } else if ((type === "game_edited" || type === "game_cancelled") && gameId) {
-        // Fan-out game edited/cancelled notifications to all players and invited users (excluding organizer)
-        console.log(`[${type}] Processing notification for game ${gameId}`);
-        const gameSnap = await db.ref(`/games/${gameId}`).once("value");
-        if (!gameSnap.exists()) {
-          console.error(`[${type}] Game ${gameId} does not exist`);
+      } else if ((type === "match_edited" || type === "match_cancelled") && matchId) {
+        // Fan-out match edited/cancelled notifications to all players and invited users (excluding organizer)
+        console.log(`[${type}] Processing notification for match ${matchId}`);
+        const matchSnap = await db.ref(`/matches/${matchId}`).once("value");
+        if (!matchSnap.exists()) {
+          console.error(`[${type}] Match ${matchId} does not exist`);
           return;
         }
 
-        const game = gameSnap.val() || {};
-        const organizerId = (game.organizerId || "").toString();
-        console.log(`[${type}] Game ${gameId} found, organizer: ${organizerId}`);
+        const match = matchSnap.val() || {};
+        const organizerId = (match.organizerId || "").toString();
+        console.log(`[${type}] Match ${matchId} found, organizer: ${organizerId}`);
 
-        // Get all players who have joined the game
+        // Get all players who have joined the match
         let players: string[] = [];
-        if (Array.isArray(game.players)) {
-          players = game.players.map((v: any) => String(v));
-        } else if (game.players && typeof game.players === "object") {
-          players = Object.values(game.players).map((v: any) => String(v));
+        if (Array.isArray(match.players)) {
+          players = match.players.map((v: any) => String(v));
+        } else if (match.players && typeof match.players === "object") {
+          players = Object.values(match.players).map((v: any) => String(v));
         }
         console.log(`[${type}] Found ${players.length} players: ${players.join(", ")}`);
 
         // Get all users who have been invited (pending or accepted)
-        const invitesSnap = await db.ref(`/games/${gameId}/invites`).once("value");
+        const invitesSnap = await db.ref(`/matches/${matchId}/invites`).once("value");
         const invitedUsers = new Set<string>();
         if (invitesSnap.exists()) {
           const invites = invitesSnap.val() || {};
@@ -325,29 +325,29 @@ export const onMailNotificationCreate = onValueCreated(
         console.log(`[${type}] Total users to notify: ${allUsersToNotify.size} (after excluding organizer)`);
 
         if (allUsersToNotify.size === 0) {
-          console.log(`[${type}] No users to notify for game ${gameId} (organizer: ${organizerId}, players: ${players.length}, invites: ${invitedUsers.size})`);
+          console.log(`[${type}] No users to notify for match ${matchId} (organizer: ${organizerId}, players: ${players.length}, invites: ${invitedUsers.size})`);
           return;
         }
 
-        // Get game details for notification
-        const sport = (game.sport || "game").toString();
-        const location = (game.location || "your location").toString();
-        const organizerName = (game.organizerName || "Organizer").toString();
+        // Get match details for notification
+        const sport = (match.sport || "match").toString();
+        const location = (match.location || "your location").toString();
+        const organizerName = (match.organizerName || "Organizer").toString();
 
         const updates: { [path: string]: any } = {};
         for (const uid of allUsersToNotify) {
           const path = `/users/${uid}/notifications/${notificationId}`;
-          if (type === "game_edited") {
+          if (type === "match_edited") {
             updates[path] = {
-              type: "game_edited",
-              data: { gameId, sport, location, fromName: organizerName, changes: "details" },
+              type: "match_edited",
+              data: { matchId, sport, location, fromName: organizerName, changes: "details" },
               timestamp: now,
               read: false,
             };
-          } else if (type === "game_cancelled") {
+          } else if (type === "match_cancelled") {
             updates[path] = {
-              type: "game_cancelled",
-              data: { gameId, sport, location },
+              type: "match_cancelled",
+              data: { matchId, sport, location },
               timestamp: now,
               read: false,
             };
@@ -356,9 +356,9 @@ export const onMailNotificationCreate = onValueCreated(
 
         if (Object.keys(updates).length > 0) {
           await db.ref().update(updates);
-          console.log(`[${type}] Successfully sent ${Object.keys(updates).length} notifications for game ${gameId}`);
+          console.log(`[${type}] Successfully sent ${Object.keys(updates).length} notifications for match ${matchId}`);
         } else {
-          console.error(`[${type}] Failed to create notification updates for game ${gameId}`);
+          console.error(`[${type}] Failed to create notification updates for match ${matchId}`);
         }
       } else {
         // Unknown notification type - log for debugging
@@ -374,20 +374,20 @@ export const onMailNotificationCreate = onValueCreated(
   }
 );
 
-// Cleanup when a game is deleted: remove joined indexes, invites, and related notifications
-export const onGameDelete = onValueDeleted("/games/{gameId}", async (event) => {
-  const gameId = event.params.gameId as string;
+// Cleanup when a match is deleted: remove joined indexes, invites, and related notifications
+export const onMatchDelete = onValueDeleted("/matches/{matchId}", async (event) => {
+  const matchId = event.params.matchId as string;
   const db = admin.database();
   try {
     const usersSnap = await db.ref("/users").once("value");
     const users = usersSnap.val() || {};
     const updates: { [path: string]: null } = {};
     for (const uid of Object.keys(users)) {
-      updates[`/users/${uid}/joinedGames/${gameId}`] = null;
-      updates[`/users/${uid}/gameInvites/${gameId}`] = null;
+      updates[`/users/${uid}/joinedMatches/${matchId}`] = null;
+      updates[`/users/${uid}/matchInvites/${matchId}`] = null;
       const notifs = (users[uid]?.notifications) || {};
       for (const nid of Object.keys(notifs)) {
-        if (notifs[nid]?.data?.gameId === gameId) {
+        if (notifs[nid]?.data?.matchId === matchId) {
           updates[`/users/${uid}/notifications/${nid}`] = null;
         }
       }
@@ -396,7 +396,7 @@ export const onGameDelete = onValueDeleted("/games/{gameId}", async (event) => {
       await db.ref().update(updates);
     }
   } catch (e) {
-    console.error("Error cleaning up after game delete:", e);
+    console.error("Error cleaning up after match delete:", e);
   }
 });
 
@@ -494,26 +494,26 @@ export const onUserDelete = onValueDeleted("/users/{uid}", async (event) => {
     console.error("Error loading friend tokens during user delete cleanup:", error);
   }
 
-  // 6. Clean up game-related data (invites and player entries)
+  // 6. Clean up match-related data (invites and player entries)
   try {
-    const gamesSnap = await db.ref("/games").once("value");
-    const games = gamesSnap.val() || {};
-    for (const gid of Object.keys(games)) {
-      updates[`/games/${gid}/invites/${uid}`] = null;
+    const matchesSnap = await db.ref("/matches").once("value");
+    const matches = matchesSnap.val() || {};
+    for (const mid of Object.keys(matches)) {
+      updates[`/matches/${mid}/invites/${uid}`] = null;
       // players may be array or object; handle both
-      const game = games[gid] || {};
-      const players = game.players;
+      const match = matches[mid] || {};
+      const players = match.players;
       if (Array.isArray(players)) {
         const filtered = players.filter((p: string) => p !== uid);
-        updates[`/games/${gid}/players`] = filtered;
-        updates[`/games/${gid}/currentPlayers`] = filtered.length;
+        updates[`/matches/${mid}/players`] = filtered;
+        updates[`/matches/${mid}/currentPlayers`] = filtered.length;
       } else if (players && typeof players === 'object') {
         // If modeled as map, just remove key if present
-        updates[`/games/${gid}/players/${uid}`] = null;
+        updates[`/matches/${mid}/players/${uid}`] = null;
       }
     }
   } catch (e) {
-    console.error("Error loading games during user delete cleanup:", e);
+    console.error("Error loading matches during user delete cleanup:", e);
   }
 
   // 7. Clean up pending invite index
@@ -533,29 +533,29 @@ export const onUserDelete = onValueDeleted("/users/{uid}", async (event) => {
   console.log(`Completed comprehensive cleanup for deleted user: ${uid}`);
 });
 
-// Enforce last-write-wins metadata and monotonic version on game updates
-export const onGameUpdate = onValueWritten("/games/{gameId}", async (event) => {
+// Enforce last-write-wins metadata and monotonic version on match updates
+export const onMatchUpdate = onValueWritten("/matches/{matchId}", async (event) => {
   const before = event.data.before.val();
   const after = event.data.after.val() || {};
   if (!after) return;
 
-  // Only update metadata if this is an actual update (game existed before)
-  // New game creations should not have updatedAt set by this function
+  // Only update metadata if this is an actual update (match existed before)
+  // New match creations should not have updatedAt set by this function
   const isCreation = !event.data.before.exists();
   if (isCreation) {
-    // For new games, only set version if not already set
+    // For new matches, only set version if not already set
     // IMPORTANT: Don't update updatedAt during creation - it should equal createdAt
     // Also check if updatedAt is already correctly set to createdAt (or not set)
     const updates: { [key: string]: any } = {};
     if (!after.version) {
       updates.version = 1;
     }
-    // Ensure updatedAt is not set or equals createdAt for new games
-    // This prevents the "Modified" badge from appearing on newly created games
+    // Ensure updatedAt is not set or equals createdAt for new matches
+    // This prevents the "Modified" badge from appearing on newly created matches
     const createdAtMs = after.createdAt;
     const updatedAtMs = after.updatedAt;
     if (updatedAtMs && createdAtMs && updatedAtMs !== createdAtMs) {
-      // Fix: set updatedAt to match createdAt for new games
+      // Fix: set updatedAt to match createdAt for new matches
       updates.updatedAt = createdAtMs;
     }
 
@@ -639,7 +639,7 @@ export const onGameUpdate = onValueWritten("/games/{gameId}", async (event) => {
         const afterInviteUids = Object.keys(afterInvites);
 
         // Check if only invite statuses changed or new invites were added
-        // Both cases are participant-related actions, not game modifications
+        // Both cases are participant-related actions, not match modifications
         const newInvitesAdded = afterInviteUids.length > beforeInviteUids.length &&
           beforeInviteUids.every(uid => afterInviteUids.includes(uid));
         const sameInvitesStatusChanged =
@@ -662,7 +662,7 @@ export const onGameUpdate = onValueWritten("/games/{gameId}", async (event) => {
             }
             if (!onlyParticipantInviteChanges) break;
           }
-          // New invites are also participant-related (organizer inviting people, not modifying game)
+          // New invites are also participant-related (organizer inviting people, not modifying match)
           if (onlyParticipantInviteChanges || newInvitesAdded) {
             onlyParticipantFieldsChanged = true;
           }
@@ -680,7 +680,7 @@ export const onGameUpdate = onValueWritten("/games/{gameId}", async (event) => {
   // Skip version/updatedAt updates entirely if only participant fields changed
   // This prevents unnecessary writes and potential notification triggers
   if (onlyParticipantFieldsChanged && !isOrganizerEdit) {
-    console.log(`Skipping version/updatedAt update for game ${event.params.gameId} - only participant fields changed (invites/players)`);
+    console.log(`Skipping version/updatedAt update for match ${event.params.matchId} - only participant fields changed (invites/players)`);
     return;
   }
 
@@ -700,7 +700,7 @@ export const onGameUpdate = onValueWritten("/games/{gameId}", async (event) => {
 
     await event.data.after.ref.update(updates);
   } catch (e) {
-    console.error("Error enforcing game version/update metadata:", e);
+    console.error("Error enforcing match version/update metadata:", e);
   }
 });
 
@@ -728,9 +728,9 @@ export const processNotificationRequest = onValueCreated(
 
       console.log(`Notification request processed for user ${recipientUid}, type: ${type}, requestId: ${requestId}`);
 
-      // Log specifically for game_modified to trace source
-      if (type === "game_modified") {
-        console.log(`[DEBUG] game_modified notification created via processNotificationRequest - recipientUid: ${recipientUid}, requestId: ${requestId}, data:`, JSON.stringify(data));
+      // Log specifically for match_modified to trace source
+      if (type === "match_modified") {
+        console.log(`[DEBUG] match_modified notification created via processNotificationRequest - recipientUid: ${recipientUid}, requestId: ${requestId}, data:`, JSON.stringify(data));
       }
 
       // Clean up the request
@@ -754,9 +754,9 @@ export const sendNotification = onValueCreated(
 
     if (!notification || notification.read) return;
 
-    // Log all notifications for debugging to find where game_modified comes from
-    if (notification.type === "game_modified") {
-      console.log(`[DEBUG] game_modified notification detected - userId: ${userId}, notificationId: ${notificationId}, data:`, JSON.stringify(notification.data));
+    // Log all notifications for debugging to find where match_modified comes from
+    if (notification.type === "match_modified") {
+      console.log(`[DEBUG] match_modified notification detected - userId: ${userId}, notificationId: ${notificationId}, data:`, JSON.stringify(notification.data));
     }
 
     try {
@@ -797,46 +797,46 @@ export const sendNotification = onValueCreated(
           data.route = "/friends";
           break;
 
-        case "game_invite":
-          title = "Game Invitation";
+        case "match_invite":
+          title = "Match Invitation";
           {
             const fromName = notification.data?.fromName || "Someone";
-            const rawSport = (notification.data?.sport || "game").toString();
+            const rawSport = (notification.data?.sport || "match").toString();
             const sportWord = rawSport.toLowerCase() === "soccer" ? "football" : rawSport;
             body = `${fromName} invited you to play a ${sportWord} match!`;
           }
-          data.route = "/my-games";
-          data.gameId = notification.data?.gameId || "";
+          data.route = "/my-matches";
+          data.matchId = notification.data?.matchId || "";
           break;
 
-        case "game_cancelled":
-          title = "Game Cancelled";
-          body = `The ${notification.data?.sport || "game"} at ${notification.data?.location || "your location"
+        case "match_cancelled":
+          title = "Match Cancelled";
+          body = `The ${notification.data?.sport || "match"} at ${notification.data?.location || "your location"
             } has been cancelled`;
-          data.route = "/my-games";
-          data.gameId = notification.data?.gameId || "";
+          data.route = "/my-matches";
+          data.matchId = notification.data?.matchId || "";
           break;
 
         case "invite_accepted":
           title = "Invite Accepted";
-          body = `${notification.data?.fromName || "Someone"} accepted your ${notification.data?.sport || "game"} invite`;
-          data.route = "/my-games";
-          data.gameId = notification.data?.gameId || "";
+          body = `${notification.data?.fromName || "Someone"} accepted your ${notification.data?.sport || "match"} invite`;
+          data.route = "/my-matches";
+          data.matchId = notification.data?.matchId || "";
           break;
 
         case "invite_declined":
           title = "Invite Declined";
-          body = `${notification.data?.fromName || "Someone"} declined your ${notification.data?.sport || "game"} invite`;
-          data.route = "/my-games";
-          data.gameId = notification.data?.gameId || "";
+          body = `${notification.data?.fromName || "Someone"} declined your ${notification.data?.sport || "match"} invite`;
+          data.route = "/my-matches";
+          data.matchId = notification.data?.matchId || "";
           break;
 
-        case "game_edited":
-          title = "Game Updated";
+        case "match_edited":
+          title = "Match Updated";
           const changes = notification.data?.changes || "details";
-          body = `${notification.data?.fromName || "Organizer"} changed the game ${changes}`;
-          data.route = "/my-games";
-          data.gameId = notification.data?.gameId || "";
+          body = `${notification.data?.fromName || "Organizer"} changed the match ${changes}`;
+          data.route = "/my-matches";
+          data.matchId = notification.data?.matchId || "";
           break;
 
         default:
@@ -891,11 +891,11 @@ export const sendNotification = onValueCreated(
 );
 
 // Invite trigger → push directly to invitee
-export const onGameInviteCreate = onValueCreated(
-  "/games/{gameId}/invites/{inviteeUid}",
+export const onMatchInviteCreate = onValueCreated(
+  "/matches/{matchId}/invites/{inviteeUid}",
   async (event) => {
     const inviteeUid = event.params.inviteeUid as string;
-    const gameId = event.params.gameId as string;
+    const matchId = event.params.matchId as string;
     const invite = event.data.val() || {};
 
     try {
@@ -910,14 +910,14 @@ export const onGameInviteCreate = onValueCreated(
         return;
       }
 
-      // Get game data to retrieve sport and organizerId
-      const gameSnap = await admin
+      // Get match data to retrieve sport and organizerId
+      const matchSnap = await admin
         .database()
-        .ref(`/games/${gameId}`)
+        .ref(`/matches/${matchId}`)
         .once("value");
-      const game = gameSnap.val() || {};
-      const organizerId = (game.organizerId || invite.organizerId || "").toString();
-      const rawSport = (game.sport || invite.sport || "game").toString();
+      const match = matchSnap.val() || {};
+      const organizerId = (match.organizerId || invite.organizerId || "").toString();
+      const rawSport = (match.sport || invite.sport || "match").toString();
 
       // Resolve organizer display name with graceful fallbacks
       let organizerName: string = "Someone";
@@ -938,19 +938,19 @@ export const onGameInviteCreate = onValueCreated(
 
       const message: admin.messaging.MulticastMessage = {
         notification: {
-          title: "Game Invitation",
-          body: `${organizerName} invited you to a ${sportWord} game!`,
+          title: "Match Invitation",
+          body: `${organizerName} invited you to a ${sportWord} match!`,
         },
         data: {
           type: "discover",
-          gameId,
+          matchId,
         },
         tokens,
       };
 
       const res = await admin.messaging().sendEachForMulticast(message);
       console.log(
-        `Invite push: sent ${res.successCount} of ${tokens.length} to invitee ${inviteeUid} for game ${gameId}`
+        `Invite push: sent ${res.successCount} of ${tokens.length} to invitee ${inviteeUid} for match ${matchId}`
       );
 
       if (res.failureCount > 0) {
@@ -1028,9 +1028,9 @@ export const cleanupOldNotifications = onSchedule(
   }
 );
 
-// Cleanup old cancelled and past games
+// Cleanup old cancelled and past matches
 // Runs nightly at 3 AM (1 hour after notification cleanup)
-export const cleanupOldGames = onSchedule(
+export const cleanupOldMatches = onSchedule(
   { schedule: "0 3 * * *", timeZone: "Europe/Amsterdam" },
   async () => {
     const db = admin.database();
@@ -1039,65 +1039,65 @@ export const cleanupOldGames = onSchedule(
     const oneYearAgo = now - 365 * 24 * 60 * 60 * 1000; // 1 year in milliseconds
 
     try {
-      const gamesSnapshot = await db.ref("/games").once("value");
-      const games = gamesSnapshot.val();
-      if (!games) {
-        console.log("No games found for cleanup");
+      const matchesSnapshot = await db.ref("/matches").once("value");
+      const matches = matchesSnapshot.val();
+      if (!matches) {
+        console.log("No matches found for cleanup");
         return;
       }
 
-      const gamesToDelete: string[] = [];
+      const matchesToDelete: string[] = [];
       const updates: { [path: string]: null } = {};
 
-      // First pass: identify games to delete
-      for (const [gameId, gameData] of Object.entries(games)) {
-        const game = gameData as any;
-        if (!game) continue;
+      // First pass: identify matches to delete
+      for (const [matchId, matchData] of Object.entries(matches)) {
+        const match = matchData as any;
+        if (!match) continue;
 
         let shouldDelete = false;
         let reason = "";
 
-        // Check if game is cancelled and cancelled more than 90 days ago
-        if (game.isActive === false && game.canceledAt) {
-          const canceledAt = typeof game.canceledAt === "number"
-            ? game.canceledAt
-            : parseInt(game.canceledAt);
+        // Check if match is cancelled and cancelled more than 90 days ago
+        if (match.isActive === false && match.canceledAt) {
+          const canceledAt = typeof match.canceledAt === "number"
+            ? match.canceledAt
+            : parseInt(match.canceledAt);
           if (canceledAt && canceledAt < ninetyDaysAgo) {
             shouldDelete = true;
             reason = `cancelled ${Math.floor((now - canceledAt) / (24 * 60 * 60 * 1000))} days ago`;
           }
         }
 
-        // Check if game date is more than 1 year in the past (regardless of active status)
-        // This catches old historical games that should be archived
-        if (!shouldDelete && game.dateTime) {
-          let gameDate: number;
-          if (typeof game.dateTime === "number") {
+        // Check if match date is more than 1 year in the past (regardless of active status)
+        // This catches old historical matches that should be archived
+        if (!shouldDelete && match.dateTime) {
+          let matchDate: number;
+          if (typeof match.dateTime === "number") {
             // If stored as timestamp
-            gameDate = game.dateTime;
-          } else if (typeof game.dateTime === "string") {
+            matchDate = match.dateTime;
+          } else if (typeof match.dateTime === "string") {
             // If stored as ISO string, parse it
-            const parsed = new Date(game.dateTime).getTime();
+            const parsed = new Date(match.dateTime).getTime();
             if (isNaN(parsed)) continue;
-            gameDate = parsed;
+            matchDate = parsed;
           } else {
             continue;
           }
 
-          if (gameDate < oneYearAgo) {
+          if (matchDate < oneYearAgo) {
             shouldDelete = true;
-            reason = `game date was ${Math.floor((now - gameDate) / (24 * 60 * 60 * 1000))} days ago`;
+            reason = `match date was ${Math.floor((now - matchDate) / (24 * 60 * 60 * 1000))} days ago`;
           }
         }
 
         if (shouldDelete) {
-          gamesToDelete.push(gameId);
-          console.log(`Marking game ${gameId} for deletion: ${reason}`);
+          matchesToDelete.push(matchId);
+          console.log(`Marking match ${matchId} for deletion: ${reason}`);
         }
       }
 
-      if (gamesToDelete.length === 0) {
-        console.log("No old games found to clean up");
+      if (matchesToDelete.length === 0) {
+        console.log("No old matches found to clean up");
         return;
       }
 
@@ -1105,46 +1105,46 @@ export const cleanupOldGames = onSchedule(
       const usersSnapshot = await db.ref("/users").once("value");
       const users = usersSnapshot.val() || {};
 
-      // Get all games data for slot cleanup
-      for (const gameId of gamesToDelete) {
-        const game = games[gameId] as any;
-        if (!game) continue;
+      // Get all matches data for slot cleanup
+      for (const matchId of matchesToDelete) {
+        const match = matches[matchId] as any;
+        if (!match) continue;
 
-        // Delete the game itself (this will trigger onGameDelete for some cleanup)
-        updates[`/games/${gameId}`] = null;
+        // Delete the match itself (this will trigger onMatchDelete for some cleanup)
+        updates[`/matches/${matchId}`] = null;
 
-        // Clean up organizer's createdGames index
-        if (game.organizerId) {
-          updates[`/users/${game.organizerId}/createdGames/${gameId}`] = null;
+        // Clean up organizer's createdMatches index
+        if (match.organizerId) {
+          updates[`/users/${match.organizerId}/createdMatches/${matchId}`] = null;
         }
 
-        // Clean up slot reservation if game has slot info
-        if (game.slotDate && game.slotField && game.slotTime) {
-          updates[`/slots/${game.slotDate}/${game.slotField}/${game.slotTime}`] = null;
+        // Clean up slot reservation if match has slot info
+        if (match.slotDate && match.slotField && match.slotTime) {
+          updates[`/slots/${match.slotDate}/${match.slotField}/${match.slotTime}`] = null;
         }
 
         // Clean up pending invite index for all users
         for (const uid of Object.keys(users)) {
-          updates[`/pendingInviteIndex/${uid}/${gameId}`] = null;
+          updates[`/pendingInviteIndex/${uid}/${matchId}`] = null;
         }
       }
 
-      // Note: onGameDelete will automatically clean up:
-      // - /users/{uid}/joinedGames/{gameId}
-      // - /users/{uid}/gameInvites/{gameId}
+      // Note: onMatchDelete will automatically clean up:
+      // - /users/{uid}/joinedMatches/{matchId}
+      // - /users/{uid}/matchInvites/{matchId}
       // - Related notifications
-      // But we clean up createdGames and pendingInviteIndex here since onGameDelete
+      // But we clean up createdMatches and pendingInviteIndex here since onMatchDelete
       // might not catch all cases
 
       // Execute all deletions atomically
       if (Object.keys(updates).length > 0) {
         await db.ref().update(updates);
         console.log(
-          `Successfully cleaned up ${gamesToDelete.length} old games and related data`
+          `Successfully cleaned up ${matchesToDelete.length} old matches and related data`
         );
       }
     } catch (error) {
-      console.error("Error cleaning up old games:", error);
+      console.error("Error cleaning up old matches:", error);
       throw error; // Re-throw to trigger Cloud Functions retry
     }
   }
@@ -1152,9 +1152,9 @@ export const cleanupOldGames = onSchedule(
 
 // Invite status change → notify organizer (accepted/declined)
 export const onInviteStatusChange = onValueWritten(
-  "/games/{gameId}/invites/{inviteeUid}/status",
+  "/matches/{matchId}/invites/{inviteeUid}/status",
   async (event) => {
-    const gameId = event.params.gameId as string;
+    const matchId = event.params.matchId as string;
     const inviteeUid = event.params.inviteeUid as string;
     const before = (event.data.before.val() || "").toString();
     const after = (event.data.after.val() || "").toString();
@@ -1163,13 +1163,13 @@ export const onInviteStatusChange = onValueWritten(
     if (after !== "accepted" && after !== "declined") return; // only these
 
     try {
-      // Load game to find organizer and sport
-      const gameSnap = await admin.database().ref(`/games/${gameId}`).once("value");
-      if (!gameSnap.exists()) return;
-      const game = gameSnap.val() || {};
-      const organizerId: string = (game.organizerId || "").toString();
+      // Load match to find organizer and sport
+      const matchSnap = await admin.database().ref(`/matches/${matchId}`).once("value");
+      if (!matchSnap.exists()) return;
+      const match = matchSnap.val() || {};
+      const organizerId: string = (match.organizerId || "").toString();
       if (!organizerId || organizerId === inviteeUid) return;
-      const rawSport = (game.sport || "game").toString();
+      const rawSport = (match.sport || "match").toString();
       const sportWord = rawSport.toLowerCase() === "soccer" ? "football" : rawSport;
 
       // Resolve invitee display name
@@ -1198,15 +1198,15 @@ export const onInviteStatusChange = onValueWritten(
         notification: { title, body },
         data: {
           type: isAccepted ? "invite_accepted" : "invite_declined",
-          route: "/my-games",
-          gameId,
+          route: "/my-matches",
+          matchId,
         },
         tokens,
       };
 
       const res = await admin.messaging().sendEachForMulticast(msg);
       console.log(
-        `Invite status ${after}: sent ${res.successCount}/${tokens.length} to organizer ${organizerId} for game ${gameId}`
+        `Invite status ${after}: sent ${res.successCount}/${tokens.length} to organizer ${organizerId} for match ${matchId}`
       );
 
       if (res.failureCount > 0) {

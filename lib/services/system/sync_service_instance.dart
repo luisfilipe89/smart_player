@@ -3,13 +3,13 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart' show compute;
 import 'package:move_young/utils/logger.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:move_young/features/games/services/games_service.dart';
+import 'package:move_young/features/matches/services/matches_service.dart';
 import 'package:move_young/features/friends/services/friends_service.dart';
 import 'package:move_young/models/infrastructure/service_error.dart';
 
 /// Instance-based SyncService for use with Riverpod dependency injection
 class SyncServiceInstance {
-  final IGamesService _cloudGamesService;
+  final IMatchesService _cloudMatchesService;
   final IFriendsService _friendsService;
   final SharedPreferences? _prefs;
 
@@ -46,14 +46,14 @@ class SyncServiceInstance {
   static const int priorityHigh =
       3; // Critical operations (e.g., friend accept)
   static const int priorityNormal =
-      2; // Normal operations (e.g., game join/leave)
+      2; // Normal operations (e.g., match join/leave)
   static const int priorityLow = 1; // Low priority (e.g., updates)
 
   // Private constants for internal use (alias to public constants)
   static const int _priorityNormal = priorityNormal;
 
   SyncServiceInstance(
-    this._cloudGamesService,
+    this._cloudMatchesService,
     this._friendsService,
     this._prefs,
   );
@@ -86,7 +86,7 @@ class SyncServiceInstance {
   ///
   /// [priority] determines execution order:
   /// - 3 (high): Critical operations like friend accept
-  /// - 2 (normal): Standard operations like game join/leave
+  /// - 2 (normal): Standard operations like match join/leave
   /// - 1 (low): Low priority operations like updates
   Future<void> addSyncOperation({
     required String type,
@@ -345,7 +345,7 @@ class SyncServiceInstance {
         for (final item in queueList) {
           final op = SyncOperation.fromJson(
             item,
-            _cloudGamesService,
+            _cloudMatchesService,
             _friendsService,
           );
           _syncQueue.add(op);
@@ -428,14 +428,14 @@ class SyncServiceInstance {
 
     try {
       switch (type) {
-        case 'game_join':
-          final gameId = data['gameId'] as String;
-          await _cloudGamesService.joinGame(gameId);
+        case 'match_join':
+          final matchId = data['matchId'] as String;
+          await _cloudMatchesService.joinMatch(matchId);
           return true;
 
-        case 'game_leave':
-          final gameId = data['gameId'] as String;
-          await _cloudGamesService.leaveGame(gameId);
+        case 'match_leave':
+          final matchId = data['matchId'] as String;
+          await _cloudMatchesService.leaveMatch(matchId);
           return true;
 
         case 'friend_request':
@@ -511,7 +511,7 @@ class SyncOperation {
 
   factory SyncOperation.fromJson(
     Map<String, dynamic> json,
-    IGamesService? cloudGamesService,
+    IMatchesService? cloudMatchesService,
     IFriendsService? friendsService,
   ) {
     final type = json['type'] as String;
@@ -520,27 +520,27 @@ class SyncOperation {
     // Reconstruct operation based on type
     Future<bool> Function() operation;
     switch (type) {
-      case 'game_join':
-        final gameId = data['gameId'] as String;
+      case 'match_join':
+        final matchId = data['matchId'] as String;
         operation = () async {
-          if (cloudGamesService == null) {
+          if (cloudMatchesService == null) {
             NumberedLogger.w(
-                'Cannot execute game_join: cloudGamesService not available');
+                'Cannot execute match_join: cloudMatchesService not available');
             return false;
           }
-          await cloudGamesService.joinGame(gameId);
+          await cloudMatchesService.joinMatch(matchId);
           return true;
         };
         break;
-      case 'game_leave':
-        final gameId = data['gameId'] as String;
+      case 'match_leave':
+        final matchId = data['matchId'] as String;
         operation = () async {
-          if (cloudGamesService == null) {
+          if (cloudMatchesService == null) {
             NumberedLogger.w(
-                'Cannot execute game_leave: cloudGamesService not available');
+                'Cannot execute match_leave: cloudMatchesService not available');
             return false;
           }
-          await cloudGamesService.leaveGame(gameId);
+          await cloudMatchesService.leaveMatch(matchId);
           return true;
         };
         break;

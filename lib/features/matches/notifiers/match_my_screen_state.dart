@@ -1,16 +1,16 @@
 import 'package:flutter/foundation.dart';
 import 'package:move_young/models/infrastructure/cached_data.dart';
 
-/// Immutable state class for the games my screen
+/// Immutable state class for the matches my screen
 @immutable
-class GamesMyScreenState {
-  // Weather cache per gameId with TTL (1 hour expiry)
-  final Map<String, CachedData<Map<String, String>>> weatherByGameId;
+class MatchesMyScreenState {
+  // Weather cache per matchId with TTL (1 hour expiry)
+  final Map<String, CachedData<Map<String, String>>> weatherByMatchId;
   final Set<String> weatherLoading;
   static const Duration weatherCacheTTL = Duration(hours: 1);
 
-  // Calendar status cache per gameId: true = in calendar, false = not in calendar, null = checking
-  final Map<String, bool?> calendarStatusByGameId;
+  // Calendar status cache per matchId: true = in calendar, false = not in calendar, null = checking
+  final Map<String, bool?> calendarStatusByMatchId;
   final Set<String> calendarLoading;
   final bool calendarPreloadInProgress;
 
@@ -21,10 +21,10 @@ class GamesMyScreenState {
   // Highlight ID for scrolling
   final String? highlightId;
 
-  const GamesMyScreenState({
-    this.weatherByGameId = const {},
+  const MatchesMyScreenState({
+    this.weatherByMatchId = const {},
     this.weatherLoading = const {},
-    this.calendarStatusByGameId = const {},
+    this.calendarStatusByMatchId = const {},
     this.calendarLoading = const {},
     this.calendarPreloadInProgress = false,
     this.profileCache = const {},
@@ -33,28 +33,28 @@ class GamesMyScreenState {
   });
 
   /// Create initial state
-  factory GamesMyScreenState.initial(String? highlightGameId) {
-    return GamesMyScreenState(
-      highlightId: highlightGameId,
+  factory MatchesMyScreenState.initial(String? highlightMatchId) {
+    return MatchesMyScreenState(
+      highlightId: highlightMatchId,
     );
   }
 
   /// Copy with method for immutable updates
-  GamesMyScreenState copyWith({
-    Map<String, CachedData<Map<String, String>>>? weatherByGameId,
+  MatchesMyScreenState copyWith({
+    Map<String, CachedData<Map<String, String>>>? weatherByMatchId,
     Set<String>? weatherLoading,
-    Map<String, bool?>? calendarStatusByGameId,
+    Map<String, bool?>? calendarStatusByMatchId,
     Set<String>? calendarLoading,
     bool? calendarPreloadInProgress,
     Map<String, Map<String, String?>>? profileCache,
     Set<String>? profileLoading,
     String? Function()? highlightId,
   }) {
-    return GamesMyScreenState(
-      weatherByGameId: weatherByGameId ?? this.weatherByGameId,
+    return MatchesMyScreenState(
+      weatherByMatchId: weatherByMatchId ?? this.weatherByMatchId,
       weatherLoading: weatherLoading ?? this.weatherLoading,
-      calendarStatusByGameId:
-          calendarStatusByGameId ?? this.calendarStatusByGameId,
+      calendarStatusByMatchId:
+          calendarStatusByMatchId ?? this.calendarStatusByMatchId,
       calendarLoading: calendarLoading ?? this.calendarLoading,
       calendarPreloadInProgress:
           calendarPreloadInProgress ?? this.calendarPreloadInProgress,
@@ -64,38 +64,38 @@ class GamesMyScreenState {
     );
   }
 
-  /// Helper to update weather cache for a specific game
-  GamesMyScreenState updateWeatherCache(
-    String gameId,
+  /// Helper to update weather cache for a specific match
+  MatchesMyScreenState updateWeatherCache(
+    String matchId,
     CachedData<Map<String, String>>? cachedData,
   ) {
     final updated = Map<String, CachedData<Map<String, String>>>.from(
-      weatherByGameId,
+      weatherByMatchId,
     );
     if (cachedData != null) {
-      updated[gameId] = cachedData;
+      updated[matchId] = cachedData;
     } else {
-      updated.remove(gameId);
+      updated.remove(matchId);
     }
-    return copyWith(weatherByGameId: updated);
+    return copyWith(weatherByMatchId: updated);
   }
 
-  /// Helper to update calendar status for a specific game
-  GamesMyScreenState updateCalendarStatus(String gameId, bool? status) {
-    final updated = Map<String, bool?>.from(calendarStatusByGameId);
-    updated[gameId] = status;
-    return copyWith(calendarStatusByGameId: updated);
+  /// Helper to update calendar status for a specific match
+  MatchesMyScreenState updateCalendarStatus(String matchId, bool? status) {
+    final updated = Map<String, bool?>.from(calendarStatusByMatchId);
+    updated[matchId] = status;
+    return copyWith(calendarStatusByMatchId: updated);
   }
 
-  /// Helper to update calendar statuses for multiple games
-  GamesMyScreenState updateCalendarStatuses(Map<String, bool> statuses) {
-    final updated = Map<String, bool?>.from(calendarStatusByGameId);
+  /// Helper to update calendar statuses for multiple matches
+  MatchesMyScreenState updateCalendarStatuses(Map<String, bool> statuses) {
+    final updated = Map<String, bool?>.from(calendarStatusByMatchId);
     updated.addAll(statuses.map((key, value) => MapEntry(key, value as bool?)));
-    return copyWith(calendarStatusByGameId: updated);
+    return copyWith(calendarStatusByMatchId: updated);
   }
 
   /// Helper to update profile cache
-  GamesMyScreenState updateProfileCache(
+  MatchesMyScreenState updateProfileCache(
       String uid, Map<String, String?> profile) {
     final updated = Map<String, Map<String, String?>>.from(profileCache);
     updated[uid] = profile;
@@ -103,7 +103,7 @@ class GamesMyScreenState {
   }
 
   /// Helper to update multiple profiles
-  GamesMyScreenState updateProfiles(
+  MatchesMyScreenState updateProfiles(
       Map<String, Map<String, String?>> profiles) {
     final updated = Map<String, Map<String, String?>>.from(profileCache);
     updated.addAll(profiles);

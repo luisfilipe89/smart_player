@@ -41,11 +41,11 @@ class NotificationServiceInstance implements INotificationService {
     importance: Importance.high,
   );
 
-  static const AndroidNotificationChannel _channelGames =
+  static const AndroidNotificationChannel _channelMatches =
       AndroidNotificationChannel(
-    'smartplayer_games',
-    'Games',
-    description: 'Game invites and updates',
+    'smartplayer_matches',
+    'Matches',
+    description: 'Match invites and updates',
     importance: Importance.high,
   );
 
@@ -87,7 +87,8 @@ class NotificationServiceInstance implements INotificationService {
             _onDeepLinkNavigation?.call(payloadMap);
           } catch (e) {
             // Payload is not valid JSON, skip
-            NumberedLogger.d('Invalid notification payload format: ${response.payload}');
+            NumberedLogger.d(
+                'Invalid notification payload format: ${response.payload}');
           }
         }
       },
@@ -106,7 +107,7 @@ class NotificationServiceInstance implements INotificationService {
       await _local
           .resolvePlatformSpecificImplementation<
               AndroidFlutterLocalNotificationsPlugin>()
-          ?.createNotificationChannel(_channelGames);
+          ?.createNotificationChannel(_channelMatches);
     }
 
     // Request permissions (non-blocking - don't await to avoid blocking startup)
@@ -231,13 +232,14 @@ class NotificationServiceInstance implements INotificationService {
             title: message.notification?.title ?? 'SMARTPLAYER',
             body: message.notification?.body ?? 'You have a new notification',
             payload: payload,
-            channel: _channelGames, // Use games channel for game invites
+            channel: _channelMatches, // Use matches channel for match invites
           );
         }
         // DO NOT navigate automatically - only navigate when user taps the notification
       },
       onError: (error) {
-        NumberedLogger.e('Error in Firebase Messaging onMessage stream: $error');
+        NumberedLogger.e(
+            'Error in Firebase Messaging onMessage stream: $error');
       },
     );
 
@@ -265,18 +267,18 @@ class NotificationServiceInstance implements INotificationService {
   }
 
   void _handleNotificationTap(RemoteMessage message) {
-    // Handle game invites with type 'discover' (navigate to Join a Game screen)
-    if (message.data.containsKey('gameId') &&
+    // Handle match invites with type 'discover' (navigate to Join a Match screen)
+    if (message.data.containsKey('matchId') &&
         message.data['type'] == 'discover') {
       _onDeepLinkNavigation?.call({
         'type': 'discover',
-        'gameId': message.data['gameId'],
+        'matchId': message.data['matchId'],
       });
-    } else if (message.data.containsKey('gameId')) {
-      // Fallback for other game-related notifications
+    } else if (message.data.containsKey('matchId')) {
+      // Fallback for other match-related notifications
       _onDeepLinkNavigation?.call({
-        'type': 'game',
-        'gameId': message.data['gameId'],
+        'type': 'match',
+        'matchId': message.data['matchId'],
       });
     } else if (message.data.containsKey('friendId')) {
       _onDeepLinkNavigation?.call({
@@ -320,18 +322,18 @@ class NotificationServiceInstance implements INotificationService {
     String? payload,
     AndroidNotificationChannel? channel,
   }) async {
-    // Use provided channel or default to games channel for better visibility
-    final channelId = channel?.id ?? _channelGames.id;
-    final channelName = channel?.name ?? 'Games';
+    // Use provided channel or default to matches channel for better visibility
+    final channelId = channel?.id ?? _channelMatches.id;
+    final channelName = channel?.name ?? 'Matches';
     final channelDescription =
-        channel?.description ?? 'Game invites and updates';
+        channel?.description ?? 'Match invites and updates';
 
     final AndroidNotificationDetails androidPlatformChannelSpecifics =
         AndroidNotificationDetails(
       channelId,
       channelName,
       channelDescription: channelDescription,
-      importance: Importance.high, // Use high importance for game invites
+      importance: Importance.high, // Use high importance for match invites
       priority: Priority.high,
       playSound: true,
       enableVibration: true,
@@ -407,30 +409,31 @@ class NotificationServiceInstance implements INotificationService {
   }
 
   @override
-  Future<void> sendGameEditedNotification(String gameId) async {
+  Future<void> sendMatchEditedNotification(String matchId) async {
     try {
       await _db.ref('mail/notifications').push().set({
-        'type': 'game_edited',
-        'gameId': gameId,
+        'type': 'match_edited',
+        'matchId': matchId,
         'ts': DateTime.now().toIso8601String(),
       });
-      NumberedLogger.i('Queued game edited notification for game $gameId');
+      NumberedLogger.i('Queued match edited notification for match $matchId');
     } catch (e) {
-      NumberedLogger.e('Error sending game edited notification: $e');
+      NumberedLogger.e('Error sending match edited notification: $e');
     }
   }
 
   @override
-  Future<void> sendGameCancelledNotification(String gameId) async {
+  Future<void> sendMatchCancelledNotification(String matchId) async {
     try {
       await _db.ref('mail/notifications').push().set({
-        'type': 'game_cancelled',
-        'gameId': gameId,
+        'type': 'match_cancelled',
+        'matchId': matchId,
         'ts': DateTime.now().toIso8601String(),
       });
-      NumberedLogger.i('Queued game cancelled notification for game $gameId');
+      NumberedLogger.i(
+          'Queued match cancelled notification for match $matchId');
     } catch (e) {
-      NumberedLogger.e('Error sending game cancelled notification: $e');
+      NumberedLogger.e('Error sending match cancelled notification: $e');
     }
   }
 

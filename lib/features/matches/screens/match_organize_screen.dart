@@ -2,11 +2,11 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:easy_localization/easy_localization.dart';
-import 'package:move_young/features/games/models/game.dart';
+import 'package:move_young/features/matches/models/match.dart';
 import 'package:move_young/theme/_theme.dart';
 import 'package:move_young/features/auth/services/auth_provider.dart';
-import 'package:move_young/features/games/services/games_provider.dart';
-import 'package:move_young/features/games/services/cloud_games_provider.dart';
+import 'package:move_young/features/matches/services/match_provider.dart';
+import 'package:move_young/features/matches/services/cloud_matches_provider.dart';
 import 'package:move_young/services/external/weather_provider.dart';
 import 'package:move_young/services/system/haptics_provider.dart';
 import 'package:move_young/features/friends/services/friends_provider.dart';
@@ -16,35 +16,36 @@ import 'package:move_young/features/maps/screens/gmaps_screen.dart';
 import 'package:move_young/services/calendar/calendar_service.dart';
 import 'package:move_young/widgets/app_back_button.dart';
 import 'package:move_young/utils/time_slot_utils.dart';
-import 'package:move_young/features/games/services/game_form_validator.dart';
+import 'package:move_young/features/matches/services/match_form_validator.dart';
 import 'package:move_young/utils/snackbar_helper.dart';
 import 'package:move_young/utils/type_converters.dart';
 import 'package:move_young/utils/geolocation_utils.dart';
 import 'package:move_young/utils/logger.dart';
-import 'package:move_young/features/games/notifiers/game_form_notifier.dart';
-import 'package:move_young/features/games/notifiers/game_form_state.dart';
-import 'package:move_young/features/games/widgets/game_form_sport_selector.dart';
-import 'package:move_young/features/games/widgets/game_form_max_players_slider.dart';
-import 'package:move_young/features/games/widgets/game_form_date_selector.dart';
+import 'package:move_young/features/matches/notifiers/match_form_notifier.dart';
+import 'package:move_young/features/matches/notifiers/match_form_state.dart';
+import 'package:move_young/features/matches/widgets/match_form_sport_selector.dart';
+import 'package:move_young/features/matches/widgets/match_form_max_players_slider.dart';
+import 'package:move_young/features/matches/widgets/match_form_date_selector.dart';
 
-class GameOrganizeScreen extends ConsumerStatefulWidget {
-  final Game? initialGame;
-  const GameOrganizeScreen({super.key, this.initialGame});
+class MatchOrganizeScreen extends ConsumerStatefulWidget {
+  final Match? initialMatch;
+  const MatchOrganizeScreen({super.key, this.initialMatch});
 
   @override
-  ConsumerState<GameOrganizeScreen> createState() => _GameOrganizeScreenState();
+  ConsumerState<MatchOrganizeScreen> createState() =>
+      _MatchOrganizeScreenState();
 }
 
-class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
+class _MatchOrganizeScreenState extends ConsumerState<MatchOrganizeScreen> {
   // Scroll controller for auto-scrolling
   final ScrollController _scrollController = ScrollController();
-  final GlobalKey _createGameButtonKey = GlobalKey();
+  final GlobalKey _createMatchButtonKey = GlobalKey();
 
   // Search for fields (still local for TextEditingController)
   final TextEditingController _fieldSearchController = TextEditingController();
 
-  // Track if we've reset the form for new game creation
-  bool _hasResetForNewGame = false;
+  // Track if we've reset the form for new match creation
+  bool _hasResetForNewMatch = false;
 
   void _showSignInInlinePrompt() {
     if (!mounted) return;
@@ -54,14 +55,14 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // Reset form state when creating a new game (initialGame is null)
-    // This ensures we don't show leftover state from previous game creation
-    if (widget.initialGame == null && !_hasResetForNewGame) {
-      _hasResetForNewGame = true;
+    // Reset form state when creating a new match (initialMatch is null)
+    // This ensures we don't show leftover state from previous match creation
+    if (widget.initialMatch == null && !_hasResetForNewMatch) {
+      _hasResetForNewMatch = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
-          final notifier = ref.read(gameFormNotifierProvider(null).notifier);
-          final currentState = ref.read(gameFormNotifierProvider(null));
+          final notifier = ref.read(matchFormNotifierProvider(null).notifier);
+          final currentState = ref.read(matchFormNotifierProvider(null));
           // Always reset if there's any leftover state (especially showSuccess)
           if (currentState.showSuccess ||
               currentState.sport != null ||
@@ -84,17 +85,17 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
   }
 
   // Get form state and notifier from provider
-  GameFormState get _formState =>
-      ref.watch(gameFormNotifierProvider(widget.initialGame));
-  GameFormNotifier get _formNotifier =>
-      ref.read(gameFormNotifierProvider(widget.initialGame).notifier);
+  MatchFormState get _formState =>
+      ref.watch(matchFormNotifierProvider(widget.initialMatch));
+  MatchFormNotifier get _formNotifier =>
+      ref.read(matchFormNotifierProvider(widget.initialMatch).notifier);
 
-  // Auto-scroll to Create Game button
-  void _scrollToCreateGameButton() {
+  // Auto-scroll to Create Match button
+  void _scrollToCreateMatchButton() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_createGameButtonKey.currentContext != null) {
+      if (_createMatchButtonKey.currentContext != null) {
         Scrollable.ensureVisible(
-          _createGameButtonKey.currentContext!,
+          _createMatchButtonKey.currentContext!,
           duration: const Duration(milliseconds: 500),
           curve: Curves.easeInOut,
           alignment: 0.1, // Show button near the top of the screen
@@ -154,7 +155,7 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
 
   // Use computed properties from state
   bool get _isFormComplete => _formState.isFormComplete;
-  bool get _isCreatingSimilarGame => _formState.isCreatingSimilarGame;
+  bool get _isCreatingSimilarMatch => _formState.isCreatingSimilarMatch;
   bool get _hasChanges => _formState.hasChanges;
 
   void _onFieldSearchChanged(String query) {
@@ -162,26 +163,26 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
     _formNotifier.updateFieldSearch(query);
   }
 
-  // Field and weather loading are now handled by GameFormNotifier
+  // Field and weather loading are now handled by MatchFormNotifier
   // Methods removed: _loadFields(), _updateFieldDistances(), _loadWeather()
 
-  Future<void> _updateGame() async {
-    // Safety check: don't update historic games (should create new game instead)
-    if (_isCreatingSimilarGame) {
+  Future<void> _updateMatch() async {
+    // Safety check: don't update historic matches (should create new match instead)
+    if (_isCreatingSimilarMatch) {
       // This shouldn't happen, but if it does, redirect to create
-      await _createGame();
+      await _createMatch();
       return;
     }
 
     // If no changes in edit mode, show info and exit early
-    if (widget.initialGame != null && !_hasChanges) {
+    if (widget.initialMatch != null && !_hasChanges) {
       if (mounted) {
         SnackBarHelper.showInfo(context, 'No changes were made');
       }
       return;
     }
     // Validate required fields
-    final requiredFieldsResult = GameFormValidator.validateRequiredFields(
+    final requiredFieldsResult = MatchFormValidator.validateRequiredFields(
       sport: _formState.sport,
       field: _formState.field,
       date: _formState.date,
@@ -197,7 +198,7 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
       return;
     }
 
-    if (widget.initialGame == null) {
+    if (widget.initialMatch == null) {
       if (mounted) {
         SnackBarHelper.showError(context, 'form_fill_all_fields');
       }
@@ -205,7 +206,7 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
     }
 
     // Validate future date/time
-    final futureDateTimeResult = GameFormValidator.validateFutureDateTime(
+    final futureDateTimeResult = MatchFormValidator.validateFutureDateTime(
       date: _formState.date,
       time: _formState.time,
     );
@@ -223,7 +224,7 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
 
     try {
       // Parse the selected time and combine with selected date
-      final combinedDateTime = GameFormValidator.parseDateTime(
+      final combinedDateTime = MatchFormValidator.parseDateTime(
         date: _formState.date!,
         time: _formState.time!,
       );
@@ -235,7 +236,7 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
         return;
       }
 
-      final current = widget.initialGame!;
+      final current = widget.initialMatch!;
       final String newLocation = _formState.field?['name'] ?? current.location;
       final String? newAddress =
           _formState.field?['address'] ?? current.address;
@@ -246,8 +247,8 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
       final String? newFieldId =
           _formState.field?['id']?.toString() ?? current.fieldId;
 
-      // Update game through provider
-      final updatedGame = current.copyWith(
+      // Update match through provider
+      final updatedMatch = current.copyWith(
         dateTime: combinedDateTime,
         location: newLocation,
         address: newAddress,
@@ -256,7 +257,7 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
         fieldId: newFieldId,
       );
 
-      await ref.read(gamesActionsProvider).updateGame(updatedGame);
+      await ref.read(matchesActionsProvider).updateMatch(updatedMatch);
 
       // Send invites to newly selected friends
       final userId = ref.read(currentUserIdProvider);
@@ -273,14 +274,14 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
           final messenger = ScaffoldMessenger.of(context);
           try {
             await ref
-                .read(cloudGamesActionsProvider)
-                .sendGameInvitesToFriends(current.id, newInvites);
+                .read(cloudMatchesActionsProvider)
+                .sendMatchInvitesToFriends(current.id, newInvites);
             NumberedLogger.i(
               'Successfully sent invites to ${newInvites.length} friends',
             );
           } catch (e, stackTrace) {
-            // Log error but don't fail game update
-            NumberedLogger.e('Failed to send game invites: $e');
+            // Log error but don't fail match update
+            NumberedLogger.e('Failed to send match invites: $e');
             NumberedLogger.d('Stack trace: $stackTrace');
             // Show error to user so they know invites weren't sent
             if (mounted) {
@@ -292,7 +293,7 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          'Game updated but failed to send invites: ${e.toString().replaceAll('Exception: ', '')}',
+                          'Match updated but failed to send invites: ${e.toString().replaceAll('Exception: ', '')}',
                           style: AppTextStyles.body.copyWith(
                             color: Colors.white,
                           ),
@@ -315,18 +316,18 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
         Future.delayed(const Duration(milliseconds: 750), () {
           if (mounted) _formNotifier.setSuccess(false);
         });
-        SnackBarHelper.showSuccess(context, 'game_updated_successfully');
-        // Navigate to My Games → Organized and highlight the updated game
+        SnackBarHelper.showSuccess(context, 'match_updated_successfully');
+        // Navigate to My Matches → Organized and highlight the updated match
         final ctrl = MainScaffoldController.maybeOf(context);
-        ctrl?.openMyGames(
+        ctrl?.openMyMatches(
           initialTab: 1,
-          highlightGameId: updatedGame.id,
+          highlightMatchId: updatedMatch.id,
           popToRoot: true,
         );
       }
     } catch (e) {
       if (mounted) {
-        String errorMsg = 'game_creation_failed'.tr();
+        String errorMsg = 'match_creation_failed'.tr();
         final es = e.toString();
         final isSlotUnavailable = es.contains('new_slot_unavailable') ||
             es.contains('time_slot_unavailable');
@@ -353,12 +354,12 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
     }
   }
 
-  // Booked slots loading is now handled by GameFormNotifier
+  // Booked slots loading is now handled by MatchFormNotifier
   // Method removed: _loadBookedSlots()
 
-  Future<void> _createGame() async {
+  Future<void> _createMatch() async {
     // Validate required fields
-    final requiredFieldsResult = GameFormValidator.validateRequiredFields(
+    final requiredFieldsResult = MatchFormValidator.validateRequiredFields(
       sport: _formState.sport,
       field: _formState.field,
       date: _formState.date,
@@ -367,7 +368,7 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
     if (!requiredFieldsResult.isValid) {
       if (_formState.time == null) {
         // Inline prompt near time section
-        _scrollToCreateGameButton();
+        _scrollToCreateMatchButton();
         return;
       }
       if (mounted) {
@@ -380,7 +381,7 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
     }
 
     // Validate future date/time
-    final futureDateTimeResult = GameFormValidator.validateFutureDateTime(
+    final futureDateTimeResult = MatchFormValidator.validateFutureDateTime(
       date: _formState.date,
       time: _formState.time,
     );
@@ -398,7 +399,7 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
 
     try {
       // Parse the selected time and combine with selected date
-      final combinedDateTime = GameFormValidator.parseDateTime(
+      final combinedDateTime = MatchFormValidator.parseDateTime(
         date: _formState.date!,
         time: _formState.time!,
       );
@@ -410,7 +411,7 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
         return;
       }
 
-      // Create a game object with selected field data
+      // Create a match object with selected field data
       final userId = ref.read(currentUserIdProvider);
       final userDisplayName = ref.read(currentUserDisplayNameProvider);
 
@@ -420,7 +421,7 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
         return;
       }
 
-      final game = Game(
+      final match = Match(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
         sport: _formState.sport!,
         dateTime: combinedDateTime,
@@ -439,10 +440,11 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
         players: [userId], // Creator is counted as the first player
       );
 
-      final createdId = await ref.read(gamesActionsProvider).createGame(game);
+      final createdId =
+          await ref.read(matchesActionsProvider).createMatch(match);
 
-      // Update game with the created ID for calendar integration
-      final createdGame = game.copyWith(id: createdId);
+      // Update match with the created ID for calendar integration
+      final createdMatch = match.copyWith(id: createdId);
 
       if (mounted) {
         // Capture context-dependent values before any navigation
@@ -456,39 +458,40 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
           if (mounted) formNotifier.setSuccess(false);
         });
 
-        // Automatically add newly created game to calendar (non-blocking)
-        // This helps organizers keep track of their games
-        CalendarService.addGameToCalendar(createdGame).then((eventId) {
+        // Automatically add newly created match to calendar (non-blocking)
+        // This helps organizers keep track of their matches
+        CalendarService.addMatchToCalendar(createdMatch).then((eventId) {
           if (mounted && eventId != null) {
             // Calendar event added successfully - show subtle feedback
             // Don't show a separate snackbar to avoid UI clutter
-            NumberedLogger.i('Game $createdId automatically added to calendar');
+            NumberedLogger.i(
+                'Match $createdId automatically added to calendar');
           } else if (mounted) {
-            // Calendar add failed - log but don't show error (game creation succeeded)
+            // Calendar add failed - log but don't show error (match creation succeeded)
             NumberedLogger.w(
-                'Failed to add game $createdId to calendar (non-critical)');
+                'Failed to add match $createdId to calendar (non-critical)');
           }
         }).catchError((e) {
           // Log error but don't interrupt user flow
-          NumberedLogger.w('Error adding game to calendar: $e');
+          NumberedLogger.w('Error adding match to calendar: $e');
         });
 
         // Show success message using captured messenger (safe after navigation)
         scaffoldMessenger.showSnackBar(
           SnackBar(
-            content: Text('game_created_successfully'.tr()),
+            content: Text('match_created_successfully'.tr()),
             backgroundColor: AppColors.green,
             duration: const Duration(seconds: 3),
           ),
         );
 
-        // Navigate to My Games → Organized and highlight the created game
+        // Navigate to My Matches → Organized and highlight the created match
         // Use post-frame callback to ensure navigation happens safely after build
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted && ctrl != null) {
-            ctrl.openMyGames(
+            ctrl.openMyMatches(
               initialTab: 1,
-              highlightGameId: createdId,
+              highlightMatchId: createdId,
               popToRoot: true,
             );
           }
@@ -498,16 +501,16 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
         // This ensures consistent transition timing whether friends are invited or not
         if (_formState.selectedFriendUids.isNotEmpty) {
           ref
-              .read(cloudGamesActionsProvider)
-              .sendGameInvitesToFriends(
+              .read(cloudMatchesActionsProvider)
+              .sendMatchInvitesToFriends(
                   createdId, _formState.selectedFriendUids.toList())
               .then((_) {
             NumberedLogger.i(
               'Successfully sent invites to ${_formState.selectedFriendUids.length} friends',
             );
           }).catchError((e, stackTrace) {
-            // Log error but don't fail game creation or interrupt navigation
-            NumberedLogger.e('Failed to send game invites: $e');
+            // Log error but don't fail match creation or interrupt navigation
+            NumberedLogger.e('Failed to send match invites: $e');
             NumberedLogger.d('Stack trace: $stackTrace');
             // Show error to user so they know invites weren't sent (if still mounted)
             if (mounted) {
@@ -523,7 +526,7 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          'Game created but failed to send invites: ${e.toString().replaceAll('Exception: ', '')}',
+                          'Match created but failed to send invites: ${e.toString().replaceAll('Exception: ', '')}',
                           style: AppTextStyles.body.copyWith(
                             color: Colors.white,
                           ),
@@ -541,7 +544,7 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
       }
     } catch (e) {
       if (mounted) {
-        String errorMsg = 'game_creation_failed'.tr();
+        String errorMsg = 'match_creation_failed'.tr();
         final es = e.toString();
         final isSlotUnavailable = es.contains('new_slot_unavailable') ||
             es.contains('time_slot_unavailable');
@@ -907,11 +910,11 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Form state is managed by GameFormNotifier - no need to pre-fill here
-    // The notifier handles initialization from initialGame
+    // Form state is managed by MatchFormNotifier - no need to pre-fill here
+    // The notifier handles initialization from initialMatch
 
-    // Immediately clear success overlay if showing (for new game creation)
-    if (widget.initialGame == null && _formState.showSuccess) {
+    // Immediately clear success overlay if showing (for new match creation)
+    if (widget.initialMatch == null && _formState.showSuccess) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
           _formNotifier.setSuccess(false);
@@ -923,7 +926,7 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
       appBar: AppBar(
         leadingWidth: 48,
         leading: const AppBackButton(),
-        title: Text('organize_a_game'.tr()),
+        title: Text('organize_a_match'.tr()),
         backgroundColor: AppColors.white,
         elevation: 0,
       ),
@@ -957,8 +960,8 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                             // Sport Selection - Horizontal Scrollable List
                             Padding(
                               padding: AppPaddings.symmHorizontalReg,
-                              child: GameFormSportSelector(
-                                initialGame: widget.initialGame,
+                              child: MatchFormSportSelector(
+                                initialMatch: widget.initialMatch,
                                 notifier: _formNotifier,
                               ),
                             ),
@@ -1299,8 +1302,8 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                               PanelHeader('max_players'.tr()),
                               Padding(
                                 padding: AppPaddings.symmHorizontalReg,
-                                child: GameFormMaxPlayersSlider(
-                                  initialGame: widget.initialGame,
+                                child: MatchFormMaxPlayersSlider(
+                                  initialMatch: widget.initialMatch,
                                   notifier: _formNotifier,
                                 ),
                               ),
@@ -1312,10 +1315,10 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                               ),
                               Padding(
                                 padding: AppPaddings.symmHorizontalReg,
-                                child: GameFormDateSelector(
-                                  initialGame: widget.initialGame,
+                                child: MatchFormDateSelector(
+                                  initialMatch: widget.initialMatch,
                                   notifier: _formNotifier,
-                                  onDateSelected: _scrollToCreateGameButton,
+                                  onDateSelected: _scrollToCreateMatchButton,
                                 ),
                               ),
                             ],
@@ -1473,7 +1476,7 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                                                     _formNotifier
                                                         .selectTime(time);
                                                     // Auto-scroll to show next options after selecting time
-                                                    _scrollToCreateGameButton();
+                                                    _scrollToCreateMatchButton();
                                                   },
                                                 ),
                                               ),
@@ -1490,7 +1493,7 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
 
                             // Visibility Selection (create only, after time is chosen)
                             if (_formState.time != null &&
-                                widget.initialGame == null) ...[
+                                widget.initialMatch == null) ...[
                               PanelHeader('choose_visibility'.tr()),
                               Padding(
                                 padding: AppPaddings.symmHorizontalReg,
@@ -1567,9 +1570,9 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                               ),
                             ],
 
-                            // Create Game Button (match header width via same padding)
+                            // Create Match Button (match header width via same padding)
                             Padding(
-                              key: _createGameButtonKey,
+                              key: _createMatchButtonKey,
                               padding: AppPaddings.allReg,
                               child: SizedBox(
                                 width: double.infinity,
@@ -1577,17 +1580,17 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                                 child: ElevatedButton(
                                   onPressed:
                                       _isFormComplete && !_formState.isLoading
-                                          ? (_isCreatingSimilarGame
-                                              ? _createGame
-                                              : (widget.initialGame != null
-                                                  ? _updateGame
-                                                  : _createGame))
+                                          ? (_isCreatingSimilarMatch
+                                              ? _createMatch
+                                              : (widget.initialMatch != null
+                                                  ? _updateMatch
+                                                  : _createMatch))
                                           : null,
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor: _isFormComplete
-                                        ? (_isCreatingSimilarGame
+                                        ? (_isCreatingSimilarMatch
                                             ? AppColors.blue
-                                            : (widget.initialGame != null
+                                            : (widget.initialMatch != null
                                                 ? (_hasChanges
                                                     ? Colors.orange
                                                     : AppColors.green)
@@ -1614,11 +1617,11 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
                                           ),
                                         )
                                       : Text(
-                                          _isCreatingSimilarGame
-                                              ? 'create_game'.tr()
-                                              : (widget.initialGame != null
-                                                  ? 'update_game'.tr()
-                                                  : 'create_game'.tr()),
+                                          _isCreatingSimilarMatch
+                                              ? 'create_match'.tr()
+                                              : (widget.initialMatch != null
+                                                  ? 'update_match'.tr()
+                                                  : 'create_match'.tr()),
                                           style:
                                               AppTextStyles.cardTitle.copyWith(
                                             color: Colors.white,
@@ -1652,7 +1655,7 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
         }
 
         final name = snap.data?['displayName'] ?? 'Friend';
-        final locked = widget.initialGame != null &&
+        final locked = widget.initialMatch != null &&
             _formState.lockedInvitedUids.contains(uid);
 
         return Chip(
@@ -1700,7 +1703,7 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
       builder: (context) => _FriendSelectionSheet(
         currentUid: ref.read(currentUserIdProvider) ?? '',
         initiallySelected: _formState.selectedFriendUids,
-        lockedUids: widget.initialGame != null
+        lockedUids: widget.initialMatch != null
             ? _formState.lockedInvitedUids
             : const <String>{},
         onApply: (selectedUids) {
@@ -1716,7 +1719,7 @@ class _GameOrganizeScreenState extends ConsumerState<GameOrganizeScreen> {
     );
   }
 
-  // Locked invites loading is now handled by GameFormNotifier
+  // Locked invites loading is now handled by MatchFormNotifier
   // Method removed: _loadLockedInvites()
 }
 

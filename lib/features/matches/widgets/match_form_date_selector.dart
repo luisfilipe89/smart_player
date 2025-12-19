@@ -3,18 +3,18 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:move_young/theme/_theme.dart';
 import 'package:move_young/services/system/haptics_provider.dart';
 import 'package:move_young/utils/date_formatter.dart';
-import 'package:move_young/features/games/models/game.dart';
-import 'package:move_young/features/games/notifiers/game_form_notifier.dart';
+import 'package:move_young/features/matches/models/match.dart';
+import 'package:move_young/features/matches/notifiers/match_form_notifier.dart';
 
 /// Widget for selecting a date
-class GameFormDateSelector extends ConsumerWidget {
-  final Game? initialGame;
-  final GameFormNotifier notifier;
+class MatchFormDateSelector extends ConsumerWidget {
+  final Match? initialMatch;
+  final MatchFormNotifier notifier;
   final VoidCallback? onDateSelected;
 
-  const GameFormDateSelector({
+  const MatchFormDateSelector({
     super.key,
-    required this.initialGame,
+    required this.initialMatch,
     required this.notifier,
     this.onDateSelected,
   });
@@ -31,7 +31,7 @@ class GameFormDateSelector extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final state = ref.watch(gameFormNotifierProvider(initialGame));
+    final state = ref.watch(matchFormNotifierProvider(initialMatch));
 
     return Column(
       mainAxisSize: MainAxisSize.min,

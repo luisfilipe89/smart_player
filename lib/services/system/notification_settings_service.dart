@@ -8,14 +8,14 @@ class NotificationSettingsService {
   // Preference keys
   static const String _keyNotificationsEnabled = 'notifications_enabled';
   static const String _keyFriendRequests = 'notifications_friend_requests';
-  static const String _keyGameInvites = 'notifications_game_invites';
-  static const String _keyGameUpdates = 'notifications_game_updates';
+  static const String _keyMatchInvites = 'notifications_match_invites';
+  static const String _keyMatchUpdates = 'notifications_match_updates';
 
   // Default values
   bool _notificationsEnabled = true;
   bool _friendRequests = true;
-  bool _gameInvites = true;
-  bool _gameUpdates = true;
+  bool _matchInvites = true;
+  bool _matchUpdates = true;
   
   final StreamController<Map<String, bool>> _settingsController =
       StreamController<Map<String, bool>>.broadcast();
@@ -27,8 +27,8 @@ class NotificationSettingsService {
     try {
       _notificationsEnabled = _prefs.getBool(_keyNotificationsEnabled) ?? true;
       _friendRequests = _prefs.getBool(_keyFriendRequests) ?? true;
-      _gameInvites = _prefs.getBool(_keyGameInvites) ?? true;
-      _gameUpdates = _prefs.getBool(_keyGameUpdates) ?? true;
+      _matchInvites = _prefs.getBool(_keyMatchInvites) ?? true;
+      _matchUpdates = _prefs.getBool(_keyMatchUpdates) ?? true;
       _emitSettings();
     } catch (e) {
       // If SharedPreferences fails, use default values
@@ -41,8 +41,8 @@ class NotificationSettingsService {
     return {
       'notificationsEnabled': _notificationsEnabled,
       'friendRequests': _friendRequests,
-      'gameInvites': _gameInvites,
-      'gameUpdates': _gameUpdates,
+      'matchInvites': _matchInvites,
+      'matchUpdates': _matchUpdates,
     };
   }
 
@@ -52,11 +52,11 @@ class NotificationSettingsService {
   /// Get friend requests enabled state
   bool get friendRequests => _friendRequests;
 
-  /// Get game invites enabled state
-  bool get gameInvites => _gameInvites;
+  /// Get match invites enabled state
+  bool get matchInvites => _matchInvites;
 
-  /// Get game updates enabled state
-  bool get gameUpdates => _gameUpdates;
+  /// Get match updates enabled state
+  bool get matchUpdates => _matchUpdates;
 
   /// Check if a specific notification type is enabled
   bool isNotificationTypeEnabled(String type) {
@@ -65,10 +65,10 @@ class NotificationSettingsService {
     switch (type) {
       case 'friend_requests':
         return _friendRequests;
-      case 'game_invites':
-        return _gameInvites;
-      case 'game_updates':
-        return _gameUpdates;
+      case 'match_invites':
+        return _matchInvites;
+      case 'match_updates':
+        return _matchUpdates;
       default:
         return true;
     }
@@ -96,22 +96,22 @@ class NotificationSettingsService {
     }
   }
 
-  /// Set game invites enabled state
-  Future<void> setGameInvites(bool value) async {
-    _gameInvites = value;
+  /// Set match invites enabled state
+  Future<void> setMatchInvites(bool value) async {
+    _matchInvites = value;
     try {
-      await _prefs.setBool(_keyGameInvites, value);
+      await _prefs.setBool(_keyMatchInvites, value);
       _emitSettings();
     } catch (e) {
       _emitSettings();
     }
   }
 
-  /// Set game updates enabled state
-  Future<void> setGameUpdates(bool value) async {
-    _gameUpdates = value;
+  /// Set match updates enabled state
+  Future<void> setMatchUpdates(bool value) async {
+    _matchUpdates = value;
     try {
-      await _prefs.setBool(_keyGameUpdates, value);
+      await _prefs.setBool(_keyMatchUpdates, value);
       _emitSettings();
     } catch (e) {
       _emitSettings();
@@ -124,11 +124,11 @@ class NotificationSettingsService {
       case 'friend_requests':
         await setFriendRequests(value);
         break;
-      case 'game_invites':
-        await setGameInvites(value);
+      case 'match_invites':
+        await setMatchInvites(value);
         break;
-      case 'game_updates':
-        await setGameUpdates(value);
+      case 'match_updates':
+        await setMatchUpdates(value);
         break;
     }
   }

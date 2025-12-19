@@ -130,8 +130,8 @@ bool areCoordinatesNearby({
 /// Example:
 /// ```dart
 /// final isVeryClose = areCoordinatesVeryClose(
-///   lat1: game.latitude!,
-///   lon1: game.longitude!,
+///   lat1: match.latitude!,
+///   lon1: match.longitude!,
 ///   lat2: field['latitude'],
 ///   lon2: field['longitude'],
 /// );

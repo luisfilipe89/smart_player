@@ -51,7 +51,7 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
     super.initState();
     NumberedLogger.d(
         'AgendaScreen initState called, highlightEventTitle: ${widget.highlightEventTitle}');
-    // Schedule scroll to highlighted event after first frame (similar to games screen)
+    // Schedule scroll to highlighted event after first frame (similar to matches screen)
     if (widget.highlightEventTitle != null) {
       NumberedLogger.d(
           'AgendaScreen initState: Scheduling scroll to: ${widget.highlightEventTitle}');
@@ -975,7 +975,8 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
           else
             SliverPadding(
               padding: const EdgeInsets.only(
-                top: 12, // Match bottom margin between cards (from AppPaddings.topBottom)
+                top:
+                    12, // Match bottom margin between cards (from AppPaddings.topBottom)
                 left: 16, // From AppPaddings.symmHorizontalReg
                 right: 16, // From AppPaddings.symmHorizontalReg
               ),

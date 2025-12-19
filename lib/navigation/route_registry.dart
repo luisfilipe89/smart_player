@@ -10,13 +10,13 @@ class AgendaIntent extends RouteIntent {
   final String? highlightEventTitle;
 }
 
-class DiscoverGamesIntent extends RouteIntent {
-  DiscoverGamesIntent({this.highlightGameId});
-  final String? highlightGameId;
+class DiscoverMatchesIntent extends RouteIntent {
+  DiscoverMatchesIntent({this.highlightMatchId});
+  final String? highlightMatchId;
 }
 
-class MyGamesIntent extends RouteIntent {
-  MyGamesIntent({this.initialTab = 0, this.highlightGameId});
+class MyMatchesIntent extends RouteIntent {
+  MyMatchesIntent({this.initialTab = 0, this.highlightMatchId});
   final int initialTab; // 0: joined, 1: organized
-  final String? highlightGameId;
+  final String? highlightMatchId;
 }

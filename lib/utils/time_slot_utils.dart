@@ -1,7 +1,7 @@
 /// Utility functions for time slot operations.
 ///
 /// Handles time slot overlap detection and time format conversions.
-/// Games always last 1 hour, so overlap checks consider 1-hour windows.
+/// Matches always last 1 hour, so overlap checks consider 1-hour windows.
 library;
 
 /// Converts a time string in HH:mm format to minutes since midnight.
@@ -61,7 +61,7 @@ String minutesToTimeKey(int minutes) {
 
 /// Checks if two 1-hour time slots overlap.
 ///
-/// Games always last 1 hour, so we check if the 1-hour windows overlap.
+/// Matches always last 1 hour, so we check if the 1-hour windows overlap.
 /// Works with both HH:mm and HHmm formats.
 ///
 /// Two intervals overlap if: start1 < end2 && start2 < end1

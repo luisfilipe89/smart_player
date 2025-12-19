@@ -29,127 +29,127 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       resizeToAvoidBottomInset: false,
-      backgroundColor: AppColors.background,
+      backgroundColor: const Color(0xFF181e35),
       body: SafeArea(
-        child: Container(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [Color(0xFFF6FAFF), Color(0xFFEFF6FF)],
-            ),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(AppSpacing.lg),
-            child: Column(
-              children: [
-                const Spacer(),
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.lg),
+          child: Column(
+            children: [
+              const Spacer(),
 
-                // Logo/Title Section
-                Column(
-                  children: [
-                    // App Icon/Logo placeholder
-                    Container(
-                      width: 120,
-                      height: 120,
-                      decoration: BoxDecoration(
-                        color: AppColors.primary,
-                        borderRadius: BorderRadius.circular(
-                          AppRadius.bigContainer,
-                        ),
-                        boxShadow: AppShadows.md,
-                      ),
-                      child: const Icon(
-                        Icons.sports_basketball,
-                        size: 60,
-                        color: Colors.white,
-                      ),
-                    ),
-                    const SizedBox(height: AppSpacing.lg),
-
-                    // App Title (kept as brand; if desired, localize key below)
-                    Text(
-                      'SMARTPLAYER',
-                      style: AppTextStyles.huge.copyWith(
-                        color: AppColors.text,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 2,
-                      ),
-                    ),
-                    const SizedBox(height: AppSpacing.sm),
-
-                    // Subtitle
-                    Text(
-                      'introduction'.tr(),
-                      style: AppTextStyles.body.copyWith(
-                        color: AppColors.grey,
-                        fontSize: 16,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                  ],
-                ),
-
-                const Spacer(),
-
-                // Auth Buttons Section
-                Column(
-                  children: [
-                    // Continue with Apple (iOS only)
-                    if (_isIOS) ...[
-                      _buildSocialButton(
-                        context: context,
-                        icon: _brandIcon('apple'),
-                        label: 'auth_continue_apple'.tr(),
-                        onPressed: _isLoading
-                            ? null
-                            : () => _showComingSoon(context),
-                        loading: false,
-                      ),
-                      const SizedBox(height: AppSpacing.md),
-                    ],
-
-                    // Continue with Google
-                    _buildSocialButton(
-                      context: context,
-                      icon: _brandIcon('google'),
-                      label: 'auth_continue_google'.tr(),
-                      onPressed: _isLoading
-                          ? null
-                          : () => _continueWithGoogle(context),
-                      loading: _loadingGoogle,
-                    ),
-                    const SizedBox(height: AppSpacing.lg),
-
-                    // Divider
-                    Row(
-                      children: [
-                        const Expanded(child: Divider(color: AppColors.grey)),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: AppSpacing.md,
-                          ),
-                          child: Text(
-                            'auth_or'.tr(),
-                            style: AppTextStyles.body.copyWith(
-                              color: AppColors.grey,
+              // Logo/Title Section
+              Column(
+                children: [
+                  // App Logo
+                  Container(
+                    color: const Color(
+                        0xFF181e35), // Match screen background exactly
+                    child: Image.asset(
+                      'assets/images/logo.png',
+                      width: 240,
+                      height: 240,
+                      fit: BoxFit.contain,
+                      errorBuilder: (context, error, stackTrace) {
+                        // Fallback to icon if image fails to load
+                        return Container(
+                          width: 120,
+                          height: 120,
+                          decoration: BoxDecoration(
+                            color: AppColors.primary,
+                            borderRadius: BorderRadius.circular(
+                              AppRadius.bigContainer,
                             ),
                           ),
-                        ),
-                        const Expanded(child: Divider(color: AppColors.grey)),
-                      ],
+                          child: const Icon(
+                            Icons.sports_basketball,
+                            size: 60,
+                            color: Colors.white,
+                          ),
+                        );
+                      },
                     ),
-                    const SizedBox(height: AppSpacing.lg),
+                  ),
 
-                    // Continue with Email
-                    _buildEmailButton(context, disabled: _isLoading),
+                  // App Title (kept as brand; if desired, localize key below)
+                  Text(
+                    'SMARTPLAYER',
+                    style: AppTextStyles.huge.copyWith(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 2,
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+
+                  // Subtitle
+                  Text(
+                    'introduction'.tr(),
+                    style: AppTextStyles.body.copyWith(
+                      color: Colors.white70,
+                      fontSize: 16,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+
+              const Spacer(),
+
+              // Auth Buttons Section
+              Column(
+                children: [
+                  // Continue with Apple (iOS only)
+                  if (_isIOS) ...[
+                    _buildSocialButton(
+                      context: context,
+                      icon: _brandIcon('apple'),
+                      label: 'auth_continue_apple'.tr(),
+                      onPressed:
+                          _isLoading ? null : () => _showComingSoon(context),
+                      loading: false,
+                    ),
                     const SizedBox(height: AppSpacing.md),
                   ],
-                ),
 
-                const Spacer(),
-              ],
-            ),
+                  // Continue with Google
+                  _buildSocialButton(
+                    context: context,
+                    icon: _brandIcon('google'),
+                    label: 'auth_continue_google'.tr(),
+                    onPressed:
+                        _isLoading ? null : () => _continueWithGoogle(context),
+                    loading: _loadingGoogle,
+                  ),
+                  const SizedBox(height: AppSpacing.lg),
+
+                  // Divider
+                  Row(
+                    children: [
+                      const Expanded(child: Divider(color: Colors.white30)),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: AppSpacing.md,
+                        ),
+                        child: Text(
+                          'auth_or'.tr(),
+                          style: AppTextStyles.body.copyWith(
+                            color: Colors.white70,
+                          ),
+                        ),
+                      ),
+                      const Expanded(child: Divider(color: Colors.white30)),
+                    ],
+                  ),
+                  const SizedBox(height: AppSpacing.lg),
+
+                  // Continue with Email
+                  _buildEmailButton(context, disabled: _isLoading),
+                  const SizedBox(height: AppSpacing.md),
+                ],
+              ),
+
+              const Spacer(),
+            ],
           ),
         ),
       ),
@@ -231,9 +231,8 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> {
     bool navigated = false;
     try {
       // Check active internet connection before starting Google sign-in
-      final hasInternet = await ref
-          .read(connectivityActionsProvider)
-          .hasInternetConnection();
+      final hasInternet =
+          await ref.read(connectivityActionsProvider).hasInternetConnection();
       if (!hasInternet) {
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -265,10 +264,7 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> {
       if (context.mounted) {
         final errorMessage = FirebaseErrorHandler.getUserMessage(e);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(errorMessage),
-            backgroundColor: Colors.red,
-          ),
+          SnackBar(content: Text(errorMessage), backgroundColor: Colors.red),
         );
       }
     } finally {

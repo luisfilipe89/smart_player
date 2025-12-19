@@ -1,20 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:easy_localization/easy_localization.dart';
-import 'package:move_young/features/games/models/game.dart';
+import 'package:move_young/features/matches/models/match.dart';
 import 'package:move_young/theme/_theme.dart';
 import 'package:move_young/services/calendar/calendar_service.dart';
 import 'package:move_young/services/system/haptics_provider.dart';
 
-class GameDetailScreen extends ConsumerStatefulWidget {
-  final Game game;
-  const GameDetailScreen({super.key, required this.game});
+class MatchDetailScreen extends ConsumerStatefulWidget {
+  final Match match;
+  const MatchDetailScreen({super.key, required this.match});
 
   @override
-  ConsumerState<GameDetailScreen> createState() => _GameDetailScreenState();
+  ConsumerState<MatchDetailScreen> createState() => _MatchDetailScreenState();
 }
 
-class _GameDetailScreenState extends ConsumerState<GameDetailScreen> {
+class _MatchDetailScreenState extends ConsumerState<MatchDetailScreen> {
   bool _isInCalendar = false;
   bool _isLoading = false;
 
@@ -25,7 +25,8 @@ class _GameDetailScreenState extends ConsumerState<GameDetailScreen> {
   }
 
   Future<void> _checkCalendarStatus() async {
-    final isInCalendar = await CalendarService.isGameInCalendar(widget.game.id);
+    final isInCalendar =
+        await CalendarService.isMatchInCalendar(widget.match.id);
     if (mounted) {
       setState(() {
         _isInCalendar = isInCalendar;
@@ -72,7 +73,7 @@ class _GameDetailScreenState extends ConsumerState<GameDetailScreen> {
       if (_isInCalendar) {
         // Remove from calendar
         final success =
-            await CalendarService.removeGameFromCalendar(widget.game.id);
+            await CalendarService.removeMatchFromCalendar(widget.match.id);
         if (mounted) {
           setState(() {
             _isInCalendar = !success;
@@ -91,7 +92,7 @@ class _GameDetailScreenState extends ConsumerState<GameDetailScreen> {
         }
       } else {
         // Add to calendar
-        final eventId = await CalendarService.addGameToCalendar(widget.game);
+        final eventId = await CalendarService.addMatchToCalendar(widget.match);
         if (mounted) {
           setState(() {
             _isInCalendar = eventId != null;
@@ -127,10 +128,10 @@ class _GameDetailScreenState extends ConsumerState<GameDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final sportColor = _colorForSport(widget.game.sport);
+    final sportColor = _colorForSport(widget.match.sport);
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.game.sport.toUpperCase()),
+        title: Text(widget.match.sport.toUpperCase()),
         backgroundColor: AppColors.white,
         elevation: 0,
         actions: [
@@ -162,14 +163,14 @@ class _GameDetailScreenState extends ConsumerState<GameDetailScreen> {
               Row(
                 children: [
                   Hero(
-                    tag: 'game-${widget.game.id}-icon',
+                    tag: 'match-${widget.match.id}-icon',
                     child: Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
                         color: sportColor.withValues(alpha: 0.1),
                         shape: BoxShape.circle,
                       ),
-                      child: Icon(_iconForSport(widget.game.sport),
+                      child: Icon(_iconForSport(widget.match.sport),
                           size: 28, color: sportColor),
                     ),
                   ),
@@ -178,10 +179,10 @@ class _GameDetailScreenState extends ConsumerState<GameDetailScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(widget.game.location, style: AppTextStyles.h3),
+                        Text(widget.match.location, style: AppTextStyles.h3),
                         const SizedBox(height: 2),
                         Text(
-                            '${widget.game.getFormattedDateLocalized((key) => key.tr())} • ${widget.game.formattedTime}',
+                            '${widget.match.getFormattedDateLocalized((key) => key.tr())} • ${widget.match.formattedTime}',
                             style: AppTextStyles.bodyMuted),
                       ],
                     ),
@@ -189,8 +190,8 @@ class _GameDetailScreenState extends ConsumerState<GameDetailScreen> {
                 ],
               ),
               const SizedBox(height: AppHeights.huge),
-              if (widget.game.description.isNotEmpty)
-                Text(widget.game.description, style: AppTextStyles.body),
+              if (widget.match.description.isNotEmpty)
+                Text(widget.match.description, style: AppTextStyles.body),
             ],
           ),
         ),

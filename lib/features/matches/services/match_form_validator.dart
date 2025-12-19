@@ -1,4 +1,4 @@
-/// Form validation utilities for game creation and editing.
+/// Form validation utilities for match creation and editing.
 ///
 /// Extracts validation logic from UI components to improve separation of concerns
 /// and provide a single source of truth for validation rules.
@@ -25,8 +25,8 @@ class ValidationResult {
         errorMessage = message;
 }
 
-/// Validates game form data before submission.
-class GameFormValidator {
+/// Validates match form data before submission.
+class MatchFormValidator {
   /// Validates that all required fields are filled.
   ///
   /// Returns a validation result indicating if the form is complete
@@ -139,6 +139,7 @@ class GameFormValidator {
     );
   }
 }
+
 
 
 

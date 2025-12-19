@@ -3,7 +3,7 @@ class DbPaths {
 
   // Root collections
   static const String users = 'users';
-  static const String games = 'games';
+  static const String matches = 'matches';
   static const String mail = 'mail';
   static const String emailInvites = 'emailInvites';
   static const String pendingInviteIndex = 'pendingInviteIndex';
@@ -20,9 +20,9 @@ class DbPaths {
       '$users/$uid/friendRequests/received';
   static String userFriendRequestsSent(String uid) =>
       '$users/$uid/friendRequests/sent';
-  static String userJoinedGames(String uid) => '$uid/joinedGames';
-  static String userCreatedGames(String uid) => '$uid/createdGames';
-  static String userGameInvites(String uid) => '$uid/gameInvites';
+  static String userJoinedMatches(String uid) => '$uid/joinedMatches';
+  static String userCreatedMatches(String uid) => '$uid/createdMatches';
+  static String userMatchInvites(String uid) => '$uid/matchInvites';
   static String userSettingsProfileRoot(String uid) =>
       '$users/$uid/settings/profile';
 
@@ -36,10 +36,10 @@ class DbPaths {
   static String userShareEmail(String uid) =>
       '$users/$uid/settings/profile/shareEmail';
 
-  // Games subpaths
-  static String game(String gameId) => '$games/$gameId';
-  static String gamePlayers(String gameId) => '$games/$gameId/players';
-  static String gameInvites(String gameId) => '$games/$gameId/invites';
+  // Matches subpaths
+  static String match(String matchId) => '$matches/$matchId';
+  static String matchPlayers(String matchId) => '$matches/$matchId/players';
+  static String matchInvites(String matchId) => '$matches/$matchId/invites';
 
   // Users by email hash (indexing)
   static const String usersByEmailHash = 'usersByEmailHash';

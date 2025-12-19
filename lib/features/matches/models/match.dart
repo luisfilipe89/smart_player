@@ -1,23 +1,23 @@
 import 'dart:convert';
 
-/// Represents a game/match that users can join or organize.
+/// Represents a match that users can join or organize.
 ///
-/// A Game contains all information about a sporting event including:
+/// A Match contains all information about a sporting event including:
 /// - Location and timing details
 /// - Player capacity and current participants
 /// - Organizer information
-/// - Game settings (public/private, active status, skill levels, etc.)
+/// - Match settings (public/private, active status, skill levels, etc.)
 ///
-/// Games support a bench/waitlist system where players beyond maxPlayers
+/// Matches support a bench/waitlist system where players beyond maxPlayers
 /// are placed on the bench and can be promoted when spots become available.
-class Game {
-  /// Unique identifier for the game
+class Match {
+  /// Unique identifier for the match
   final String id;
 
   /// Sport type (e.g., 'football', 'basketball', 'tennis')
   final String sport;
 
-  /// Date and time when the game takes place (in local timezone)
+  /// Date and time when the match takes place (in local timezone)
   final DateTime dateTime;
 
   /// Human-readable location name (e.g., "Central Park Field 1")
@@ -35,43 +35,43 @@ class Game {
   /// Canonical field identifier (e.g., OpenStreetMap ID) for field matching
   final String? fieldId;
 
-  /// Maximum number of players allowed in the game
+  /// Maximum number of players allowed in the match
   final int maxPlayers;
 
   /// Current number of players who have joined
   final int currentPlayers;
 
-  /// Description of the game provided by the organizer
+  /// Description of the match provided by the organizer
   final String description;
 
-  /// User ID of the game organizer
+  /// User ID of the match organizer
   final String organizerId;
 
-  /// Display name of the game organizer
+  /// Display name of the match organizer
   final String organizerName;
 
-  /// Timestamp when the game was created
+  /// Timestamp when the match was created
   final DateTime createdAt;
 
-  /// Timestamp when the game was last updated (null if never updated)
+  /// Timestamp when the match was last updated (null if never updated)
   final DateTime? updatedAt;
 
-  /// User ID who last updated the game (null if never updated)
+  /// User ID who last updated the match (null if never updated)
   final String? updatedBy;
 
   /// Version number for optimistic locking (null if not using versioning)
   final int? version;
 
-  /// Whether the game is currently active (cancelled games are inactive)
+  /// Whether the match is currently active (cancelled matches are inactive)
   final bool isActive;
 
-  /// Whether the game is publicly visible and joinable
+  /// Whether the match is publicly visible and joinable
   final bool isPublic;
 
-  /// URL to an image representing the game or field
+  /// URL to an image representing the match or field
   final String? imageUrl;
 
-  /// List of skill levels this game is suitable for
+  /// List of skill levels this match is suitable for
   /// (e.g., ['beginner', 'intermediate', 'advanced'])
   final List<String> skillLevels;
 
@@ -84,11 +84,11 @@ class Game {
   /// Contact information (phone or email) for the organizer
   final String? contactInfo;
 
-  /// List of player user IDs who have joined the game
+  /// List of player user IDs who have joined the match
   /// First [maxPlayers] are active players, rest are on the bench
   final List<String> players;
 
-  Game({
+  Match({
     required this.id,
     required this.sport,
     required this.dateTime,
@@ -116,10 +116,10 @@ class Game {
     this.players = const [],
   });
 
-  /// Creates a copy of this game with updated fields.
+  /// Creates a copy of this match with updated fields.
   ///
   /// Only the provided fields will be updated; all others remain the same.
-  Game copyWith({
+  Match copyWith({
     String? id,
     String? sport,
     DateTime? dateTime,
@@ -146,7 +146,7 @@ class Game {
     String? contactInfo,
     List<String>? players,
   }) {
-    return Game(
+    return Match(
       id: id ?? this.id,
       sport: sport ?? this.sport,
       dateTime: dateTime ?? this.dateTime,
@@ -175,7 +175,7 @@ class Game {
     );
   }
 
-  /// Converts the game to JSON format for local storage (SQLite).
+  /// Converts the match to JSON format for local storage (SQLite).
   ///
   /// Uses integer representation for booleans and JSON-encoded strings
   /// for lists to be compatible with SQLite storage.
@@ -209,7 +209,7 @@ class Game {
     };
   }
 
-  /// Converts the game to JSON format for cloud storage (Firebase).
+  /// Converts the match to JSON format for cloud storage (Firebase).
   ///
   /// Uses native types (booleans, lists) for easier querying in Firebase.
   /// Includes both local and UTC timestamps for cross-timezone correctness.
@@ -245,12 +245,12 @@ class Game {
     };
   }
 
-  /// Creates a Game instance from JSON data.
+  /// Creates a Match instance from JSON data.
   ///
   /// Supports both local (SQLite) and cloud (Firebase) JSON formats.
   /// Handles type conversions and prefers UTC timestamps when available
   /// to avoid cross-timezone issues.
-  factory Game.fromJson(Map<String, dynamic> json) {
+  factory Match.fromJson(Map<String, dynamic> json) {
     // Support both local (SQLite) and cloud (Firebase) shapes
     final dynamic createdAtRaw = json['createdAt'];
     final DateTime createdAtParsed = createdAtRaw is int
@@ -320,7 +320,7 @@ class Game {
           DateTime.now();
     }
 
-    return Game(
+    return Match(
       id: json['id']?.toString() ?? '',
       sport: json['sport']?.toString() ?? '',
       dateTime: dtParsed,
@@ -356,10 +356,10 @@ class Game {
     );
   }
 
-  /// Whether the game has reached maximum capacity
+  /// Whether the match has reached maximum capacity
   bool get isFull => currentPlayers >= maxPlayers;
 
-  /// Whether the game has available spots for new players
+  /// Whether the match has available spots for new players
   bool get hasSpace => currentPlayers < maxPlayers;
 
   /// Number of available spots remaining
@@ -372,7 +372,7 @@ class Game {
   List<String> get benchPlayers =>
       players.length > maxPlayers ? players.skip(maxPlayers).toList() : [];
 
-  /// Number of active players currently in the game
+  /// Number of active players currently in the match
   int get activeCount => activePlayers.length;
 
   /// Number of players on the bench/waitlist
@@ -395,16 +395,16 @@ class Game {
     return index >= 0 && index < maxPlayers;
   }
 
-  /// Gets the player's position in the game (1-indexed).
+  /// Gets the player's position in the match (1-indexed).
   ///
   /// Returns the position number (1, 2, 3, etc.) or `null` if the
-  /// player is not in the game.
+  /// player is not in the match.
   int? getPlayerPosition(String playerId) {
     final index = players.indexOf(playerId);
     return index >= 0 ? index + 1 : null;
   }
 
-  /// Whether the game is scheduled in the future
+  /// Whether the match is scheduled in the future
   bool get isUpcoming => dateTime.isAfter(DateTime.now());
 
   /// Gets a formatted date string (non-localized, for backwards compatibility).
@@ -413,11 +413,11 @@ class Game {
   String get formattedDate {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
-    final gameDate = DateTime(dateTime.year, dateTime.month, dateTime.day);
+    final matchDate = DateTime(dateTime.year, dateTime.month, dateTime.day);
 
-    if (gameDate == today) {
+    if (matchDate == today) {
       return 'Today';
-    } else if (gameDate == today.add(const Duration(days: 1))) {
+    } else if (matchDate == today.add(const Duration(days: 1))) {
       return 'Tomorrow';
     } else {
       return '${dateTime.day}/${dateTime.month}/${dateTime.year}';
@@ -431,11 +431,11 @@ class Game {
   String getFormattedDateLocalized(String Function(String) translate) {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
-    final gameDate = DateTime(dateTime.year, dateTime.month, dateTime.day);
+    final matchDate = DateTime(dateTime.year, dateTime.month, dateTime.day);
 
-    if (gameDate == today) {
+    if (matchDate == today) {
       return translate('today');
-    } else if (gameDate == today.add(const Duration(days: 1))) {
+    } else if (matchDate == today.add(const Duration(days: 1))) {
       return translate('tomorrow');
     } else {
       return '${dateTime.day}/${dateTime.month}/${dateTime.year}';
@@ -449,12 +449,12 @@ class Game {
     return '$hour:$minute';
   }
 
-  /// Gets the duration until the game starts
-  Duration get timeUntilGame {
+  /// Gets the duration until the match starts
+  Duration get timeUntilMatch {
     return dateTime.difference(DateTime.now());
   }
 
-  /// Checks if the game has been modified after creation.
+  /// Checks if the match has been modified after creation.
   ///
   /// Returns `true` if [updatedAt] exists and differs from [createdAt]
   /// by more than 1 second (to account for timestamp precision).

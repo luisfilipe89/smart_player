@@ -3,19 +3,19 @@ import 'package:path/path.dart';
 import 'dart:developer' as developer;
 
 class CalendarEventInfo {
-  final String gameId;
+  final String matchId;
   final String eventId;
   final String calendarId;
 
   CalendarEventInfo({
-    required this.gameId,
+    required this.matchId,
     required this.eventId,
     required this.calendarId,
   });
 
   Map<String, dynamic> toMap() {
     return {
-      'gameId': gameId,
+      'matchId': matchId,
       'eventId': eventId,
       'calendarId': calendarId,
     };
@@ -23,7 +23,7 @@ class CalendarEventInfo {
 
   factory CalendarEventInfo.fromMap(Map<String, dynamic> map) {
     return CalendarEventInfo(
-      gameId: map['gameId'] as String,
+      matchId: map['matchId'] as String,
       eventId: map['eventId'] as String,
       calendarId: map['calendarId'] as String,
     );
@@ -56,14 +56,14 @@ class CalendarEventsDb {
         onCreate: (db, version) async {
           await db.execute('''
             CREATE TABLE calendar_events (
-              gameId TEXT PRIMARY KEY,
+              matchId TEXT PRIMARY KEY,
               eventId TEXT NOT NULL,
               calendarId TEXT NOT NULL
             )
           ''');
-          // Create index on gameId for faster queries (gameId is already PRIMARY KEY, but explicit index helps)
+          // Create index on matchId for faster queries (matchId is already PRIMARY KEY, but explicit index helps)
           await db.execute('''
-            CREATE INDEX IF NOT EXISTS idx_gameId ON calendar_events(gameId)
+            CREATE INDEX IF NOT EXISTS idx_matchId ON calendar_events(matchId)
           ''');
           developer.log('Calendar events table created',
               name: 'CalendarEventsDb');
@@ -72,7 +72,7 @@ class CalendarEventsDb {
           if (oldVersion < 2) {
             // Add index for existing databases
             await db.execute('''
-              CREATE INDEX IF NOT EXISTS idx_gameId ON calendar_events(gameId)
+              CREATE INDEX IF NOT EXISTS idx_matchId ON calendar_events(matchId)
             ''');
             developer.log('Calendar events database upgraded to version 2',
                 name: 'CalendarEventsDb');
@@ -91,7 +91,7 @@ class CalendarEventsDb {
   /// Insert or update a calendar event
   /// Returns true if successful, false otherwise
   Future<bool> insertCalendarEvent(
-      String gameId, String eventId, String calendarId) async {
+      String matchId, String eventId, String calendarId) async {
     if (_database == null) {
       developer.log('Database not initialized', name: 'CalendarEventsDb');
       return false;
@@ -101,13 +101,13 @@ class CalendarEventsDb {
       await _database!.insert(
         'calendar_events',
         CalendarEventInfo(
-          gameId: gameId,
+          matchId: matchId,
           eventId: eventId,
           calendarId: calendarId,
         ).toMap(),
         conflictAlgorithm: ConflictAlgorithm.replace,
       );
-      developer.log('Calendar event inserted: gameId=$gameId, eventId=$eventId',
+      developer.log('Calendar event inserted: matchId=$matchId, eventId=$eventId',
           name: 'CalendarEventsDb');
       return true;
     } catch (e, stackTrace) {
@@ -117,9 +117,9 @@ class CalendarEventsDb {
     }
   }
 
-  /// Get calendar event info for a game
+  /// Get calendar event info for a match
   /// Returns null if not found or on error
-  Future<CalendarEventInfo?> getCalendarEvent(String gameId) async {
+  Future<CalendarEventInfo?> getCalendarEvent(String matchId) async {
     if (_database == null) {
       developer.log('Database not initialized', name: 'CalendarEventsDb');
       return null;
@@ -128,8 +128,8 @@ class CalendarEventsDb {
     try {
       final maps = await _database!.query(
         'calendar_events',
-        where: 'gameId = ?',
-        whereArgs: [gameId],
+        where: 'matchId = ?',
+        whereArgs: [matchId],
       );
       if (maps.isNotEmpty) {
         return CalendarEventInfo.fromMap(maps.first);
@@ -144,7 +144,7 @@ class CalendarEventsDb {
 
   /// Delete a calendar event
   /// Returns true if successful, false otherwise
-  Future<bool> deleteCalendarEvent(String gameId) async {
+  Future<bool> deleteCalendarEvent(String matchId) async {
     if (_database == null) {
       developer.log('Database not initialized', name: 'CalendarEventsDb');
       return false;
@@ -153,11 +153,11 @@ class CalendarEventsDb {
     try {
       final count = await _database!.delete(
         'calendar_events',
-        where: 'gameId = ?',
-        whereArgs: [gameId],
+        where: 'matchId = ?',
+        whereArgs: [matchId],
       );
       if (count > 0) {
-        developer.log('Calendar event deleted: gameId=$gameId',
+        developer.log('Calendar event deleted: matchId=$matchId',
             name: 'CalendarEventsDb');
         return true;
       }
@@ -169,9 +169,9 @@ class CalendarEventsDb {
     }
   }
 
-  /// Get all game IDs that have calendar events
+  /// Get all match IDs that have calendar events
   /// Returns empty list on error
-  Future<List<String>> getAllGameIds() async {
+  Future<List<String>> getAllMatchIds() async {
     if (_database == null) {
       developer.log('Database not initialized', name: 'CalendarEventsDb');
       return [];
@@ -179,12 +179,12 @@ class CalendarEventsDb {
 
     try {
       final maps = await _database!.query('calendar_events');
-      final gameIds = maps.map((map) => map['gameId'] as String).toList();
-      developer.log('Retrieved ${gameIds.length} calendar events',
+      final matchIds = maps.map((map) => map['matchId'] as String).toList();
+      developer.log('Retrieved ${matchIds.length} calendar events',
           name: 'CalendarEventsDb');
-      return gameIds;
+      return matchIds;
     } catch (e, stackTrace) {
-      developer.log('Error getting all game IDs: $e',
+      developer.log('Error getting all match IDs: $e',
           name: 'CalendarEventsDb', error: e, stackTrace: stackTrace);
       return [];
     }

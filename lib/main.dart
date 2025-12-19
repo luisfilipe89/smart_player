@@ -331,9 +331,9 @@ class _MoveYoungAppState extends ConsumerState<MoveYoungApp>
         }
 
         // Watch calendar sync provider to automatically sync calendar events
-        // This provider watches games and syncs calendar events when games change
+        // This provider watches matches and syncs calendar events when matches change
         ref.watch(calendarSyncProvider);
-        
+
         // Watch events preload provider to preload events in background when user logs in
         ref.watch(eventsPreloadProvider);
 
@@ -366,7 +366,8 @@ class _MoveYoungAppState extends ConsumerState<MoveYoungApp>
 
         // Initialize notification settings service after SharedPreferences is ready
         // This ensures preferences are loaded early
-        final notificationSettingsActions = ref.read(notificationSettingsActionsProvider);
+        final notificationSettingsActions =
+            ref.read(notificationSettingsActionsProvider);
         if (notificationSettingsActions != null) {
           // Initialize asynchronously without blocking
           Future.microtask(() async {
@@ -374,7 +375,8 @@ class _MoveYoungAppState extends ConsumerState<MoveYoungApp>
               await notificationSettingsActions.initialize();
               NumberedLogger.d('Notification settings initialized');
             } catch (e) {
-              NumberedLogger.w('Notification settings initialization error (non-critical): $e');
+              NumberedLogger.w(
+                  'Notification settings initialization error (non-critical): $e');
             }
           });
         }

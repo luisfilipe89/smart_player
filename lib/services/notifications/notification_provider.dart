@@ -69,8 +69,8 @@ class DeepLinkDispatcher {
   }
 
   void _showDeepLinkError(String message) {
-    // Log the error - UI feedback will be handled in screens when game/user not found
-    // Screens will validate game existence and show appropriate errors
+    // Log the error - UI feedback will be handled in screens when match/user not found
+    // Screens will validate match existence and show appropriate errors
   }
 
   void _routeOrQueue(RouteIntent intent) {
@@ -104,12 +104,12 @@ class DeepLinkDispatcher {
       controller.switchToTab(kTabFriends, popToRoot: true);
     } else if (intent is AgendaIntent) {
       controller.switchToTab(kTabAgenda, popToRoot: true);
-    } else if (intent is DiscoverGamesIntent) {
-      controller.openJoinScreen(intent.highlightGameId);
-    } else if (intent is MyGamesIntent) {
-      controller.openMyGames(
+    } else if (intent is DiscoverMatchesIntent) {
+      controller.openJoinScreen(intent.highlightMatchId);
+    } else if (intent is MyMatchesIntent) {
+      controller.openMyMatches(
         initialTab: intent.initialTab,
-        highlightGameId: intent.highlightGameId,
+        highlightMatchId: intent.highlightMatchId,
         popToRoot: true,
       );
     } else {
@@ -180,22 +180,22 @@ class NotificationActions {
         removedUserUid: removedUserUid,
         removerUid: removerUid,
       );
-  Future<void> sendGameEditedNotification(String gameId) async {
-    // Check if game update notifications are enabled
+  Future<void> sendMatchEditedNotification(String matchId) async {
+    // Check if match update notifications are enabled
     if (_settingsActions != null && 
-        !_settingsActions!.isNotificationTypeEnabled('game_updates')) {
-      return; // User has disabled game update notifications
+        !_settingsActions!.isNotificationTypeEnabled('match_updates')) {
+      return; // User has disabled match update notifications
     }
-    await _notificationService.sendGameEditedNotification(gameId);
+    await _notificationService.sendMatchEditedNotification(matchId);
   }
   
-  Future<void> sendGameCancelledNotification(String gameId) async {
-    // Check if game update notifications are enabled
+  Future<void> sendMatchCancelledNotification(String matchId) async {
+    // Check if match update notifications are enabled
     if (_settingsActions != null && 
-        !_settingsActions!.isNotificationTypeEnabled('game_updates')) {
-      return; // User has disabled game update notifications
+        !_settingsActions!.isNotificationTypeEnabled('match_updates')) {
+      return; // User has disabled match update notifications
     }
-    await _notificationService.sendGameCancelledNotification(gameId);
+    await _notificationService.sendMatchCancelledNotification(matchId);
   }
 }
 

@@ -1,24 +1,25 @@
 import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:move_young/features/games/models/game.dart';
-import 'package:move_young/features/games/notifiers/games_my_screen_state.dart';
-import 'package:move_young/features/games/services/games_provider.dart';
+import 'package:move_young/features/matches/models/match.dart';
+import 'package:move_young/features/matches/notifiers/match_my_screen_state.dart';
+import 'package:move_young/features/matches/services/match_provider.dart';
 import 'package:move_young/services/external/weather_provider.dart';
 import 'package:move_young/features/friends/services/friends_provider.dart';
 import 'package:move_young/services/calendar/calendar_service.dart';
 import 'package:move_young/models/infrastructure/cached_data.dart';
 import 'package:move_young/utils/logger.dart';
 
-/// Notifier for managing games my screen state
+/// Notifier for managing matches my screen state
 /// Handles weather caching, calendar status caching, and profile caching
-class GamesMyScreenNotifier extends StateNotifier<GamesMyScreenState> {
+class MatchesMyScreenNotifier extends StateNotifier<MatchesMyScreenState> {
   final Ref _ref;
 
-  GamesMyScreenNotifier(this._ref, String? highlightGameId)
-      : super(GamesMyScreenState.initial(highlightGameId));
+  MatchesMyScreenNotifier(this._ref, String? highlightMatchId)
+      : super(MatchesMyScreenState.initial(highlightMatchId));
 
   /// Safely update state, ignoring errors if notifier is disposed
-  void _safeUpdateState(GamesMyScreenState Function(GamesMyScreenState) updater) {
+  void _safeUpdateState(
+      MatchesMyScreenState Function(MatchesMyScreenState) updater) {
     try {
       state = updater(state);
     } on StateError catch (e) {
@@ -42,7 +43,7 @@ class GamesMyScreenNotifier extends StateNotifier<GamesMyScreenState> {
     state = state.copyWith(highlightId: () => null);
   }
 
-  /// Pre-load calendar statuses for all games from database
+  /// Pre-load calendar statuses for all matches from database
   /// Moved to isolate to avoid blocking main thread
   Future<void> preloadCalendarStatuses() async {
     if (state.calendarPreloadInProgress) return;
@@ -55,50 +56,51 @@ class GamesMyScreenNotifier extends StateNotifier<GamesMyScreenState> {
         // Ensure CalendarService is initialized
         await CalendarService.initialize();
 
-        // Get all games from providers
-        final myGamesAsync = _ref.read(myGamesProvider);
-        final historicGamesAsync = _ref.read(historicGamesProvider);
+        // Get all matches from providers
+        final myMatchesAsync = _ref.read(myMatchesProvider);
+        final historicMatchesAsync = _ref.read(historicMatchesProvider);
 
-        // Collect all game IDs from all tabs
-        final allGameIds = <String>{};
+        // Collect all match IDs from all tabs
+        final allMatchIds = <String>{};
 
-        // Get games from myGamesAsync if available
-        final myGames = myGamesAsync.valueOrNull;
-        if (myGames != null) {
-          for (final game in myGames) {
-            allGameIds.add(game.id);
+        // Get matches from myMatchesAsync if available
+        final myMatches = myMatchesAsync.valueOrNull;
+        if (myMatches != null) {
+          for (final match in myMatches) {
+            allMatchIds.add(match.id);
           }
         }
 
-        // Get games from historicGamesAsync if available
-        final historicGames = historicGamesAsync.valueOrNull;
-        if (historicGames != null) {
-          for (final game in historicGames) {
-            allGameIds.add(game.id);
+        // Get matches from historicMatchesAsync if available
+        final historicMatches = historicMatchesAsync.valueOrNull;
+        if (historicMatches != null) {
+          for (final match in historicMatches) {
+            allMatchIds.add(match.id);
           }
         }
 
-        // Batch check calendar status for all games
-        if (allGameIds.isEmpty) {
+        // Batch check calendar status for all matches
+        if (allMatchIds.isEmpty) {
           _safeUpdateState((s) => s.copyWith(calendarPreloadInProgress: false));
           return;
         }
 
-        // Get all games that are in calendar from database
-        final gamesInCalendar = await CalendarService.getAllGamesInCalendar();
-        final gamesInCalendarSet = gamesInCalendar.toSet();
+        // Get all matches that are in calendar from database
+        final matchesInCalendar =
+            await CalendarService.getAllMatchesInCalendar();
+        final matchesInCalendarSet = matchesInCalendar.toSet();
 
-        // Update cache for all games
+        // Update cache for all matches
         final statuses = <String, bool>{};
-        for (final gameId in allGameIds) {
-          statuses[gameId] = gamesInCalendarSet.contains(gameId);
+        for (final matchId in allMatchIds) {
+          statuses[matchId] = matchesInCalendarSet.contains(matchId);
         }
         _safeUpdateState((s) => s
             .updateCalendarStatuses(statuses)
             .copyWith(calendarPreloadInProgress: false));
 
         NumberedLogger.i(
-            'Preloaded calendar statuses for ${allGameIds.length} games (${gamesInCalendarSet.length} in calendar)');
+            'Preloaded calendar statuses for ${allMatchIds.length} matches (${matchesInCalendarSet.length} in calendar)');
       } catch (e, stackTrace) {
         NumberedLogger.e('Error preloading calendar statuses: $e');
         NumberedLogger.d('Stack trace: $stackTrace');
@@ -108,24 +110,24 @@ class GamesMyScreenNotifier extends StateNotifier<GamesMyScreenState> {
     });
   }
 
-  /// Check calendar status for a game (cached)
-  Future<bool?> getCalendarStatus(String gameId) async {
+  /// Check calendar status for a match (cached)
+  Future<bool?> getCalendarStatus(String matchId) async {
     // Return cached status if available
-    if (state.calendarStatusByGameId.containsKey(gameId)) {
-      return state.calendarStatusByGameId[gameId];
+    if (state.calendarStatusByMatchId.containsKey(matchId)) {
+      return state.calendarStatusByMatchId[matchId];
     }
 
     // Check if already loading
-    if (state.calendarLoading.contains(gameId)) {
+    if (state.calendarLoading.contains(matchId)) {
       return null; // Still loading
     }
 
     // Start loading
     state = state.copyWith(
-      calendarLoading: {...state.calendarLoading, gameId},
-      calendarStatusByGameId: {
-        ...state.calendarStatusByGameId,
-        gameId: null, // Mark as checking
+      calendarLoading: {...state.calendarLoading, matchId},
+      calendarStatusByMatchId: {
+        ...state.calendarStatusByMatchId,
+        matchId: null, // Mark as checking
       },
     );
 
@@ -133,23 +135,24 @@ class GamesMyScreenNotifier extends StateNotifier<GamesMyScreenState> {
       // Ensure CalendarService is initialized
       await CalendarService.initialize();
 
-      final isInCalendar = await CalendarService.isGameInCalendar(gameId);
-      _safeUpdateState((s) => s.updateCalendarStatus(gameId, isInCalendar).copyWith(
-        calendarLoading: {
-          ...s.calendarLoading..remove(gameId),
-        },
-      ));
+      final isInCalendar = await CalendarService.isMatchInCalendar(matchId);
+      _safeUpdateState(
+          (s) => s.updateCalendarStatus(matchId, isInCalendar).copyWith(
+                calendarLoading: {
+                  ...s.calendarLoading..remove(matchId),
+                },
+              ));
       return isInCalendar;
     } catch (e, stackTrace) {
       NumberedLogger.e('Error checking calendar status: $e');
       NumberedLogger.d('Stack trace: $stackTrace');
       _safeUpdateState((s) => s
-          .updateCalendarStatus(gameId, false) // Default to false on error
-          .copyWith(
-        calendarLoading: {
-          ...s.calendarLoading..remove(gameId),
-        },
-      ));
+              .updateCalendarStatus(matchId, false) // Default to false on error
+              .copyWith(
+            calendarLoading: {
+              ...s.calendarLoading..remove(matchId),
+            },
+          ));
       return false;
     }
   }
@@ -195,19 +198,19 @@ class GamesMyScreenNotifier extends StateNotifier<GamesMyScreenState> {
     // Update cache
     final profiles = Map<String, Map<String, String?>>.fromEntries(results);
     _safeUpdateState((s) => s.updateProfiles(profiles).copyWith(
-      profileLoading: {
-        ...s.profileLoading..removeAll(missing),
-      },
-    ));
+          profileLoading: {
+            ...s.profileLoading..removeAll(missing),
+          },
+        ));
   }
 
-  /// Ensure weather data is loaded for a game (cached with TTL)
-  Future<void> ensureWeatherForGame(Game game) async {
-    if (game.latitude == null || game.longitude == null) return;
-    final key = game.id;
+  /// Ensure weather data is loaded for a match (cached with TTL)
+  Future<void> ensureWeatherForMatch(Match match) async {
+    if (match.latitude == null || match.longitude == null) return;
+    final key = match.id;
 
     // Check if we have valid cached data (not expired)
-    final cached = state.weatherByGameId[key];
+    final cached = state.weatherByMatchId[key];
     if (cached != null && !cached.isExpired) {
       return; // Already have fresh data
     }
@@ -215,40 +218,40 @@ class GamesMyScreenNotifier extends StateNotifier<GamesMyScreenState> {
     if (state.weatherLoading.contains(key)) return;
 
     _safeUpdateState((s) => s.copyWith(
-      weatherLoading: {...s.weatherLoading, key},
-    ));
+          weatherLoading: {...s.weatherLoading, key},
+        ));
 
     try {
       final weatherActions = _ref.read(weatherActionsProvider);
       final map = await weatherActions.fetchWeatherForDate(
-        date: game.dateTime,
-        latitude: game.latitude!,
-        longitude: game.longitude!,
+        date: match.dateTime,
+        latitude: match.latitude!,
+        longitude: match.longitude!,
       );
       // Cache with TTL
       final cachedData = CachedData(
         map,
         DateTime.now(),
-        expiry: GamesMyScreenState.weatherCacheTTL,
+        expiry: MatchesMyScreenState.weatherCacheTTL,
       );
       _safeUpdateState((s) => s.updateWeatherCache(key, cachedData).copyWith(
-        weatherLoading: {
-          ...s.weatherLoading..remove(key),
-        },
-      ));
+            weatherLoading: {
+              ...s.weatherLoading..remove(key),
+            },
+          ));
     } catch (e) {
-      NumberedLogger.e('Error fetching weather for game ${game.id}: $e');
+      NumberedLogger.e('Error fetching weather for match ${match.id}: $e');
       _safeUpdateState((s) => s.copyWith(
-        weatherLoading: {
-          ...s.weatherLoading..remove(key),
-        },
-      ));
+            weatherLoading: {
+              ...s.weatherLoading..remove(key),
+            },
+          ));
     }
   }
 
-  /// Get weather data for a game (from cache)
-  Map<String, String>? getWeatherForGame(String gameId) {
-    final cached = state.weatherByGameId[gameId];
+  /// Get weather data for a match (from cache)
+  Map<String, String>? getWeatherForMatch(String matchId) {
+    final cached = state.weatherByMatchId[matchId];
     if (cached != null && !cached.isExpired) {
       return cached.data;
     }
@@ -260,21 +263,21 @@ class GamesMyScreenNotifier extends StateNotifier<GamesMyScreenState> {
     return state.profileCache[uid];
   }
 
-  /// Check if calendar preload is needed based on game IDs
-  bool needsCalendarPreload(Set<String> gameIds) {
-    return state.calendarStatusByGameId.isEmpty ||
-        gameIds.any((id) => !state.calendarStatusByGameId.containsKey(id));
+  /// Check if calendar preload is needed based on match IDs
+  bool needsCalendarPreload(Set<String> matchIds) {
+    return state.calendarStatusByMatchId.isEmpty ||
+        matchIds.any((id) => !state.calendarStatusByMatchId.containsKey(id));
   }
 
-  /// Update calendar status for a specific game (used when adding/removing from calendar)
-  void updateCalendarStatus(String gameId, bool status) {
-    state = state.updateCalendarStatus(gameId, status);
+  /// Update calendar status for a specific match (used when adding/removing from calendar)
+  void updateCalendarStatus(String matchId, bool status) {
+    state = state.updateCalendarStatus(matchId, status);
   }
 }
 
-/// Provider for games my screen notifier
-final gamesMyScreenNotifierProvider = StateNotifierProvider.autoDispose
-    .family<GamesMyScreenNotifier, GamesMyScreenState, String?>(
-        (ref, highlightGameId) {
-  return GamesMyScreenNotifier(ref, highlightGameId);
+/// Provider for matches my screen notifier
+final matchesMyScreenNotifierProvider = StateNotifierProvider.autoDispose
+    .family<MatchesMyScreenNotifier, MatchesMyScreenState, String?>(
+        (ref, highlightMatchId) {
+  return MatchesMyScreenNotifier(ref, highlightMatchId);
 });

@@ -15,11 +15,10 @@ import 'package:move_young/navigation/route_registry.dart';
 import 'package:move_young/features/settings/screens/settings_screen.dart';
 import 'package:move_young/features/help/screens/help_screen.dart';
 import 'package:move_young/features/profile/screens/profile_screen.dart';
-import 'package:move_young/features/friends/screens/friends_screen.dart';
 import 'package:move_young/features/auth/screens/auth_screen.dart';
 import 'package:move_young/providers/locale_controller.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:move_young/features/games/services/cloud_games_provider.dart';
+import 'package:move_young/features/matches/services/cloud_matches_provider.dart';
 import 'package:move_young/services/system/haptics_provider.dart';
 import 'package:move_young/utils/logger.dart';
 import 'dart:async';
@@ -121,8 +120,9 @@ class _HomeScreenNewState extends ConsumerState<HomeScreenNew> {
 
   Future<void> _refreshInvites() async {
     try {
-      final cloudGamesService = ref.read(cloudGamesServiceProvider);
-      final invited = await cloudGamesService.getInvitedGamesForCurrentUser();
+      final cloudMatchesService = ref.read(cloudMatchesServiceProvider);
+      final invited =
+          await cloudMatchesService.getInvitedMatchesForCurrentUser();
       if (!mounted) return;
       setState(() => _pendingInvites = invited.length);
     } catch (e, stack) {
@@ -134,8 +134,8 @@ class _HomeScreenNewState extends ConsumerState<HomeScreenNew> {
   void _watchPendingInvites() {
     _invitesSub?.cancel();
     try {
-      final cloudGamesService = ref.read(cloudGamesServiceProvider);
-      _invitesSub = cloudGamesService.watchPendingInvitesCount().listen(
+      final cloudMatchesService = ref.read(cloudMatchesServiceProvider);
+      _invitesSub = cloudMatchesService.watchPendingInvitesCount().listen(
         (n) {
           if (!mounted) return;
           setState(() => _pendingInvites = n);
@@ -327,13 +327,13 @@ class _HomeScreenNewState extends ConsumerState<HomeScreenNew> {
                                 showSignInPrompt: true);
                             return;
                           }
-                          Navigator.of(context).pushNamed('/organize-game');
+                          Navigator.of(context).pushNamed('/organize-match');
                         },
                         onTapJoin: () async {
                           ref.read(hapticsActionsProvider)?.lightImpact();
                           await Navigator.of(
                             context,
-                          ).pushNamed('/discover-games');
+                          ).pushNamed('/discover-matches');
                           if (mounted) {
                             await _refreshInvites();
                           }
@@ -588,18 +588,6 @@ class _HomeScreenNewState extends ConsumerState<HomeScreenNew> {
                         },
                       ),
                       _buildBottomSheetButton(
-                        icon: Icons.people_outline,
-                        label: 'friends'.tr(),
-                        onTap: () {
-                          Navigator.of(context).pop();
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) => const FriendsScreen(),
-                            ),
-                          );
-                        },
-                      ),
-                      _buildBottomSheetButton(
                         icon: Icons.settings_outlined,
                         label: 'settings'.tr(),
                         onTap: () {
@@ -786,8 +774,8 @@ class _QuickTilesRow extends ConsumerWidget {
             height: 168,
             child: _HomeImageTile(
               image: const AssetImage('assets/images/organize_a_match.jpg'),
-              title: 'organize_a_game'.tr(),
-              subtitle: 'start_a_game'.tr(),
+              title: 'organize_a_match'.tr(),
+              subtitle: 'start_a_match'.tr(),
               onTap: onTapOrganize,
             ),
           ),
@@ -801,8 +789,8 @@ class _QuickTilesRow extends ConsumerWidget {
               children: [
                 _HomeImageTile(
                   image: const AssetImage('assets/images/join_a_game.jpg'),
-                  title: 'join_a_game'.tr(),
-                  subtitle: 'choose_a_game'.tr(),
+                  title: 'join_a_match'.tr(),
+                  subtitle: 'choose_a_match'.tr(),
                   onTap: onTapJoin,
                 ),
                 if (pendingInvites > 0)

@@ -4,7 +4,7 @@
             ".read": true,
             ".write": false
         },
-        "games": {
+        "matches": {
             ".read": "auth != null",
             ".write": false,
             ".indexOn": [
@@ -16,7 +16,7 @@
                 "isPublic",
                 "dateTime"
             ],
-            "$gameId": {
+            "$matchId": {
                 ".read": "auth != null && (data.child('isPublic').val() == true || data.child('organizerId').val() == auth.uid || data.child('players').hasChild(auth.uid))",
                 ".write": "auth != null && (data.child('organizerId').val() == auth.uid || (!data.exists() && newData.child('organizerId').val() == auth.uid))",
                 "organizerId": {
@@ -29,7 +29,7 @@
                 },
                 "currentPlayers": {
                     ".read": "auth != null",
-                    ".write": "auth != null && (root.child('games/'+$gameId+'/organizerId').val() == auth.uid || newData.val() == data.val() + 1 || newData.val() == data.val() - 1)",
+                    ".write": "auth != null && (root.child('matches/'+$matchId+'/organizerId').val() == auth.uid || newData.val() == data.val() + 1 || newData.val() == data.val() - 1)",
                     ".validate": "newData.isNumber() && newData.val() >= 0"
                 },
                 "invites": {
@@ -37,8 +37,8 @@
                         "status"
                     ],
                     "$uid": {
-                        ".read": "auth != null && ($uid === auth.uid || root.child('games/'+$gameId+'/organizerId').val() === auth.uid)",
-                        ".write": "auth != null && ($uid === auth.uid || root.child('games/'+$gameId+'/organizerId').val() === auth.uid)",
+                        ".read": "auth != null && ($uid === auth.uid || root.child('matches/'+$matchId+'/organizerId').val() === auth.uid)",
+                        ".write": "auth != null && ($uid === auth.uid || root.child('matches/'+$matchId+'/organizerId').val() === auth.uid)",
                         "status": {
                             ".validate": "newData.isString() && (newData.val() == 'pending' || newData.val() == 'accepted' || newData.val() == 'declined' || newData.val() == 'left')"
                         }
@@ -49,8 +49,8 @@
         "pendingInviteIndex": {
             "$uid": {
                 ".read": "auth != null && auth.uid == $uid",
-                "$gameId": {
-                    ".write": "auth != null && ((auth.uid == $uid && (!data.exists() || newData.val() == null || newData.val() == 'pending')) || root.child('games/'+$gameId+'/organizerId').val() === auth.uid)",
+                "$matchId": {
+                    ".write": "auth != null && ((auth.uid == $uid && (!data.exists() || newData.val() == null || newData.val() == 'pending')) || root.child('matches/'+$matchId+'/organizerId').val() === auth.uid)",
                     ".validate": "newData.val() == 'pending' || newData.val() == null"
                 }
             }
@@ -106,20 +106,20 @@
                         ".write": "auth != null && (auth.uid == $uid || auth.uid == $friendUid)"
                     }
                 },
-                "gameInvites": {
-                    "$gameId": {
+                "matchInvites": {
+                    "$matchId": {
                         ".read": "auth != null && auth.uid == $uid",
-                        ".write": "auth != null && (auth.uid == $uid || root.child('games/'+$gameId+'/organizerId').val() === auth.uid)"
+                        ".write": "auth != null && (auth.uid == $uid || root.child('matches/'+$matchId+'/organizerId').val() === auth.uid)"
                     }
                 },
-                "createdGames": {
-                    "$gameId": {
+                "createdMatches": {
+                    "$matchId": {
                         ".read": "auth != null && auth.uid == $uid",
                         ".write": "auth != null && auth.uid == $uid"
                     }
                 },
-                "joinedGames": {
-                    "$gameId": {
+                "joinedMatches": {
+                    "$matchId": {
                         ".read": "auth != null && auth.uid == $uid",
                         ".write": "auth != null && auth.uid == $uid"
                     }
@@ -175,7 +175,7 @@
             "notifications": {
                 "$id": {
                     ".read": "false",
-                    ".write": "auth != null && ((newData.child('type').val() === 'friend_request' && newData.child('toUid').isString() && newData.child('fromUid').val() === auth.uid) || (newData.child('type').val() === 'friend_accept' && newData.child('toUid').isString() && newData.child('fromUid').val() === auth.uid) || (newData.child('type').val() === 'game_invite' && newData.child('toUid').isString() && newData.child('gameId').isString() && newData.child('fromUid').val() === auth.uid) || (newData.child('type').val() === 'game_edited' && newData.child('gameId').isString() && root.child('games').child(newData.child('gameId').val()).child('organizerId').val() === auth.uid) || (newData.child('type').val() === 'game_cancelled' && newData.child('gameId').isString() && root.child('games').child(newData.child('gameId').val()).child('organizerId').val() === auth.uid))",
+                    ".write": "auth != null && ((newData.child('type').val() === 'friend_request' && newData.child('toUid').isString() && newData.child('fromUid').val() === auth.uid) || (newData.child('type').val() === 'friend_accept' && newData.child('toUid').isString() && newData.child('fromUid').val() === auth.uid) || (newData.child('type').val() === 'match_invite' && newData.child('toUid').isString() && newData.child('matchId').isString() && newData.child('fromUid').val() === auth.uid) || (newData.child('type').val() === 'match_edited' && newData.child('matchId').isString() && root.child('matches').child(newData.child('matchId').val()).child('organizerId').val() === auth.uid) || (newData.child('type').val() === 'match_cancelled' && newData.child('matchId').isString() && root.child('matches').child(newData.child('matchId').val()).child('organizerId').val() === auth.uid))",
                     ".validate": "newData.hasChild('type') && newData.child('type').isString()"
                 }
             },

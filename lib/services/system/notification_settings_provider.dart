@@ -25,8 +25,8 @@ final notificationSettingsProvider = StreamProvider<Map<String, bool>>((ref) {
     return Stream.value({
       'notificationsEnabled': true,
       'friendRequests': true,
-      'gameInvites': true,
-      'gameUpdates': true,
+      'matchInvites': true,
+      'matchUpdates': true,
     });
   }
   return service.settingsStream;
@@ -51,14 +51,14 @@ class NotificationSettingsActions {
   Map<String, bool> getSettings() => _service.getSettings();
   bool get notificationsEnabled => _service.notificationsEnabled;
   bool get friendRequests => _service.friendRequests;
-  bool get gameInvites => _service.gameInvites;
-  bool get gameUpdates => _service.gameUpdates;
+  bool get matchInvites => _service.matchInvites;
+  bool get matchUpdates => _service.matchUpdates;
   bool isNotificationTypeEnabled(String type) => _service.isNotificationTypeEnabled(type);
   
   Future<void> setNotificationsEnabled(bool value) => _service.setNotificationsEnabled(value);
   Future<void> setFriendRequests(bool value) => _service.setFriendRequests(value);
-  Future<void> setGameInvites(bool value) => _service.setGameInvites(value);
-  Future<void> setGameUpdates(bool value) => _service.setGameUpdates(value);
+  Future<void> setMatchInvites(bool value) => _service.setMatchInvites(value);
+  Future<void> setMatchUpdates(bool value) => _service.setMatchUpdates(value);
   Future<void> setCategory(String category, bool value) => _service.setCategory(category, value);
 }
 

@@ -13,9 +13,9 @@ abstract class INotificationService {
     required String removerUid,
   });
 
-  /// Send a game edited notification to all players
-  Future<void> sendGameEditedNotification(String gameId);
+  /// Send a match edited notification to all players
+  Future<void> sendMatchEditedNotification(String matchId);
 
-  /// Send a game cancelled notification to all players
-  Future<void> sendGameCancelledNotification(String gameId);
+  /// Send a match cancelled notification to all players
+  Future<void> sendMatchCancelledNotification(String matchId);
 }

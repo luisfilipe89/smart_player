@@ -2,13 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:easy_localization/easy_localization.dart';
-import 'package:move_young/features/games/models/game.dart';
+import 'package:move_young/features/matches/models/match.dart';
 import 'package:move_young/features/auth/services/auth_provider.dart';
-import 'package:move_young/features/games/services/games_provider.dart';
-import 'package:move_young/features/games/services/cloud_games_provider.dart';
+import 'package:move_young/features/matches/services/match_provider.dart';
+import 'package:move_young/features/matches/services/cloud_matches_provider.dart';
 import 'package:move_young/theme/_theme.dart';
-import 'package:move_young/features/games/screens/games_join_screen.dart';
-import 'package:move_young/features/games/screens/game_organize_screen.dart';
+import 'package:move_young/features/matches/screens/match_join_screen.dart';
+import 'package:move_young/features/matches/screens/match_organize_screen.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:move_young/services/external/weather_provider.dart';
@@ -21,19 +21,20 @@ import 'package:move_young/features/maps/screens/gmaps_screen.dart';
 import 'package:move_young/services/calendar/calendar_service.dart';
 import 'package:move_young/services/system/haptics_provider.dart';
 import 'package:move_young/utils/logger.dart';
-import 'package:move_young/features/games/notifiers/games_my_screen_notifier.dart';
+import 'package:move_young/features/matches/notifiers/match_my_screen_notifier.dart';
 import 'dart:async';
 
-class GamesMyScreen extends ConsumerStatefulWidget {
-  final String? highlightGameId;
+class MatchesMyScreen extends ConsumerStatefulWidget {
+  final String? highlightMatchId;
   final int initialTab;
-  const GamesMyScreen({super.key, this.highlightGameId, this.initialTab = 0});
+  const MatchesMyScreen(
+      {super.key, this.highlightMatchId, this.initialTab = 0});
 
   @override
-  ConsumerState<GamesMyScreen> createState() => _GamesMyScreenState();
+  ConsumerState<MatchesMyScreen> createState() => _MatchesMyScreenState();
 }
 
-class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
+class _MatchesMyScreenState extends ConsumerState<MatchesMyScreen>
     with SingleTickerProviderStateMixin {
   final Map<String, GlobalKey> _itemKeys = {};
   late final TabController _tab;
@@ -46,7 +47,7 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
     _tab =
         TabController(length: 3, vsync: this, initialIndex: widget.initialTab);
     // Create periodic stream once in initState to avoid creating new streams on every rebuild
-    // Use broadcast stream to allow multiple listeners (one per game tile)
+    // Use broadcast stream to allow multiple listeners (one per match tile)
     _periodicMinuteStream = Stream.periodic(
       const Duration(minutes: 1),
       (i) => i,
@@ -59,14 +60,14 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
       }
     });
 
-    // Schedule scroll to highlighted game after first frame
+    // Schedule scroll to highlighted match after first frame
     WidgetsBinding.instance
-        .addPostFrameCallback((_) => _scrollToHighlightedGame());
+        .addPostFrameCallback((_) => _scrollToHighlightedMatch());
 
-    // Pre-load calendar statuses for all games when screen initializes
+    // Pre-load calendar statuses for all matches when screen initializes
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final notifier = ref
-          .read(gamesMyScreenNotifierProvider(widget.highlightGameId).notifier);
+      final notifier = ref.read(
+          matchesMyScreenNotifierProvider(widget.highlightMatchId).notifier);
       notifier.preloadCalendarStatuses();
     });
   }
@@ -77,9 +78,9 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
     super.dispose();
   }
 
-  void _scrollToHighlightedGame({int attempts = 0}) {
+  void _scrollToHighlightedMatch({int attempts = 0}) {
     final screenState =
-        ref.read(gamesMyScreenNotifierProvider(widget.highlightGameId));
+        ref.read(matchesMyScreenNotifierProvider(widget.highlightMatchId));
     if (!mounted || screenState.highlightId == null) {
       return;
     }
@@ -95,7 +96,7 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
       Future.delayed(const Duration(seconds: 2), () {
         if (mounted) {
           ref
-              .read(gamesMyScreenNotifierProvider(widget.highlightGameId)
+              .read(matchesMyScreenNotifierProvider(widget.highlightMatchId)
                   .notifier)
               .clearHighlightId();
         }
@@ -104,7 +105,7 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
     }
     if (attempts < 6) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        _scrollToHighlightedGame(attempts: attempts + 1);
+        _scrollToHighlightedMatch(attempts: attempts + 1);
       });
     }
   }
@@ -114,12 +115,12 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
   }
 
   // ---- Helpers restored ----
-  Widget _buildParticipantsStrip(Game game) {
-    final List<String> basePlayerUids = List<String>.from(game.players);
+  Widget _buildParticipantsStrip(Match match) {
+    final List<String> basePlayerUids = List<String>.from(match.players);
 
     return SizedBox(
       height: 44,
-      child: ref.watch(gameInviteStatusesProvider(game.id)).when(
+      child: ref.watch(matchInviteStatusesProvider(match.id)).when(
             loading: () => const SizedBox.shrink(),
             error: (_, __) => const SizedBox.shrink(),
             data: (inviteStatuses) {
@@ -135,8 +136,8 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
               final List<String> limited = merged.take(12).toList();
 
               // Build profiles from cache immediately (synchronous)
-              final screenState = ref
-                  .watch(gamesMyScreenNotifierProvider(widget.highlightGameId));
+              final screenState = ref.watch(
+                  matchesMyScreenNotifierProvider(widget.highlightMatchId));
               final List<Map<String, String?>> profiles = limited
                   .map((uid) =>
                       screenState.profileCache[uid] ??
@@ -158,9 +159,9 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
                 // Defer to avoid modifying provider during build
                 Future.microtask(() {
                   ref
-                      .read(
-                          gamesMyScreenNotifierProvider(widget.highlightGameId)
-                              .notifier)
+                      .read(matchesMyScreenNotifierProvider(
+                              widget.highlightMatchId)
+                          .notifier)
                       .loadMissingProfiles(missing);
                 });
               }
@@ -245,13 +246,13 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
                             width: 14,
                             height: 14,
                             decoration: BoxDecoration(
-                              color: game.isPlayerOnBench(uid)
+                              color: match.isPlayerOnBench(uid)
                                   ? Colors.blue
                                   : Colors.green,
                               shape: BoxShape.circle,
                             ),
                             child: Icon(
-                              game.isPlayerOnBench(uid)
+                              match.isPlayerOnBench(uid)
                                   ? Icons.event_seat
                                   : Icons.check,
                               size: 10,
@@ -341,13 +342,13 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
     return (first + second).toUpperCase();
   }
 
-  Future<String?> _ensureWeatherForGame(Game game) async {
-    if (game.latitude == null || game.longitude == null) {
+  Future<String?> _ensureWeatherForMatch(Match match) async {
+    if (match.latitude == null || match.longitude == null) {
       return null;
     }
     await ref
-        .read(gamesMyScreenNotifierProvider(widget.highlightGameId).notifier)
-        .ensureWeatherForGame(game);
+        .read(matchesMyScreenNotifierProvider(widget.highlightMatchId).notifier)
+        .ensureWeatherForMatch(match);
     return null;
   }
 
@@ -394,21 +395,21 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
     }
   }
 
-  bool _isUserJoined(Game game) {
+  bool _isUserJoined(Match match) {
     final uid = ref.watch(currentUserIdProvider);
     if (uid == null || uid.isEmpty) {
       return false;
     }
-    return game.players.any((p) => p == uid);
+    return match.players.any((p) => p == uid);
   }
 
-  Future<void> _leaveGame(Game game) async {
+  Future<void> _leaveMatch(Match match) async {
     try {
-      await ref.read(gamesActionsProvider).leaveGame(game.id);
+      await ref.read(matchesActionsProvider).leaveMatch(match.id);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('You left the game'),
+            content: Text('You left the match'),
             backgroundColor: AppColors.grey,
           ),
         );
@@ -426,15 +427,15 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
     }
   }
 
-  Future<void> _removeFromJoined(Game game) async {
+  Future<void> _removeFromJoined(Match match) async {
     try {
-      // Just remove from joinedGames index
+      // Just remove from joinedMatches index
       // Streams will update automatically to reflect the change
-      await ref.read(cloudGamesActionsProvider).removeFromMyJoined(game.id);
+      await ref.read(cloudMatchesActionsProvider).removeFromMyJoined(match.id);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Removed from My Games'),
+            content: Text('Removed from My Matches'),
             backgroundColor: AppColors.grey,
           ),
         );
@@ -452,15 +453,15 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
     }
   }
 
-  Future<void> _removeFromCreated(Game game) async {
+  Future<void> _removeFromCreated(Match match) async {
     try {
-      // Just remove from createdGames index
+      // Just remove from createdMatches index
       // Streams will update automatically to reflect the change
-      await ref.read(cloudGamesActionsProvider).removeFromMyCreated(game.id);
+      await ref.read(cloudMatchesActionsProvider).removeFromMyCreated(match.id);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Removed from My Games'),
+            content: Text('Removed from My Matches'),
             backgroundColor: AppColors.grey,
           ),
         );
@@ -478,29 +479,29 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
     }
   }
 
-  /// Archive a historic game by removing it from the appropriate index
+  /// Archive a historic match by removing it from the appropriate index
   /// Determines if user is organizer or participant and calls the appropriate method
-  Future<void> _archiveHistoricGame(Game game) async {
+  Future<void> _archiveHistoricMatch(Match match) async {
     final currentUserId = ref.read(currentUserIdProvider);
-    final isOrganizer = currentUserId == game.organizerId;
+    final isOrganizer = currentUserId == match.organizerId;
 
     if (isOrganizer) {
-      await _removeFromCreated(game);
+      await _removeFromCreated(match);
     } else {
-      await _removeFromJoined(game);
+      await _removeFromJoined(match);
     }
   }
 
-  Future<void> _messageOrganizer(Game game) async {
-    final info = game.contactInfo?.trim();
+  Future<void> _messageOrganizer(Match match) async {
+    final info = match.contactInfo?.trim();
     if (info == null || info.isEmpty) {
       return;
     }
     if (info.contains('@')) {
       final uri = Uri(scheme: 'mailto', path: info, queryParameters: {
-        'subject': 'About our game at ${game.location}',
+        'subject': 'About our match at ${match.location}',
         'body':
-            'Hi ${game.organizerName},\n\nRegarding the game on ${game.getFormattedDateLocalized((key) => key.tr())} at ${game.formattedTime}...'
+            'Hi ${match.organizerName},\n\nRegarding the match on ${match.getFormattedDateLocalized((key) => key.tr())} at ${match.formattedTime}...'
       });
       if (await canLaunchUrl(uri)) {
         await launchUrl(uri);
@@ -513,30 +514,30 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
       await launchUrl(telUri);
       return;
     }
-    await Share.share('Organizer: ${game.organizerName} — $info');
+    await Share.share('Organizer: ${match.organizerName} — $info');
   }
 
-  Future<void> _addToCalendar(Game game) async {
+  Future<void> _addToCalendar(Match match) async {
     final screenState =
-        ref.read(gamesMyScreenNotifierProvider(widget.highlightGameId));
-    if (screenState.calendarLoading.contains(game.id)) {
+        ref.read(matchesMyScreenNotifierProvider(widget.highlightMatchId));
+    if (screenState.calendarLoading.contains(match.id)) {
       return; // Already processing
     }
 
     try {
       ref.read(hapticsActionsProvider)?.selectionClick();
 
-      // Check if game is already in calendar
-      final isInCalendar = await CalendarService.isGameInCalendar(game.id);
+      // Check if match is already in calendar
+      final isInCalendar = await CalendarService.isMatchInCalendar(match.id);
 
       if (isInCalendar) {
         // Remove from calendar
-        final success = await CalendarService.removeGameFromCalendar(game.id);
+        final success = await CalendarService.removeMatchFromCalendar(match.id);
         if (mounted) {
           ref
-              .read(gamesMyScreenNotifierProvider(widget.highlightGameId)
+              .read(matchesMyScreenNotifierProvider(widget.highlightMatchId)
                   .notifier)
-              .updateCalendarStatus(game.id, !success);
+              .updateCalendarStatus(match.id, !success);
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(
@@ -550,12 +551,12 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
         }
       } else {
         // Add to calendar
-        final eventId = await CalendarService.addGameToCalendar(game);
+        final eventId = await CalendarService.addMatchToCalendar(match);
         if (mounted) {
           ref
-              .read(gamesMyScreenNotifierProvider(widget.highlightGameId)
+              .read(matchesMyScreenNotifierProvider(widget.highlightMatchId)
                   .notifier)
-              .updateCalendarStatus(game.id, eventId != null);
+              .updateCalendarStatus(match.id, eventId != null);
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(
@@ -570,7 +571,7 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
         }
       }
     } catch (e) {
-      NumberedLogger.e('Error adding game to calendar: $e');
+      NumberedLogger.e('Error adding match to calendar: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -582,32 +583,32 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
     }
   }
 
-  Future<void> _organizeSimilarGame(Game game) async {
+  Future<void> _organizeSimilarMatch(Match match) async {
     ref.read(hapticsActionsProvider)?.selectionClick();
 
-    // Navigate to GameOrganizeScreen with the historic game as initialGame
+    // Navigate to MatchOrganizeScreen with the historic match as initialMatch
     // This will pre-fill sport, field, max players, and participants
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => GameOrganizeScreen(initialGame: game),
+        builder: (_) => MatchOrganizeScreen(initialMatch: match),
       ),
     );
   }
 
-  Future<void> _openReportSheet(Game game) async {
-    // Extract field information from game
-    final fieldId = game.fieldId?.trim() ?? '';
+  Future<void> _openReportSheet(Match match) async {
+    // Extract field information from match
+    final fieldId = match.fieldId?.trim() ?? '';
     final fallbackId = fieldId.isNotEmpty
         ? fieldId
-        : (game.latitude != null && game.longitude != null
-            ? 'loc:${game.latitude!.toStringAsFixed(5)}:${game.longitude!.toStringAsFixed(5)}'
-            : 'game:${game.id}');
+        : (match.latitude != null && match.longitude != null
+            ? 'loc:${match.latitude!.toStringAsFixed(5)}:${match.longitude!.toStringAsFixed(5)}'
+            : 'match:${match.id}');
 
-    final fieldName = game.location.trim().isNotEmpty
-        ? game.location.trim()
+    final fieldName = match.location.trim().isNotEmpty
+        ? match.location.trim()
         : 'unnamed_location'.tr();
 
-    final fieldAddress = game.address?.trim();
+    final fieldAddress = match.address?.trim();
 
     final result = await showModalBottomSheet<bool>(
       context: context,
@@ -631,26 +632,26 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
     );
   }
 
-  Future<void> _openDirections(Game game) async {
+  Future<void> _openDirections(Match match) async {
     try {
       Uri uri;
 
       // Prefer coordinates if available for accurate directions
-      if (game.latitude != null && game.longitude != null) {
+      if (match.latitude != null && match.longitude != null) {
         uri = Uri.parse(
-          'https://www.google.com/maps/dir/?api=1&destination=${game.latitude},${game.longitude}&travelmode=walking',
+          'https://www.google.com/maps/dir/?api=1&destination=${match.latitude},${match.longitude}&travelmode=walking',
         );
       } else {
         // Fallback: Use address or location name
         String searchQuery = '';
 
         // Strategy 1: Use address if available
-        if (game.address != null && game.address!.isNotEmpty) {
-          searchQuery = game.address!;
+        if (match.address != null && match.address!.isNotEmpty) {
+          searchQuery = match.address!;
         }
         // Strategy 2: Use location name
-        else if (game.location.isNotEmpty) {
-          searchQuery = game.location;
+        else if (match.location.isNotEmpty) {
+          searchQuery = match.location;
 
           // Strategy 3: Enhance with area name if we know it's in 's-Hertogenbosch
           // This helps Google Maps find the location better
@@ -734,55 +735,55 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
   @override
   Widget build(BuildContext context) {
     // Watch providers for reactive data
-    final myGamesAsync = ref.watch(myGamesProvider);
-    final historicGamesAsync = ref.watch(historicGamesProvider);
-    final screenNotifier = ref
-        .read(gamesMyScreenNotifierProvider(widget.highlightGameId).notifier);
+    final myMatchesAsync = ref.watch(myMatchesProvider);
+    final historicMatchesAsync = ref.watch(historicMatchesProvider);
+    final screenNotifier = ref.read(
+        matchesMyScreenNotifierProvider(widget.highlightMatchId).notifier);
 
-    // Pre-load calendar statuses when games are loaded
+    // Pre-load calendar statuses when matches are loaded
     // This ensures calendar status is persisted when user exits and re-enters app
-    // Also reloads when games change (e.g., new games added)
-    if (myGamesAsync.hasValue || historicGamesAsync.hasValue) {
-      final gamesLoaded = (myGamesAsync.valueOrNull?.length ?? 0) +
-          (historicGamesAsync.valueOrNull?.length ?? 0);
-      if (gamesLoaded > 0) {
-        // Check if we need to update cache (either empty or games have changed)
-        final allGameIds = <String>{};
-        final myGames = myGamesAsync.valueOrNull;
-        if (myGames != null) {
-          for (final game in myGames) {
-            allGameIds.add(game.id);
+    // Also reloads when matches change (e.g., new matches added)
+    if (myMatchesAsync.hasValue || historicMatchesAsync.hasValue) {
+      final matchesLoaded = (myMatchesAsync.valueOrNull?.length ?? 0) +
+          (historicMatchesAsync.valueOrNull?.length ?? 0);
+      if (matchesLoaded > 0) {
+        // Check if we need to update cache (either empty or matches have changed)
+        final allMatchIds = <String>{};
+        final myMatches = myMatchesAsync.valueOrNull;
+        if (myMatches != null) {
+          for (final match in myMatches) {
+            allMatchIds.add(match.id);
           }
         }
-        final historicGames = historicGamesAsync.valueOrNull;
-        if (historicGames != null) {
-          for (final game in historicGames) {
-            allGameIds.add(game.id);
+        final historicMatches = historicMatchesAsync.valueOrNull;
+        if (historicMatches != null) {
+          for (final match in historicMatches) {
+            allMatchIds.add(match.id);
           }
         }
 
-        // If cache is empty or missing some games, reload
-        if (screenNotifier.needsCalendarPreload(allGameIds)) {
+        // If cache is empty or missing some matches, reload
+        if (screenNotifier.needsCalendarPreload(allMatchIds)) {
           // Trigger preload without blocking UI - delay until after build completes
           Future(() => screenNotifier.preloadCalendarStatuses());
         }
       }
     }
 
-    // Calculate joined/created games from provider data
-    final joinedGames = myGamesAsync.valueOrNull
+    // Calculate joined/created matches from provider data
+    final joinedMatches = myMatchesAsync.valueOrNull
             ?.where((g) => ref.read(currentUserIdProvider) != g.organizerId)
             .toList() ??
         [];
-    final createdGames = myGamesAsync.valueOrNull
+    final createdMatches = myMatchesAsync.valueOrNull
             ?.where((g) => ref.read(currentUserIdProvider) == g.organizerId)
             .toList() ??
         [];
-    // Sort organized games by upcoming time (earliest first)
-    createdGames.sort((a, b) => a.dateTime.compareTo(b.dateTime));
+    // Sort organized matches by upcoming time (earliest first)
+    createdMatches.sort((a, b) => a.dateTime.compareTo(b.dateTime));
 
-    // Historic games (already sorted by date descending in the provider)
-    final historicGames = historicGamesAsync.valueOrNull ?? [];
+    // Historic matches (already sorted by date descending in the provider)
+    final historicMatches = historicMatchesAsync.valueOrNull ?? [];
 
     return Scaffold(
       backgroundColor: AppColors.white,
@@ -790,7 +791,7 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
       appBar: AppBar(
         leadingWidth: 48,
         leading: const AppBackButton(goHome: true),
-        title: Text('my_games'.tr()),
+        title: Text('my_matches'.tr()),
         backgroundColor: Colors.transparent,
         elevation: 0,
         centerTitle: true,
@@ -803,16 +804,16 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
           tabAlignment: TabAlignment.fill,
           tabs: [
             TabWithCount(
-              label: 'registered_games'.tr(),
-              count: joinedGames.length,
+              label: 'registered_matches'.tr(),
+              count: joinedMatches.length,
             ),
             TabWithCount(
-              label: 'organized_games'.tr(),
-              count: createdGames.length,
+              label: 'organized_matches'.tr(),
+              count: createdMatches.length,
             ),
             TabWithCount(
-              label: 'historic_games'.tr(),
-              count: historicGames.length,
+              label: 'historic_matches'.tr(),
+              count: historicMatches.length,
             ),
           ],
         ),
@@ -826,15 +827,15 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
               children: [
                 const SizedBox(height: 24),
                 Expanded(
-                  child: myGamesAsync.when(
+                  child: myMatchesAsync.when(
                     loading: () =>
                         const Center(child: CircularProgressIndicator()),
                     error: (error, stack) => ErrorRetryWidget(
-                      message:
-                          myGamesAsync.errorMessage ?? 'Failed to load games',
+                      message: myMatchesAsync.errorMessage ??
+                          'Failed to load matches',
                       onRetry: _refreshData,
                     ),
-                    data: (games) => Container(
+                    data: (matches) => Container(
                       decoration: BoxDecoration(
                         color: AppColors.white,
                         borderRadius:
@@ -847,10 +848,10 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
                         child: TabBarView(
                           controller: _tab,
                           children: [
-                            // Registered Games (joined)
+                            // Registered Matches (joined)
                             RefreshIndicator(
                               onRefresh: () async => _refreshData(),
-                              child: (joinedGames.isEmpty)
+                              child: (joinedMatches.isEmpty)
                                   ? ListView(
                                       physics:
                                           const AlwaysScrollableScrollPhysics(),
@@ -867,15 +868,15 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
                                         const EdgeInsets.only(
                                             bottom: AppHeights.reg),
                                       ),
-                                      itemCount: joinedGames.length,
+                                      itemCount: joinedMatches.length,
                                       itemBuilder: (_, i) =>
-                                          _buildGameTile(joinedGames[i]),
+                                          _buildMatchTile(joinedMatches[i]),
                                     ),
                             ),
-                            // Organized Games (created)
+                            // Organized Matches (created)
                             RefreshIndicator(
                               onRefresh: () async => _refreshData(),
-                              child: (createdGames.isEmpty)
+                              child: (createdMatches.isEmpty)
                                   ? ListView(
                                       physics:
                                           const AlwaysScrollableScrollPhysics(),
@@ -890,23 +891,23 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
                                         const EdgeInsets.only(
                                             bottom: AppHeights.reg),
                                       ),
-                                      itemCount: createdGames.length,
+                                      itemCount: createdMatches.length,
                                       itemBuilder: (_, i) =>
-                                          _buildGameTile(createdGames[i]),
+                                          _buildMatchTile(createdMatches[i]),
                                     ),
                             ),
-                            // Historic Games (past games where user participated)
+                            // Historic Matches (past matches where user participated)
                             RefreshIndicator(
                               onRefresh: () async => _refreshData(),
-                              child: historicGamesAsync.when(
+                              child: historicMatchesAsync.when(
                                 loading: () => const Center(
                                     child: CircularProgressIndicator()),
                                 error: (error, stack) => ErrorRetryWidget(
-                                  message: historicGamesAsync.errorMessage ??
-                                      'Failed to load historic games',
+                                  message: historicMatchesAsync.errorMessage ??
+                                      'Failed to load historic matches',
                                   onRetry: _refreshData,
                                 ),
-                                data: (games) => (games.isEmpty)
+                                data: (matches) => (matches.isEmpty)
                                     ? ListView(
                                         physics:
                                             const AlwaysScrollableScrollPhysics(),
@@ -923,9 +924,9 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
                                           const EdgeInsets.only(
                                               bottom: AppHeights.reg),
                                         ),
-                                        itemCount: games.length,
+                                        itemCount: matches.length,
                                         itemBuilder: (_, i) =>
-                                            _buildHistoricGameTile(games[i]),
+                                            _buildHistoricMatchTile(matches[i]),
                                       ),
                               ),
                             ),
@@ -943,12 +944,12 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
     );
   }
 
-  /// Build a historic game tile with swipe-to-archive functionality
-  Widget _buildHistoricGameTile(Game game) {
-    final key = _itemKeys.putIfAbsent(game.id, () => GlobalKey());
+  /// Build a historic match tile with swipe-to-archive functionality
+  Widget _buildHistoricMatchTile(Match match) {
+    final key = _itemKeys.putIfAbsent(match.id, () => GlobalKey());
 
-    // Build the game card (without margin)
-    final gameCard = KeyedSubtree(
+    // Build the match card (without margin)
+    final matchCard = KeyedSubtree(
       key: key,
       child: Card(
         elevation: 2,
@@ -957,14 +958,14 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppRadius.card),
         ),
-        child: _buildGameTileContent(game),
+        child: _buildMatchTileContent(match),
       ),
     );
 
     return Container(
       margin: const EdgeInsets.only(bottom: AppHeights.reg),
       child: Dismissible(
-        key: Key('historic_game_${game.id}'),
+        key: Key('historic_match_${match.id}'),
         direction: DismissDirection.horizontal,
         background: Container(
           alignment: Alignment.centerLeft,
@@ -1008,9 +1009,9 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
           ),
         ),
         onDismissed: (direction) {
-          _archiveHistoricGame(game);
+          _archiveHistoricMatch(match);
         },
-        child: gameCard,
+        child: matchCard,
       ),
     );
   }
@@ -1062,12 +1063,12 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
     );
   }
 
-  /// Build the content of a game tile (the inner container with border and column)
-  Widget _buildGameTileContent(Game game) {
+  /// Build the content of a match tile (the inner container with border and column)
+  Widget _buildMatchTileContent(Match match) {
     final currentUserId = ref.watch(currentUserIdProvider);
-    final isMine = currentUserId == game.organizerId;
-    final sportColor = _colorForSport(game.sport);
-    final accentColor = game.isActive ? AppColors.green : AppColors.red;
+    final isMine = currentUserId == match.organizerId;
+    final sportColor = _colorForSport(match.sport);
+    final accentColor = match.isActive ? AppColors.green : AppColors.red;
 
     return Container(
       decoration: BoxDecoration(
@@ -1089,7 +1090,7 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
           ListTile(
             contentPadding: const EdgeInsets.fromLTRB(20, 12, 16, 8),
             leading: Hero(
-              tag: 'game-${game.id}-icon',
+              tag: 'match-${match.id}-icon',
               child: Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
@@ -1097,14 +1098,14 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(
-                  _iconForSport(game.sport),
+                  _iconForSport(match.sport),
                   color: sportColor,
                   size: 22,
                 ),
               ),
             ),
             title: Text(
-              game.location,
+              match.location,
               style: AppTextStyles.cardTitle.copyWith(
                 fontSize: 17,
                 fontWeight: FontWeight.w600,
@@ -1118,7 +1119,7 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
                   children: [
                     Expanded(
                       child: Text(
-                        '${game.getFormattedDateLocalized((key) => key.tr())} • ${game.formattedTime}',
+                        '${match.getFormattedDateLocalized((key) => key.tr())} • ${match.formattedTime}',
                         overflow: TextOverflow.ellipsis,
                         softWrap: false,
                       ),
@@ -1130,19 +1131,19 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
                   spacing: 6,
                   runSpacing: 6,
                   children: [
-                    // Show "Cancelled" badge for cancelled games
-                    if (!game.isActive) ...[
+                    // Show "Cancelled" badge for cancelled matches
+                    if (!match.isActive) ...[
                       _buildStatusBadge(
                         label: 'Canceled',
                         color: AppColors.red,
                       ),
                     ] else ...[
-                      if (game.isFull)
+                      if (match.isFull)
                         _buildStatusBadge(
                           label: 'Full',
                           color: AppColors.red,
                         ),
-                      if (game.isModified)
+                      if (match.isModified)
                         _buildStatusBadge(
                           label: 'modified'.tr(),
                           color: AppColors.blue,
@@ -1151,7 +1152,7 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
                         stream: _periodicMinuteStream,
                         initialData: 0,
                         builder: (context, snapshot) {
-                          final remaining = game.timeUntilGame;
+                          final remaining = match.timeUntilMatch;
                           // Only show when 2 hours or less remaining
                           if (remaining.isNegative ||
                               remaining > const Duration(hours: 2)) {
@@ -1174,11 +1175,11 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
               ],
             ),
             trailing: _buildStatusBadge(
-              label: game.benchCount > 0
-                  ? '${game.maxPlayers}/${game.maxPlayers} + ${game.benchCount} bench'
-                  : '${game.currentPlayers}/${game.maxPlayers}',
-              color: game.hasSpace ? AppColors.green : AppColors.red,
-              icon: game.isPublic ? Icons.lock_open : Icons.lock,
+              label: match.benchCount > 0
+                  ? '${match.maxPlayers}/${match.maxPlayers} + ${match.benchCount} bench'
+                  : '${match.currentPlayers}/${match.maxPlayers}',
+              color: match.hasSpace ? AppColors.green : AppColors.red,
+              icon: match.isPublic ? Icons.lock_open : Icons.lock,
               showDot: false,
             ),
           ),
@@ -1198,14 +1199,14 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
                 // Weather icon with a subtle divider to separate from avatars
                 Builder(builder: (context) {
                   // Defer weather loading until after build completes
-                  Future(() => _ensureWeatherForGame(game));
-                  String time = game.formattedTime.padLeft(5, '0');
+                  Future(() => _ensureWeatherForMatch(match));
+                  String time = match.formattedTime.padLeft(5, '0');
                   if (!time.endsWith(':00')) {
                     time = '${time.substring(0, 2)}:00';
                   }
                   final screenState = ref.watch(
-                      gamesMyScreenNotifierProvider(widget.highlightGameId));
-                  final cachedWeather = screenState.weatherByGameId[game.id];
+                      matchesMyScreenNotifierProvider(widget.highlightMatchId));
+                  final cachedWeather = screenState.weatherByMatchId[match.id];
                   final forecasts = cachedWeather?.isExpired == false
                       ? cachedWeather!.data
                       : null;
@@ -1230,10 +1231,10 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
                   );
                 }),
                 Expanded(
-                  child: _buildParticipantsStrip(game),
+                  child: _buildParticipantsStrip(match),
                 ),
                 // Edit button for organizer - placed next to participants
-                if (isMine && !game.dateTime.isBefore(DateTime.now())) ...[
+                if (isMine && !match.dateTime.isBefore(DateTime.now())) ...[
                   const SizedBox(width: 12),
                   IconButton(
                     padding: const EdgeInsets.all(8),
@@ -1245,7 +1246,8 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
                     onPressed: () {
                       Navigator.of(context).push(
                         MaterialPageRoute(
-                          builder: (_) => GameOrganizeScreen(initialGame: game),
+                          builder: (_) =>
+                              MatchOrganizeScreen(initialMatch: match),
                         ),
                       );
                     },
@@ -1267,16 +1269,16 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // Only show action buttons (edit, cancel, directions, share) for upcoming games
-                if (!game.dateTime.isBefore(DateTime.now())) ...[
+                // Only show action buttons (edit, cancel, directions, share) for upcoming matches
+                if (!match.dateTime.isBefore(DateTime.now())) ...[
                   Row(
                     children: [
-                      if (!isMine && _isUserJoined(game)) ...[
+                      if (!isMine && _isUserJoined(match)) ...[
                         Expanded(
                           child: ElevatedButton.icon(
-                            onPressed: () => game.isActive
-                                ? _leaveGame(game)
-                                : _removeFromJoined(game),
+                            onPressed: () => match.isActive
+                                ? _leaveMatch(match)
+                                : _removeFromJoined(match),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: AppColors.red,
                               foregroundColor: Colors.white,
@@ -1294,12 +1296,12 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
                               elevation: 0,
                             ),
                             icon: Icon(
-                                game.isActive
+                                match.isActive
                                     ? Icons.logout
                                     : Icons.delete_outline,
                                 size: 16),
                             label:
-                                Text(game.isActive ? 'leave'.tr() : 'Remove'),
+                                Text(match.isActive ? 'leave'.tr() : 'Remove'),
                           ),
                         ),
                         const SizedBox(width: 8),
@@ -1308,13 +1310,13 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
                         Expanded(
                           child: ElevatedButton.icon(
                             onPressed: () async {
-                              // If game is already cancelled, just remove it from view
-                              if (!game.isActive) {
-                                await _removeFromCreated(game);
+                              // If match is already cancelled, just remove it from view
+                              if (!match.isActive) {
+                                await _removeFromCreated(match);
                                 return;
                               }
 
-                              // Otherwise, cancel it (which marks inactive AND removes from createdGames)
+                              // Otherwise, cancel it (which marks inactive AND removes from createdMatches)
                               final confirmed = await showDialog<bool>(
                                 context: context,
                                 builder: (ctx) => AlertDialog(
@@ -1335,13 +1337,14 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
                               if (confirmed == true) {
                                 try {
                                   await ref
-                                      .read(gamesActionsProvider)
-                                      .deleteGame(game.id);
+                                      .read(matchesActionsProvider)
+                                      .deleteMatch(match.id);
                                   if (mounted) {
                                     ScaffoldMessenger.of(context).showSnackBar(
                                       SnackBar(
                                         content: Text(
-                                            'game_cancelled_successfully'.tr()),
+                                            'match_cancelled_successfully'
+                                                .tr()),
                                         backgroundColor: AppColors.green,
                                       ),
                                     );
@@ -1352,7 +1355,7 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
                                     ScaffoldMessenger.of(context).showSnackBar(
                                       SnackBar(
                                         content: Text(
-                                            'game_cancellation_failed'.tr()),
+                                            'match_cancellation_failed'.tr()),
                                         backgroundColor: AppColors.red,
                                       ),
                                     );
@@ -1377,19 +1380,19 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
                               ),
                             ),
                             icon: Icon(
-                                game.isActive
+                                match.isActive
                                     ? Icons.cancel
                                     : Icons.delete_outline,
                                 size: 16),
                             label:
-                                Text(game.isActive ? 'cancel'.tr() : 'Remove'),
+                                Text(match.isActive ? 'cancel'.tr() : 'Remove'),
                           ),
                         ),
                         const SizedBox(width: 8),
                       ],
                       Expanded(
                         child: OutlinedButton.icon(
-                          onPressed: () => _openDirections(game),
+                          onPressed: () => _openDirections(match),
                           style: OutlinedButton.styleFrom(
                             minimumSize: const Size(0, 40),
                             padding: const EdgeInsets.symmetric(
@@ -1415,17 +1418,17 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
                         child: Builder(
                           builder: (context) {
                             final screenState = ref.watch(
-                                gamesMyScreenNotifierProvider(
-                                    widget.highlightGameId));
+                                matchesMyScreenNotifierProvider(
+                                    widget.highlightMatchId));
                             final screenNotifier = ref.read(
-                                gamesMyScreenNotifierProvider(
-                                        widget.highlightGameId)
+                                matchesMyScreenNotifierProvider(
+                                        widget.highlightMatchId)
                                     .notifier);
                             // Check cached status first
                             final cachedStatus =
-                                screenState.calendarStatusByGameId[game.id];
+                                screenState.calendarStatusByMatchId[match.id];
                             final isLoading =
-                                screenState.calendarLoading.contains(game.id);
+                                screenState.calendarLoading.contains(match.id);
 
                             // If preload is in progress and status is unknown, show as checking
                             final isActuallyLoading = isLoading ||
@@ -1438,21 +1441,21 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
                                 !isLoading &&
                                 !screenState.calendarPreloadInProgress) {
                               // Only trigger individual check if preload hasn't populated it yet
-                              // This handles edge cases where a game was added after preload completed
+                              // This handles edge cases where a match was added after preload completed
                               WidgetsBinding.instance.addPostFrameCallback((_) {
                                 final currentState = ref.read(
-                                    gamesMyScreenNotifierProvider(
-                                        widget.highlightGameId));
+                                    matchesMyScreenNotifierProvider(
+                                        widget.highlightMatchId));
                                 if (mounted &&
-                                    !currentState.calendarStatusByGameId
-                                        .containsKey(game.id) &&
+                                    !currentState.calendarStatusByMatchId
+                                        .containsKey(match.id) &&
                                     !currentState.calendarPreloadInProgress) {
                                   // Trigger async check but don't wait
                                   screenNotifier
-                                      .getCalendarStatus(game.id)
+                                      .getCalendarStatus(match.id)
                                       .catchError((e) {
                                     NumberedLogger.e(
-                                        'Error in getCalendarStatus for ${game.id}: $e');
+                                        'Error in getCalendarStatus for ${match.id}: $e');
                                     return false; // Return value for catchError
                                   });
                                 }
@@ -1488,7 +1491,7 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
                             return OutlinedButton.icon(
                               onPressed: isActuallyLoading
                                   ? null
-                                  : () => _addToCalendar(game),
+                                  : () => _addToCalendar(match),
                               style: OutlinedButton.styleFrom(
                                 minimumSize: const Size(0, 40),
                                 padding: const EdgeInsets.symmetric(
@@ -1531,12 +1534,12 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
                       ),
                     ],
                   ),
-                  if ((game.contactInfo?.isNotEmpty ?? false)) ...[
+                  if ((match.contactInfo?.isNotEmpty ?? false)) ...[
                     const SizedBox(height: 8),
                     Align(
                       alignment: Alignment.centerRight,
                       child: OutlinedButton.icon(
-                        onPressed: () => _messageOrganizer(game),
+                        onPressed: () => _messageOrganizer(match),
                         style: OutlinedButton.styleFrom(
                           foregroundColor: AppColors.primary,
                           side: const BorderSide(color: AppColors.primary),
@@ -1547,13 +1550,13 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
                     ),
                   ],
                 ],
-                // Show "Report an issue" and "Organize Similar Game" buttons for historic games (past games)
-                if (game.dateTime.isBefore(DateTime.now())) ...[
+                // Show "Report an issue" and "Organize Similar Match" buttons for historic matches (past matches)
+                if (match.dateTime.isBefore(DateTime.now())) ...[
                   Row(
                     children: [
                       Expanded(
                         child: OutlinedButton.icon(
-                          onPressed: () => _organizeSimilarGame(game),
+                          onPressed: () => _organizeSimilarMatch(match),
                           style: OutlinedButton.styleFrom(
                             minimumSize: const Size(0, 40),
                             padding: const EdgeInsets.symmetric(
@@ -1570,13 +1573,13 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
                             ),
                           ),
                           icon: const Icon(Icons.repeat, size: 18),
-                          label: Text('organize_similar_game'.tr()),
+                          label: Text('organize_similar_match'.tr()),
                         ),
                       ),
                       const SizedBox(width: 8),
                       Expanded(
                         child: OutlinedButton.icon(
-                          onPressed: () => _openReportSheet(game),
+                          onPressed: () => _openReportSheet(match),
                           style: OutlinedButton.styleFrom(
                             minimumSize: const Size(0, 40),
                             padding: const EdgeInsets.symmetric(
@@ -1608,11 +1611,11 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
     );
   }
 
-  Widget _buildGameTile(Game game) {
-    final key = _itemKeys.putIfAbsent(game.id, () => GlobalKey());
+  Widget _buildMatchTile(Match match) {
+    final key = _itemKeys.putIfAbsent(match.id, () => GlobalKey());
 
-    // Build the game card (without margin) - matching Historic tab style
-    final gameCard = KeyedSubtree(
+    // Build the match card (without margin) - matching Historic tab style
+    final matchCard = KeyedSubtree(
       key: key,
       child: Card(
         elevation: 2,
@@ -1621,13 +1624,13 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppRadius.card),
         ),
-        child: _buildGameTileContent(game),
+        child: _buildMatchTileContent(match),
       ),
     );
 
     return Container(
       margin: const EdgeInsets.only(bottom: AppHeights.reg),
-      child: gameCard,
+      child: matchCard,
     );
   }
 
@@ -1639,7 +1642,7 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
         children: [
           const Icon(Icons.sports, size: 64, color: AppColors.grey),
           const SizedBox(height: AppHeights.reg),
-          Text('no_joined_games_yet'.tr(),
+          Text('no_joined_matches_yet'.tr(),
               style: AppTextStyles.title.copyWith(color: AppColors.grey),
               textAlign: TextAlign.center),
           const SizedBox(height: AppHeights.small),
@@ -1647,11 +1650,11 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
             onPressed: () {
               Navigator.of(context).push(
                 MaterialPageRoute(
-                  builder: (_) => const GamesJoinScreen(),
+                  builder: (_) => const MatchesJoinScreen(),
                 ),
               );
             },
-            child: Text('go_join_a_game'.tr()),
+            child: Text('go_join_a_match'.tr()),
           ),
         ],
       ),
@@ -1666,7 +1669,7 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
         children: [
           const Icon(Icons.event_available, size: 64, color: AppColors.grey),
           const SizedBox(height: AppHeights.reg),
-          Text('no_organized_games_yet'.tr(),
+          Text('no_organized_matches_yet'.tr(),
               style: AppTextStyles.title.copyWith(color: AppColors.grey),
               textAlign: TextAlign.center),
           const SizedBox(height: AppHeights.small),
@@ -1674,11 +1677,11 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
             onPressed: () {
               Navigator.of(context).push(
                 MaterialPageRoute(
-                  builder: (_) => const GameOrganizeScreen(),
+                  builder: (_) => const MatchOrganizeScreen(),
                 ),
               );
             },
-            child: Text('go_organize_a_game'.tr()),
+            child: Text('go_organize_a_match'.tr()),
           ),
         ],
       ),
@@ -1693,7 +1696,7 @@ class _GamesMyScreenState extends ConsumerState<GamesMyScreen>
         children: [
           const Icon(Icons.history, size: 64, color: AppColors.grey),
           const SizedBox(height: AppHeights.reg),
-          Text('no_historic_games_yet'.tr(),
+          Text('no_historic_matches_yet'.tr(),
               style: AppTextStyles.title.copyWith(color: AppColors.grey),
               textAlign: TextAlign.center),
         ],

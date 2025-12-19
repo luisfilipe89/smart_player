@@ -3,10 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:move_young/features/home/screens/home_screen.dart';
 import 'package:move_young/features/activities/screens/fitness_screen.dart';
 import 'package:move_young/features/agenda/screens/agenda_screen.dart';
-import 'package:move_young/features/games/screens/game_organize_screen.dart';
-import 'package:move_young/features/games/models/game.dart';
-import 'package:move_young/features/games/screens/games_join_screen.dart';
-import 'package:move_young/features/games/screens/games_my_screen.dart';
+import 'package:move_young/features/matches/screens/match_organize_screen.dart';
+import 'package:move_young/features/matches/models/match.dart';
+import 'package:move_young/features/matches/screens/match_join_screen.dart';
+import 'package:move_young/features/matches/screens/match_my_screen.dart';
 import 'package:move_young/features/friends/screens/friends_screen.dart';
 import 'package:move_young/widgets/offline_banner.dart';
 import 'package:move_young/widgets/sync_status_indicator.dart';
@@ -20,32 +20,34 @@ import 'package:move_young/utils/logger.dart';
 // ---------------------------- Navigation Controller Scope ----------------------------
 class MainScaffoldController {
   const MainScaffoldController(this._switchToTab,
-      [this._openMyGames, this._openJoinScreen]);
+      [this._openMyMatches, this._openJoinScreen]);
   final void Function(int index, {bool popToRoot}) _switchToTab;
   final void Function(
-      {int initialTab, String? highlightGameId, bool popToRoot})? _openMyGames;
-  final void Function(String? highlightGameId)? _openJoinScreen;
+      {int initialTab,
+      String? highlightMatchId,
+      bool popToRoot})? _openMyMatches;
+  final void Function(String? highlightMatchId)? _openJoinScreen;
 
   void switchToTab(int index, {bool popToRoot = false}) =>
       _switchToTab(index, popToRoot: popToRoot);
 
-  void openMyGames(
-      {int initialTab = 0, String? highlightGameId, bool popToRoot = true}) {
-    final fn = _openMyGames;
+  void openMyMatches(
+      {int initialTab = 0, String? highlightMatchId, bool popToRoot = true}) {
+    final fn = _openMyMatches;
     if (fn != null) {
       fn(
           initialTab: initialTab,
-          highlightGameId: highlightGameId,
+          highlightMatchId: highlightMatchId,
           popToRoot: popToRoot);
     } else {
       _switchToTab(kTabJoin, popToRoot: popToRoot);
     }
   }
 
-  void openJoinScreen(String? highlightGameId) {
+  void openJoinScreen(String? highlightMatchId) {
     final fn = _openJoinScreen;
     if (fn != null) {
-      fn(highlightGameId);
+      fn(highlightMatchId);
     } else {
       _switchToTab(kTabJoin, popToRoot: true);
     }
@@ -58,9 +60,9 @@ class MainScaffoldController {
     return scope?.controller;
   }
 
-  // Static method to navigate to a specific game from notifications
-  static void navigateToGame(String gameId) {
-    NumberedLogger.d('Navigating to game: $gameId');
+  // Static method to navigate to a specific match from notifications
+  static void navigateToMatch(String matchId) {
+    NumberedLogger.d('Navigating to match: $matchId');
     // This will be implemented to work with the current controller instance
   }
 }
@@ -116,7 +118,7 @@ class MainScaffoldState extends ConsumerState<MainScaffold> {
   final _agendaKey = GlobalKey<NavigatorState>();
 
   late final MainScaffoldController _controller;
-  MyGamesArgs? _myGamesArgs;
+  MyMatchesArgs? _myMatchesArgs;
   String? _highlightEventTitle;
   // expose intent handlers
   void handleRouteIntent(RouteIntent intent) {
@@ -124,37 +126,38 @@ class MainScaffoldState extends ConsumerState<MainScaffold> {
       switchToTab(kTabFriends, popToRoot: true);
     } else if (intent is AgendaIntent) {
       _highlightEventTitle = intent.highlightEventTitle;
-      NumberedLogger.d('MainScaffold: Handling AgendaIntent with highlightEventTitle: $_highlightEventTitle');
+      NumberedLogger.d(
+          'MainScaffold: Handling AgendaIntent with highlightEventTitle: $_highlightEventTitle');
       switchToTab(kTabAgenda, popToRoot: true);
       // Note: AgendaScreen will receive highlightEventTitle via widget parameter
       // and will scroll to it when events are loaded
-    } else if (intent is DiscoverGamesIntent) {
+    } else if (intent is DiscoverMatchesIntent) {
       switchToTab(kTabJoin, popToRoot: true);
       WidgetsBinding.instance.addPostFrameCallback((_) {
         final nav = _joinKey.currentState;
         if (nav != null) {
           nav.push(
             NavigationUtils.sharedAxisRoute(
-              builder: (_) => GamesJoinScreen(
-                highlightGameId: intent.highlightGameId,
+              builder: (_) => MatchesJoinScreen(
+                highlightMatchId: intent.highlightMatchId,
               ),
             ),
           );
         }
       });
-    } else if (intent is MyGamesIntent) {
-      _myGamesArgs = MyGamesArgs(
+    } else if (intent is MyMatchesIntent) {
+      _myMatchesArgs = MyMatchesArgs(
           initialTab: intent.initialTab,
-          highlightGameId: intent.highlightGameId);
+          highlightMatchId: intent.highlightMatchId);
       switchToTab(kTabJoin, popToRoot: true);
       WidgetsBinding.instance.addPostFrameCallback((_) {
         final nav = _joinKey.currentState;
         if (nav != null) {
           nav.pushReplacement(
             MaterialPageRoute(
-              builder: (_) => GamesMyScreen(
+              builder: (_) => MatchesMyScreen(
                 initialTab: intent.initialTab,
-                highlightGameId: intent.highlightGameId,
+                highlightMatchId: intent.highlightMatchId,
               ),
             ),
           );
@@ -177,44 +180,44 @@ class MainScaffoldState extends ConsumerState<MainScaffold> {
           _currentIndexNotifier.value = index;
         }
       },
-      ({int initialTab = 0, String? highlightGameId, bool popToRoot = true}) {
+      ({int initialTab = 0, String? highlightMatchId, bool popToRoot = true}) {
         if (popToRoot) {
           _popToRoot(kTabJoin);
           // Also clear Home flow so returning Home shows the root Home screen
           _homeKey.currentState?.popUntil((r) => r.isFirst);
         }
-        _myGamesArgs = MyGamesArgs(
-            initialTab: initialTab, highlightGameId: highlightGameId);
+        _myMatchesArgs = MyMatchesArgs(
+            initialTab: initialTab, highlightMatchId: highlightMatchId);
         ref.read(mainTabIndexProvider.notifier).state = kTabJoin;
         _currentIndexNotifier.value = kTabJoin;
-        // Nudge the nested My Games navigator to rebuild and show latest
+        // Nudge the nested My Matches navigator to rebuild and show latest
         WidgetsBinding.instance.addPostFrameCallback((_) {
           final nav = _joinKey.currentState;
           if (nav != null) {
             nav.pushReplacement(
               MaterialPageRoute(
-                builder: (_) => GamesMyScreen(
+                builder: (_) => MatchesMyScreen(
                   initialTab: initialTab,
-                  highlightGameId: highlightGameId,
+                  highlightMatchId: highlightMatchId,
                 ),
               ),
             );
           }
         });
       },
-      (String? highlightGameId) {
+      (String? highlightMatchId) {
         // Pop to root of Join tab first
         _popToRoot(kTabJoin);
         ref.read(mainTabIndexProvider.notifier).state = kTabJoin;
         _currentIndexNotifier.value = kTabJoin;
-        // Push GamesJoinScreen with highlightGameId
+        // Push MatchesJoinScreen with highlightMatchId
         WidgetsBinding.instance.addPostFrameCallback((_) {
           final nav = _joinKey.currentState;
           if (nav != null) {
             nav.push(
               NavigationUtils.sharedAxisRoute(
-                builder: (_) => GamesJoinScreen(
-                  highlightGameId: highlightGameId,
+                builder: (_) => MatchesJoinScreen(
+                  highlightMatchId: highlightMatchId,
                 ),
               ),
             );
@@ -268,15 +271,15 @@ class MainScaffoldState extends ConsumerState<MainScaffold> {
   }
 
   void _handlePendingNotifications() {
-    // Check if there's a pending game ID to navigate to
+    // Check if there's a pending match ID to navigate to
     // This would be set by the notification tap handler
     Future.delayed(const Duration(milliseconds: 100), () {
       if (mounted) {
-        // Check for pending game ID from notification tap
+        // Check for pending match ID from notification tap
         // This is a simple approach - in production you'd use proper state management
         NumberedLogger.d('Checking for pending notifications...');
 
-        // Check if there's a pending game ID to navigate to
+        // Check if there's a pending match ID to navigate to
         // This would be set by the notification tap handler in main.dart
         // For now, we'll implement a simple approach
         // The actual navigation will be handled by the notification tap handler
@@ -322,12 +325,13 @@ class MainScaffoldState extends ConsumerState<MainScaffold> {
                             child: _FriendsFlow(navigatorKey: _friendsKey)),
                         HeroMode(
                             enabled: currentIndex == kTabJoin,
-                            child: _MyGamesFlow(
-                                navigatorKey: _joinKey, args: _myGamesArgs)),
+                            child: _MyMatchesFlow(
+                                navigatorKey: _joinKey, args: _myMatchesArgs)),
                         HeroMode(
                             enabled: currentIndex == kTabAgenda,
                             child: _AgendaFlow(
-                                key: ValueKey('agenda_flow_${_highlightEventTitle ?? 'null'}'),
+                                key: ValueKey(
+                                    'agenda_flow_${_highlightEventTitle ?? 'null'}'),
                                 navigatorKey: _agendaKey,
                                 highlightEventTitle: _highlightEventTitle)),
                       ],
@@ -346,9 +350,11 @@ class MainScaffoldState extends ConsumerState<MainScaffold> {
                         } else {
                           // Clear highlightEventTitle when switching to agenda tab directly
                           // (not via handleRouteIntent)
-                          if (index == kTabAgenda && _highlightEventTitle != null) {
+                          if (index == kTabAgenda &&
+                              _highlightEventTitle != null) {
                             _highlightEventTitle = null;
-                            NumberedLogger.d('MainScaffold: Cleared highlightEventTitle on direct agenda tab click');
+                            NumberedLogger.d(
+                                'MainScaffold: Cleared highlightEventTitle on direct agenda tab click');
                             // Pop to root to ensure we start fresh
                             _popToRoot(kTabAgenda);
                           }
@@ -387,20 +393,20 @@ class _HomeFlow extends StatelessWidget {
               builder: (_) => ActivitiesScreen(),
               settings: settings,
             );
-          case '/organize-game':
+          case '/organize-match':
             return NavigationUtils.sharedAxisRoute(
               builder: (_) {
                 final args = settings.arguments;
-                if (args is Game) {
-                  return GameOrganizeScreen(initialGame: args);
+                if (args is Match) {
+                  return MatchOrganizeScreen(initialMatch: args as Match?);
                 }
-                return const GameOrganizeScreen();
+                return const MatchOrganizeScreen();
               },
               settings: settings,
             );
-          case '/discover-games':
+          case '/discover-matches':
             return NavigationUtils.sharedAxisRoute(
-              builder: (_) => const GamesJoinScreen(),
+              builder: (_) => const MatchesJoinScreen(),
               settings: settings,
             );
 
@@ -434,11 +440,13 @@ class _AgendaFlowState extends State<_AgendaFlow> {
     super.initState();
     // If we have a highlightEventTitle on initial build, push it after first frame
     if (widget.highlightEventTitle != null) {
-      NumberedLogger.d('_AgendaFlow initState: highlightEventTitle=${widget.highlightEventTitle}, will push after first frame');
+      NumberedLogger.d(
+          '_AgendaFlow initState: highlightEventTitle=${widget.highlightEventTitle}, will push after first frame');
       WidgetsBinding.instance.addPostFrameCallback((_) {
         final nav = widget.navigatorKey.currentState;
         if (nav != null && mounted) {
-          NumberedLogger.d('_AgendaFlow initState: Pushing route with highlightEventTitle=${widget.highlightEventTitle}');
+          NumberedLogger.d(
+              '_AgendaFlow initState: Pushing route with highlightEventTitle=${widget.highlightEventTitle}');
           nav.pushReplacement(
             MaterialPageRoute(
               builder: (_) => AgendaScreen(
@@ -455,19 +463,22 @@ class _AgendaFlowState extends State<_AgendaFlow> {
   @override
   void didUpdateWidget(_AgendaFlow oldWidget) {
     super.didUpdateWidget(oldWidget);
-    NumberedLogger.d('_AgendaFlow didUpdateWidget: old=${oldWidget.highlightEventTitle}, new=${widget.highlightEventTitle}');
+    NumberedLogger.d(
+        '_AgendaFlow didUpdateWidget: old=${oldWidget.highlightEventTitle}, new=${widget.highlightEventTitle}');
     // If highlightEventTitle changed (from null to value, value to null, or value to different value), push a new route
     if (widget.highlightEventTitle != oldWidget.highlightEventTitle) {
-      NumberedLogger.d('_AgendaFlow didUpdateWidget: highlightEventTitle changed, pushing new route');
+      NumberedLogger.d(
+          '_AgendaFlow didUpdateWidget: highlightEventTitle changed, pushing new route');
       // Pop to root first to clear any existing routes
       widget.navigatorKey.currentState?.popUntil((r) => r.isFirst);
       WidgetsBinding.instance.addPostFrameCallback((_) {
         final nav = widget.navigatorKey.currentState;
         if (nav != null && mounted) {
-          final key = widget.highlightEventTitle != null 
+          final key = widget.highlightEventTitle != null
               ? ValueKey('agenda_${widget.highlightEventTitle}')
               : const ValueKey('agenda');
-          NumberedLogger.d('_AgendaFlow didUpdateWidget: Executing pushReplacement with highlightEventTitle=${widget.highlightEventTitle}');
+          NumberedLogger.d(
+              '_AgendaFlow didUpdateWidget: Executing pushReplacement with highlightEventTitle=${widget.highlightEventTitle}');
           nav.pushReplacement(
             MaterialPageRoute(
               builder: (_) => AgendaScreen(
@@ -477,7 +488,8 @@ class _AgendaFlowState extends State<_AgendaFlow> {
             ),
           );
         } else {
-          NumberedLogger.w('_AgendaFlow didUpdateWidget: Navigator is null or widget not mounted');
+          NumberedLogger.w(
+              '_AgendaFlow didUpdateWidget: Navigator is null or widget not mounted');
         }
       });
     }
@@ -485,15 +497,17 @@ class _AgendaFlowState extends State<_AgendaFlow> {
 
   @override
   Widget build(BuildContext context) {
-    NumberedLogger.d('_AgendaFlow build: highlightEventTitle=${widget.highlightEventTitle}');
+    NumberedLogger.d(
+        '_AgendaFlow build: highlightEventTitle=${widget.highlightEventTitle}');
     return Navigator(
       key: widget.navigatorKey,
       onGenerateRoute: (settings) {
         // Use a key based on highlightEventTitle to force rebuild when it changes
-        final key = widget.highlightEventTitle != null 
+        final key = widget.highlightEventTitle != null
             ? ValueKey('agenda_${widget.highlightEventTitle}')
             : const ValueKey('agenda');
-        NumberedLogger.d('_AgendaFlow onGenerateRoute: creating AgendaScreen with key=$key, highlightEventTitle=${widget.highlightEventTitle}');
+        NumberedLogger.d(
+            '_AgendaFlow onGenerateRoute: creating AgendaScreen with key=$key, highlightEventTitle=${widget.highlightEventTitle}');
         return MaterialPageRoute(
           builder: (_) => AgendaScreen(
             key: key,
@@ -524,10 +538,10 @@ class _FriendsFlow extends StatelessWidget {
   }
 }
 
-class _MyGamesFlow extends StatelessWidget {
-  const _MyGamesFlow({required this.navigatorKey, this.args});
+class _MyMatchesFlow extends StatelessWidget {
+  const _MyMatchesFlow({required this.navigatorKey, this.args});
   final GlobalKey<NavigatorState> navigatorKey;
-  final MyGamesArgs? args;
+  final MyMatchesArgs? args;
 
   @override
   Widget build(BuildContext context) {
@@ -535,9 +549,9 @@ class _MyGamesFlow extends StatelessWidget {
       key: navigatorKey,
       onGenerateRoute: (settings) {
         return MaterialPageRoute(
-          builder: (_) => GamesMyScreen(
+          builder: (_) => MatchesMyScreen(
             initialTab: args?.initialTab ?? 0,
-            highlightGameId: args?.highlightGameId,
+            highlightMatchId: args?.highlightMatchId,
           ),
           settings: settings,
         );
@@ -546,10 +560,10 @@ class _MyGamesFlow extends StatelessWidget {
   }
 }
 
-class MyGamesArgs {
+class MyMatchesArgs {
   final int initialTab;
-  final String? highlightGameId;
-  const MyGamesArgs({this.initialTab = 0, this.highlightGameId});
+  final String? highlightMatchId;
+  const MyMatchesArgs({this.initialTab = 0, this.highlightMatchId});
 }
 
 // ---------------------------- Bottom Bar Wrapper ----------------------------
@@ -573,7 +587,7 @@ class _BottomBar extends ConsumerWidget {
           label: 'friends'.tr(),
         ),
         BottomNavigationBarItem(
-            icon: Icon(Icons.sports_soccer), label: 'my_games'.tr()),
+            icon: Icon(Icons.sports_soccer), label: 'my_matches'.tr()),
         BottomNavigationBarItem(icon: Icon(Icons.event), label: 'agenda'.tr()),
       ],
     );
