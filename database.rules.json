@@ -17,7 +17,7 @@
                 "dateTime"
             ],
             "$matchId": {
-                ".read": "auth != null && (data.child('isPublic').val() == true || data.child('organizerId').val() == auth.uid || data.child('players').hasChild(auth.uid))",
+                ".read": "auth != null && (data.child('isPublic').val() == true || data.child('organizerId').val() == auth.uid || data.child('players').hasChild(auth.uid) || (data.child('invites').hasChild(auth.uid) && (data.child('invites').child(auth.uid).val() == 'pending' || data.child('invites').child(auth.uid).child('status').val() == 'pending')))",
                 ".write": "auth != null && (data.child('organizerId').val() == auth.uid || (!data.exists() && newData.child('organizerId').val() == auth.uid))",
                 "organizerId": {
                     ".validate": "newData.val() == auth.uid || (!data.exists() && newData.val() == auth.uid)"

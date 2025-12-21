@@ -7,6 +7,59 @@
     {
       "type": "Feature",
       "properties": {
+        "@id": "node/12926188337",
+        "access": "yes",
+        "leisure": "fitness_station",
+        "sport": "fitness",
+        "lat": 51.7222438,
+        "lon": 5.3050724,
+        "address_display_name": "Polsbroek, De Italiaanse Buurt, Empel, 's-Hertogenbosch, Noord-Brabant, Nederland, 5235 GL, Nederland",
+        "address_short": "Polsbroek, 5235 GL, 's-Hertogenbosch, Nederland",
+        "address_super_short": "Polsbroek, 5235 GL",
+        "address_micro_short": "Polsbroek",
+        "images": [
+          "assets/images/fitness_stations/polsbroek_1.jpeg",
+          "assets/images/fitness_stations/polsbroek_2.jpeg"
+        ]
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          5.3050724,
+          51.7222438
+        ]
+      },
+      "id": "node/12926188337"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "leisure": "fitness_station",
+        "sport": "fitness",
+        "name": "Multi-sport SportPark",
+        "lat": 51.714405,
+        "lon": 5.303034,
+        "address_display_name": "Het Wielsem 2, 's-Hertogenbosch, Noord-Brabant, Nederland, 5231 BV, Nederland",
+        "address_short": "Het Wielsem 2, 5231 BV, 's-Hertogenbosch, Nederland",
+        "address_super_short": "Het Wielsem 2, 5231 BV",
+        "address_micro_short": "Het Wielsem 2",
+        "images": [
+          "assets/images/fitness_stations/wielsem_1.jpeg",
+          "assets/images/fitness_stations/wielsem_2.jpeg"
+        ]
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          5.303034,
+          51.714405
+        ]
+      },
+      "id": "multi_sport_sportpark_wielsem"
+    },
+    {
+      "type": "Feature",
+      "properties": {
         "@id": "way/1372204501",
         "access": "yes",
         "blind": "no",
@@ -47,29 +100,6 @@
         ]
       },
       "id": "way/1372204501"
-    },
-    {
-      "type": "Feature",
-      "properties": {
-        "@id": "node/12926188337",
-        "access": "yes",
-        "leisure": "fitness_station",
-        "sport": "fitness",
-        "lat": 51.7222438,
-        "lon": 5.3050724,
-        "address_display_name": "Polsbroek, De Italiaanse Buurt, Empel, 's-Hertogenbosch, Noord-Brabant, Nederland, 5235 GL, Nederland",
-        "address_short": "Polsbroek, 5235 GL, 's-Hertogenbosch, Nederland",
-        "address_super_short": "Polsbroek, 5235 GL",
-        "address_micro_short": "Polsbroek"
-      },
-      "geometry": {
-        "type": "Point",
-        "coordinates": [
-          5.3050724,
-          51.7222438
-        ]
-      },
-      "id": "node/12926188337"
     },
     {
       "type": "Feature",

@@ -128,12 +128,24 @@ class _ActivitiesScreenState extends ConsumerState<ActivitiesScreen>
           final subtitle = field['address_super_short']?.toString() ??
               field['address_short']?.toString();
 
+          // Get images array (same as sport containers)
+          final images = field['images'] as List<dynamic>?;
+          final imageUrls = images
+              ?.map((e) => e?.toString())
+              .whereType<String>()
+              .where((s) => s.isNotEmpty)
+              .toList();
+
+          NumberedLogger.d(
+              'Fitness station ${field['id']} has ${imageUrls?.length ?? 0} images: $imageUrls');
+
           return FitnessItem(
             id: field['id']?.toString() ?? '',
             title: title,
             address: subtitle,
             latitude: field['lat'] as double?,
             longitude: field['lon'] as double?,
+            imageUrls: imageUrls?.isNotEmpty == true ? imageUrls : null,
             name: field['name']?.toString(),
           );
         }).where((item) {

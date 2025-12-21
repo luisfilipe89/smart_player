@@ -116,6 +116,7 @@ flutter:
   assets:
     - assets/images/
     - assets/images/sport_contrainers/
+    - assets/images/fitness_stations/
     - assets/translations/
     - assets/fields/
     - assets/fields/output/

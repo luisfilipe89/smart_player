@@ -29,7 +29,7 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       resizeToAvoidBottomInset: false,
-      backgroundColor: const Color(0xFF181e35),
+      backgroundColor: const Color(0xFF2a3a52),
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(AppSpacing.lg),
@@ -41,32 +41,35 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> {
               Column(
                 children: [
                   // App Logo
-                  Container(
-                    color: const Color(
-                        0xFF181e35), // Match screen background exactly
-                    child: Image.asset(
-                      'assets/images/logo.png',
-                      width: 240,
-                      height: 240,
-                      fit: BoxFit.contain,
-                      errorBuilder: (context, error, stackTrace) {
-                        // Fallback to icon if image fails to load
-                        return Container(
-                          width: 120,
-                          height: 120,
-                          decoration: BoxDecoration(
-                            color: AppColors.primary,
-                            borderRadius: BorderRadius.circular(
-                              AppRadius.bigContainer,
+                  Transform.translate(
+                    offset: const Offset(0, 40),
+                    child: Container(
+                      color: const Color(
+                          0xFF2a3a52), // Match screen background exactly
+                      child: Image.asset(
+                        'assets/images/logo.png',
+                        width: 240,
+                        height: 240,
+                        fit: BoxFit.contain,
+                        errorBuilder: (context, error, stackTrace) {
+                          // Fallback to icon if image fails to load
+                          return Container(
+                            width: 120,
+                            height: 120,
+                            decoration: BoxDecoration(
+                              color: AppColors.primary,
+                              borderRadius: BorderRadius.circular(
+                                AppRadius.bigContainer,
+                              ),
                             ),
-                          ),
-                          child: const Icon(
-                            Icons.sports_basketball,
-                            size: 60,
-                            color: Colors.white,
-                          ),
-                        );
-                      },
+                            child: const Icon(
+                              Icons.sports_basketball,
+                              size: 60,
+                              color: Colors.white,
+                            ),
+                          );
+                        },
+                      ),
                     ),
                   ),
 

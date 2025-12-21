@@ -1395,50 +1395,6 @@
     {
       "type": "Feature",
       "properties": {
-        "@id": "way/1165690348",
-        "access": "yes",
-        "equipment": "yes",
-        "leisure": "pitch",
-        "sport": "soccer",
-        "lat": 51.712952225,
-        "lon": 5.36426075,
-        "address_display_name": "Bevrijdingspad, Molenhoek, Rosmalen, 's-Hertogenbosch, Noord-Brabant, Nederland, 5241 EE, Nederland",
-        "address_short": "Bevrijdingspad, 5241 EE, Rosmalen, Nederland",
-        "address_super_short": "Bevrijdingspad, 5241 EE",
-        "address_micro_short": "Bevrijdingspad"
-      },
-      "geometry": {
-        "type": "Polygon",
-        "coordinates": [
-          [
-            [
-              5.3640109,
-              51.7129722
-            ],
-            [
-              5.3643595,
-              51.7128098
-            ],
-            [
-              5.3645259,
-              51.7129384
-            ],
-            [
-              5.3641467,
-              51.7130885
-            ],
-            [
-              5.3640109,
-              51.7129722
-            ]
-          ]
-        ]
-      },
-      "id": "way/1165690348"
-    },
-    {
-      "type": "Feature",
-      "properties": {
         "@id": "way/1192486088",
         "access": "yes",
         "equipment": "yes",
