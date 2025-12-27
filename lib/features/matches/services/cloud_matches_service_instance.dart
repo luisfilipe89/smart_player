@@ -2305,6 +2305,23 @@ class CloudMatchesServiceInstance {
       // Commit all updates atomically
       await _database.ref().update(updates);
 
+      // Automatically add newly joined match to calendar (non-blocking)
+      // This helps participants keep track of their matches
+      CalendarService.addMatchToCalendar(match).then((eventId) {
+        if (eventId != null) {
+          // Calendar event added successfully
+          NumberedLogger.i(
+              'Match $matchId automatically added to calendar for user $userId');
+        } else {
+          // Calendar add failed - log but don't show error (match join succeeded)
+          NumberedLogger.w(
+              'Failed to add match $matchId to calendar for user $userId (non-critical)');
+        }
+      }).catchError((e) {
+        // Log error but don't interrupt user flow
+        NumberedLogger.w('Error adding match to calendar: $e');
+      });
+
       // Invalidate cache for the user who joined
       _invalidateCache(userId: userId);
       // Also invalidate organizer's cache if different
