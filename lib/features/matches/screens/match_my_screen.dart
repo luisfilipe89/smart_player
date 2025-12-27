@@ -360,13 +360,16 @@ class _MatchesMyScreenState extends ConsumerState<MatchesMyScreen>
         return Icons.sports_soccer;
       case 'basketball':
         return Icons.sports_basketball;
-      case 'tennis':
-        return Icons.sports_tennis;
       case 'volleyball':
         return Icons.sports_volleyball;
-      case 'badminton':
       case 'table_tennis':
+      case 'tennis':
+      case 'badminton':
         return Icons.sports_tennis;
+      case 'skateboard':
+        return Icons.skateboarding;
+      case 'boules':
+        return Icons.scatter_plot;
       case 'swimming':
         return Icons.pool;
       default:
@@ -1111,6 +1114,8 @@ class _MatchesMyScreenState extends ConsumerState<MatchesMyScreen>
                 fontWeight: FontWeight.w600,
                 letterSpacing: 0.1,
               ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
             subtitle: Column(
               crossAxisAlignment: CrossAxisAlignment.start,

@@ -434,7 +434,7 @@ class CloudMatchesServiceInstance {
 
       // Write each path individually (update() has issues with nested validation rules)
       // - matches/{id}
-      // - users/{uid}/createdMatchs/{id}
+      // - users/{uid}/createdMatches/{id}
       // - slots/{dateKey}/{fieldKey}/{timeKey} = true (already claimed in transaction)
       // Track what was written for rollback if any write fails
       bool matchWritten = false;
@@ -444,7 +444,10 @@ class CloudMatchesServiceInstance {
         await _database.ref('${DbPaths.matches}/$matchId').set(matchData);
         matchWritten = true;
 
-        await _database.ref('users/$userId/createdMatchs/$matchId').set({
+        await _usersRef
+            .child(DbPaths.userCreatedMatches(userId))
+            .child(matchId)
+            .set({
           'sport': matchWithId.sport,
           'dateTime': matchWithId.dateTime.toIso8601String(),
           'location': matchWithId.location,
@@ -455,8 +458,9 @@ class CloudMatchesServiceInstance {
         // Rollback any writes that succeeded
         if (indexWritten) {
           try {
-            await _database
-                .ref('users/$userId/createdMatchs/$matchId')
+            await _usersRef
+                .child(DbPaths.userCreatedMatches(userId))
+                .child(matchId)
                 .remove();
           } catch (rollbackError) {
             NumberedLogger.w(
@@ -821,11 +825,18 @@ class CloudMatchesServiceInstance {
       // The CalendarSyncService provider will handle syncing for the current user
       // This is a best-effort sync for the match data
       try {
+        // Ensure CalendarService is initialized before attempting to remove calendar event
+        await CalendarService.initialize();
         NumberedLogger.i(
             'Removing calendar event for cancelled match $matchId');
-        await CalendarService.removeMatchFromCalendar(matchId);
-        NumberedLogger.i(
-            'Successfully removed calendar event for match $matchId');
+        final removed = await CalendarService.removeMatchFromCalendar(matchId);
+        if (removed) {
+          NumberedLogger.i(
+              'Successfully removed calendar event for match $matchId');
+        } else {
+          NumberedLogger.w(
+              'Calendar event not found or already removed for match $matchId');
+        }
       } catch (e, st) {
         NumberedLogger.w(
             'Error removing calendar event for cancelled match: $e');
@@ -1658,8 +1669,10 @@ class CloudMatchesServiceInstance {
           if (!matchSnapshot.exists || matchSnapshot.value == null) continue;
           final match = Match.fromJson(
               Map<String, dynamic>.from(matchSnapshot.value as Map));
-          // Include upcoming matches (active or cancelled), and ensure user is actually in players list
-          if (match.dateTime.isAfter(now) && match.players.contains(userId)) {
+          // Include upcoming matches (active or cancelled)
+          // Trust the index as source of truth - if match is in index, include it
+          // The individual match stream will validate that user is in players list
+          if (match.dateTime.isAfter(now)) {
             matchesMap[match.id] = match;
           }
         } catch (e) {
@@ -1678,11 +1691,17 @@ class CloudMatchesServiceInstance {
     final joinedMatchsDataCache = <String, Match>{};
 
     // Helper to update watched matches when index changes
-    void updateWatchedJoinedMatchs(Set<String> matchIds) {
+    Future<void> updateWatchedJoinedMatchs(Set<String> matchIds) async {
+      NumberedLogger.i(
+          'updateWatchedJoinedMatchs called with ${matchIds.length} matches: ${matchIds.toList()}');
       // Cancel subscriptions for matches no longer in index
       final matchesToRemove = joinedMatchSubscriptions.keys
           .where((id) => !matchIds.contains(id))
           .toList();
+      if (matchesToRemove.isNotEmpty) {
+        NumberedLogger.i(
+            'Removing subscriptions for ${matchesToRemove.length} matches: $matchesToRemove');
+      }
       for (final matchId in matchesToRemove) {
         joinedMatchSubscriptions[matchId]?.cancel();
         joinedMatchSubscriptions.remove(matchId);
@@ -1692,6 +1711,32 @@ class CloudMatchesServiceInstance {
       // Add subscriptions for new matches
       for (final matchId in matchIds) {
         if (!joinedMatchSubscriptions.containsKey(matchId)) {
+          NumberedLogger.i('Adding subscription for new match: $matchId');
+          // Fetch match immediately to populate cache if valid, before subscribing to stream
+          // This ensures the match appears immediately if it's already valid
+          try {
+            final matchSnapshot = await _matchesRef.child(matchId).get();
+            if (matchSnapshot.exists) {
+              final match = Match.fromJson(
+                  Map<String, dynamic>.from(matchSnapshot.value as Map));
+              final isUpcoming = match.dateTime.isAfter(now);
+              final hasUser = match.players.contains(userId);
+              NumberedLogger.i(
+                  'Match $matchId: isUpcoming=$isUpcoming, hasUser=$hasUser, players=${match.players}');
+              if (isUpcoming && hasUser) {
+                joinedMatchsDataCache[matchId] = match;
+                NumberedLogger.i('Added match $matchId to cache immediately');
+              } else {
+                NumberedLogger.w(
+                    'Match $matchId not added to cache: isUpcoming=$isUpcoming, hasUser=$hasUser');
+              }
+            } else {
+              NumberedLogger.w('Match $matchId does not exist in database');
+            }
+          } catch (e) {
+            NumberedLogger.w('Error fetching match $matchId for cache: $e');
+          }
+
           final sub = watchMatch(matchId).listen(
             (match) {
               if (match != null &&
@@ -1720,7 +1765,7 @@ class CloudMatchesServiceInstance {
         }
       }
 
-      // IMPORTANT: Emit update after removing matches so the UI updates immediately
+      // IMPORTANT: Emit update after adding/removing matches so the UI updates immediately
       if (!joinedMatchsDataStreamController.isClosed) {
         joinedMatchsDataStreamController
             .add(Map<String, Match>.from(joinedMatchsDataCache));
@@ -1741,6 +1786,8 @@ class CloudMatchesServiceInstance {
     // Track current state
     Map<String, Match> organizedMatchs = {};
     Map<String, Match> joinedMatchs = {};
+    // Track which matchIds are currently in the index to avoid removing matches that are still being validated
+    final Set<String> currentIndexMatchIds = {};
 
     void emitCombined() {
       if (controller.isClosed) return;
@@ -1774,9 +1821,13 @@ class CloudMatchesServiceInstance {
 
     // Watch joined matches index stream (handles add/remove from index)
     joinedIndexSub = joinedMatchsStream.listen((matches) {
+      NumberedLogger.i(
+          'joinedMatchsStream emitted ${matches.length} matches: ${matches.keys.toList()}');
       // Update or add matches from index fetch
       for (final entry in matches.entries) {
         joinedMatchs[entry.key] = entry.value;
+        NumberedLogger.i(
+            'Added match ${entry.key} to joinedMatchs from index stream');
       }
       // Note: Don't remove matches here - let joinedMatchsDataStream handle removals
       // based on index watch, which will stop emitting for removed matches
@@ -1787,12 +1838,33 @@ class CloudMatchesServiceInstance {
 
     // Watch individual match data streams for joined matches (handles cancellations/updates)
     joinedDataSub = joinedMatchsDataStream.listen((matches) {
+      NumberedLogger.i(
+          'joinedMatchsDataStream emitted ${matches.length} matches: ${matches.keys.toList()}');
+      NumberedLogger.i(
+          'currentIndexMatchIds: ${currentIndexMatchIds.toList()}');
       // Update joined matches with latest data from individual streams
       for (final entry in matches.entries) {
         joinedMatchs[entry.key] = entry.value;
+        NumberedLogger.i(
+            'Updated match ${entry.key} in joinedMatchs from data stream');
       }
-      // Remove matches that are no longer in the cache (removed from index)
-      joinedMatchs.removeWhere((key, _) => !matches.containsKey(key));
+      // Only remove matches that are no longer in the index (not just missing from cache)
+      // This prevents removing matches that are still being validated by the individual match stream
+      final beforeRemove = joinedMatchs.keys.toSet();
+      joinedMatchs.removeWhere((key, _) {
+        final shouldRemove =
+            !matches.containsKey(key) && !currentIndexMatchIds.contains(key);
+        if (shouldRemove) {
+          NumberedLogger.i(
+              'Removing match $key from joinedMatchs (not in cache and not in index)');
+        }
+        return shouldRemove;
+      });
+      final afterRemove = joinedMatchs.keys.toSet();
+      if (beforeRemove != afterRemove) {
+        NumberedLogger.i(
+            'joinedMatchs changed: ${beforeRemove.difference(afterRemove)} removed, ${afterRemove.difference(beforeRemove)} added');
+      }
       emitCombined();
     }, onError: (e) {
       if (!controller.isClosed) controller.addError(e);
@@ -1804,17 +1876,29 @@ class CloudMatchesServiceInstance {
         .onValue
         .listen((event) {
       if (!event.snapshot.exists) {
-        updateWatchedJoinedMatchs({});
+        currentIndexMatchIds.clear();
+        updateWatchedJoinedMatchs({}).catchError((e) {
+          NumberedLogger.e('Error in updateWatchedJoinedMatchs: $e');
+        });
         return;
       }
       final joinedData =
           Map<dynamic, dynamic>.from(event.snapshot.value as Map);
       final matchIds = joinedData.keys.map((k) => k.toString()).toSet();
-      updateWatchedJoinedMatchs(matchIds);
+      NumberedLogger.i(
+          'Index watch: joinedMatchs index updated with ${matchIds.length} matches: ${matchIds.toList()}');
+      currentIndexMatchIds.clear();
+      currentIndexMatchIds.addAll(matchIds);
+      updateWatchedJoinedMatchs(matchIds).catchError((e) {
+        NumberedLogger.e('Error in updateWatchedJoinedMatchs: $e');
+      });
     }, onError: (error) {
       NumberedLogger.e('Error watching joined matches index: $error');
       // On error, try to update with empty set to clear cache
-      updateWatchedJoinedMatchs({});
+      currentIndexMatchIds.clear();
+      updateWatchedJoinedMatchs({}).catchError((e) {
+        NumberedLogger.e('Error in updateWatchedJoinedMatchs: $e');
+      });
     });
 
     // Initial fetch to populate data
@@ -1852,7 +1936,11 @@ class CloudMatchesServiceInstance {
         final joinedData =
             Map<dynamic, dynamic>.from(joinedSnapshot.value as Map);
         final joinedIds = joinedData.keys.map((k) => k.toString()).toSet();
-        updateWatchedJoinedMatchs(joinedIds);
+        currentIndexMatchIds.clear();
+        currentIndexMatchIds.addAll(joinedIds);
+        updateWatchedJoinedMatchs(joinedIds).catchError((e) {
+          NumberedLogger.e('Error in updateWatchedJoinedMatchs: $e');
+        });
 
         for (final matchId in joinedIds) {
           try {
@@ -1860,8 +1948,9 @@ class CloudMatchesServiceInstance {
             if (matchSnapshot.exists) {
               final match = Match.fromJson(
                   Map<String, dynamic>.from(matchSnapshot.value as Map));
-              if (match.dateTime.isAfter(now) &&
-                  match.players.contains(userId)) {
+              // Trust the index as source of truth - if match is in index, include it
+              // The individual match stream will validate that user is in players list
+              if (match.dateTime.isAfter(now)) {
                 joinedMatchs[match.id] = match;
               }
             }
@@ -2203,7 +2292,9 @@ class CloudMatchesServiceInstance {
       updates['users/$userId/matchInvites/$matchId'] = null;
 
       // Add match to user's joined matches
-      updates['users/$userId/joinedMatchs/$matchId'] = {
+      // Use DbPaths to ensure consistency with the path being watched
+      // DbPaths.userJoinedMatches returns '$uid/joinedMatches', so we need 'users/$uid/joinedMatches'
+      updates['${DbPaths.users}/$userId/joinedMatches/$matchId'] = {
         'sport': match.sport,
         'dateTime': match.dateTime.toIso8601String(),
         'location': match.location,

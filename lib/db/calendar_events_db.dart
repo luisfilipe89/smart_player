@@ -52,7 +52,7 @@ class CalendarEventsDb {
 
       _database = await openDatabase(
         path,
-        version: 2,
+        version: 3,
         onCreate: (db, version) async {
           await db.execute('''
             CREATE TABLE calendar_events (
@@ -69,12 +69,56 @@ class CalendarEventsDb {
               name: 'CalendarEventsDb');
         },
         onUpgrade: (db, oldVersion, newVersion) async {
-          if (oldVersion < 2) {
-            // Add index for existing databases
-            await db.execute('''
-              CREATE INDEX IF NOT EXISTS idx_matchId ON calendar_events(matchId)
-            ''');
-            developer.log('Calendar events database upgraded to version 2',
+          if (oldVersion < 3) {
+            // Check if table exists and has correct schema
+            try {
+              // Try to query the table to see if it has the correct schema
+              await db.query('calendar_events', limit: 1);
+              // If query succeeds, check if matchId column exists
+              final tableInfo =
+                  await db.rawQuery("PRAGMA table_info(calendar_events)");
+              final hasMatchId =
+                  tableInfo.any((column) => column['name'] == 'matchId');
+
+              if (!hasMatchId) {
+                // Table exists but has wrong schema - recreate it
+                developer.log(
+                    'Recreating calendar_events table with correct schema',
+                    name: 'CalendarEventsDb');
+                await db.execute('DROP TABLE IF EXISTS calendar_events');
+                await db.execute('''
+                  CREATE TABLE calendar_events (
+                    matchId TEXT PRIMARY KEY,
+                    eventId TEXT NOT NULL,
+                    calendarId TEXT NOT NULL
+                  )
+                ''');
+                await db.execute('''
+                  CREATE INDEX IF NOT EXISTS idx_matchId ON calendar_events(matchId)
+                ''');
+              } else {
+                // Just add index if missing
+                await db.execute('''
+                  CREATE INDEX IF NOT EXISTS idx_matchId ON calendar_events(matchId)
+                ''');
+              }
+            } catch (e) {
+              // Table might not exist or has wrong schema - recreate it
+              developer.log('Recreating calendar_events table: $e',
+                  name: 'CalendarEventsDb');
+              await db.execute('DROP TABLE IF EXISTS calendar_events');
+              await db.execute('''
+                CREATE TABLE calendar_events (
+                  matchId TEXT PRIMARY KEY,
+                  eventId TEXT NOT NULL,
+                  calendarId TEXT NOT NULL
+                )
+              ''');
+              await db.execute('''
+                CREATE INDEX IF NOT EXISTS idx_matchId ON calendar_events(matchId)
+              ''');
+            }
+            developer.log('Calendar events database upgraded to version 3',
                 name: 'CalendarEventsDb');
           }
         },
@@ -107,7 +151,8 @@ class CalendarEventsDb {
         ).toMap(),
         conflictAlgorithm: ConflictAlgorithm.replace,
       );
-      developer.log('Calendar event inserted: matchId=$matchId, eventId=$eventId',
+      developer.log(
+          'Calendar event inserted: matchId=$matchId, eventId=$eventId',
           name: 'CalendarEventsDb');
       return true;
     } catch (e, stackTrace) {

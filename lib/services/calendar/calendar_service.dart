@@ -114,7 +114,8 @@ class CalendarService {
 
     // Add metadata
     descriptionParts.add('Sport: ${match.sport.toUpperCase()}');
-    descriptionParts.add('Players: ${match.currentPlayers}/${match.maxPlayers}');
+    descriptionParts
+        .add('Players: ${match.currentPlayers}/${match.maxPlayers}');
 
     // Add optional fields
     if (match.equipment != null && match.equipment!.isNotEmpty) {
@@ -336,6 +337,11 @@ class CalendarService {
   /// Remove calendar event when match is cancelled
   static Future<bool> removeMatchFromCalendar(String matchId) async {
     try {
+      // Ensure CalendarService is initialized before attempting to remove event
+      if (_db == null) {
+        await initialize();
+      }
+
       // Get stored event ID
       final eventInfo = await _db?.getCalendarEvent(matchId);
       if (eventInfo == null) {
@@ -426,7 +432,7 @@ class CalendarService {
   static DateTime _parseEventDateTime(String dateTimeStr) {
     // Try to parse common date formats
     final now = DateTime.now();
-    
+
     // Try ISO format first
     final isoParsed = DateTime.tryParse(dateTimeStr);
     if (isoParsed != null) return isoParsed;

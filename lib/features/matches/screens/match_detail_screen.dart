@@ -35,13 +35,24 @@ class _MatchDetailScreenState extends ConsumerState<MatchDetailScreen> {
   }
 
   IconData _iconForSport(String sport) {
-    switch (sport) {
+    switch (sport.toLowerCase()) {
       case 'soccer':
+      case 'football':
         return Icons.sports_soccer;
       case 'basketball':
         return Icons.sports_basketball;
+      case 'volleyball':
+        return Icons.sports_volleyball;
+      case 'table_tennis':
       case 'tennis':
+      case 'badminton':
         return Icons.sports_tennis;
+      case 'skateboard':
+        return Icons.skateboarding;
+      case 'boules':
+        return Icons.scatter_plot;
+      case 'swimming':
+        return Icons.pool;
       default:
         return Icons.sports;
     }
@@ -179,7 +190,12 @@ class _MatchDetailScreenState extends ConsumerState<MatchDetailScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(widget.match.location, style: AppTextStyles.h3),
+                        Text(
+                          widget.match.location,
+                          style: AppTextStyles.h3,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                         const SizedBox(height: 2),
                         Text(
                             '${widget.match.getFormattedDateLocalized((key) => key.tr())} • ${widget.match.formattedTime}',

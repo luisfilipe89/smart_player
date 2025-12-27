@@ -522,6 +522,8 @@ class _MatchesJoinScreenState extends ConsumerState<MatchesJoinScreen> {
                               fontWeight: FontWeight.w600,
                               letterSpacing: 0.1,
                             ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
                           Text(
                             '${currentMatch.getFormattedDateLocalized((key) => key.tr())} at ${currentMatch.formattedTime}',
@@ -1316,11 +1318,24 @@ class _MatchesJoinScreenState extends ConsumerState<MatchesJoinScreen> {
   }
 
   IconData _getSportIcon(String sport) {
-    switch (sport) {
+    switch (sport.toLowerCase()) {
       case 'soccer':
+      case 'football':
         return Icons.sports_soccer;
       case 'basketball':
         return Icons.sports_basketball;
+      case 'volleyball':
+        return Icons.sports_volleyball;
+      case 'table_tennis':
+      case 'tennis':
+      case 'badminton':
+        return Icons.sports_tennis;
+      case 'skateboard':
+        return Icons.skateboarding;
+      case 'boules':
+        return Icons.scatter_plot;
+      case 'swimming':
+        return Icons.pool;
       default:
         return Icons.sports;
     }

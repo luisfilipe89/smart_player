@@ -28,12 +28,18 @@ class MatchFormNotifier extends StateNotifier<MatchFormState> {
     }
   }
 
-  void _initializeFromMatch() {
+  Future<void> _initializeFromMatch() async {
     if (_initialMatch == null) return;
 
     // Load fields for the selected sport
     if (state.sport != null) {
-      _loadFields();
+      await _loadFields();
+    }
+
+    // Load weather and booked slots if field and date are already set (for editing)
+    if (state.field != null && state.date != null) {
+      _loadWeather();
+      _loadBookedSlots();
     }
 
     // Load existing invites
@@ -231,8 +237,22 @@ class MatchFormNotifier extends StateNotifier<MatchFormState> {
         return distA.compareTo(distB);
       });
 
+      // Update selected field to match the updated field from availableFields
+      // This ensures reference equality works for UI selection highlighting
+      Map<String, dynamic>? updatedSelectedField = state.field;
+      if (state.field != null) {
+        final match = FieldDataProcessor.findMatchingField(
+          state.field!,
+          fieldsWithDistances,
+        );
+        if (match.isNotEmpty) {
+          updatedSelectedField = match;
+        }
+      }
+
       state = state.copyWith(
         availableFields: fieldsWithDistances,
+        field: updatedSelectedField,
         isCalculatingDistances: false,
       );
 
@@ -241,8 +261,20 @@ class MatchFormNotifier extends StateNotifier<MatchFormState> {
       NumberedLogger.e('Failed to calculate field distances: $e');
       // If location fails (e.g., in emulator), still show fields without distance sorting
       // This prevents the app from breaking when location is unavailable
+      // Still try to update selected field reference even if distances failed
+      Map<String, dynamic>? updatedSelectedField = state.field;
+      if (state.field != null) {
+        final match = FieldDataProcessor.findMatchingField(
+          state.field!,
+          fields,
+        );
+        if (match.isNotEmpty) {
+          updatedSelectedField = match;
+        }
+      }
       state = state.copyWith(
         availableFields: fields, // Show fields without distance
+        field: updatedSelectedField,
         isCalculatingDistances: false,
       );
       _applyFieldSearchFilter();
