@@ -16,7 +16,6 @@ class HelpScreen extends StatefulWidget {
 
 class _HelpScreenState extends State<HelpScreen> {
   String _version = '';
-  static const String _faqUrl = 'https://example.com/help';
   static const String _supportEmail = 'support@smartplayer.nl';
   static const String _supportWhatsApp = '+31682081767';
 
@@ -32,16 +31,6 @@ class _HelpScreenState extends State<HelpScreen> {
       if (!mounted) return;
       setState(() => _version = '${info.version} (${info.buildNumber})');
     } catch (_) {}
-  }
-
-  Future<void> _openUrl(String url) async {
-    final uri = Uri.parse(url);
-    if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('help_could_not_open_link'.tr())),
-      );
-    }
   }
 
   Future<void> _emailSupport({required String subject}) async {
@@ -90,12 +79,6 @@ class _HelpScreenState extends State<HelpScreen> {
             _buildSectionCard(
               child: Column(
                 children: [
-                  _buildLinkTile(
-                    icon: Icons.question_mark_outlined,
-                    title: 'help_faqs'.tr(),
-                    onTap: () => _openUrl(_faqUrl),
-                  ),
-                  const Divider(height: 1, color: AppColors.lightgrey),
                   _buildLinkTile(
                     icon: Icons.mail_outline,
                     title: 'help_contact_support'.tr(),

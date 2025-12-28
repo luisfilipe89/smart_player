@@ -701,7 +701,11 @@ export const onMatchUpdate = onValueWritten("/matches/{matchId}", async (event) 
         const tokensObj = tokensSnap.val() || {};
         const tokens = Object.keys(tokensObj);
 
-        if (tokens.length > 0) {
+        // Check if match update notifications are enabled for this user
+        const notificationType = wasCancelled ? "match_cancelled" : "match_edited";
+        const isEnabled = await isNotificationTypeEnabled(uid, notificationType);
+
+        if (tokens.length > 0 && isEnabled) {
           const title = wasCancelled ? "Match Cancelled" : "Match Updated";
           const body = wasCancelled
             ? `The ${sport} at ${location} has been cancelled`
@@ -809,6 +813,49 @@ export const processNotificationRequest = onValueCreated(
   }
 );
 
+// Helper function to check if notification type is enabled for a user
+async function isNotificationTypeEnabled(
+  userId: string,
+  notificationType: string
+): Promise<boolean> {
+  try {
+    const settingsSnap = await admin
+      .database()
+      .ref(`/users/${userId}/settings/notifications`)
+      .once("value");
+
+    const settings = settingsSnap.val() || {};
+
+    // Master toggle - if disabled, all notifications are off
+    if (settings.enabled === false) {
+      return false;
+    }
+
+    // Default to enabled if not set
+    if (settings.enabled === undefined) {
+      return true;
+    }
+
+    // Check specific notification type
+    switch (notificationType) {
+      case "friend_request":
+      case "friend_request_accepted":
+        return settings.friendRequests !== false; // Default true
+      case "match_invite":
+        return settings.matchInvites !== false; // Default true
+      case "match_edited":
+      case "match_cancelled":
+        return settings.matchUpdates !== false; // Default true
+      default:
+        return true;
+    }
+  } catch (error) {
+    console.error(`Error checking notification settings for ${userId}:`, error);
+    // Default to enabled on error
+    return true;
+  }
+}
+
 // RTDB → push notifications
 export const sendNotification = onValueCreated(
   "/users/{userId}/notifications/{notificationId}",
@@ -831,6 +878,14 @@ export const sendNotification = onValueCreated(
     // Log all notifications for debugging to find where match_modified comes from
     if (notification.type === "match_modified") {
       console.log(`[DEBUG] match_modified notification detected - userId: ${userId}, notificationId: ${notificationId}, data:`, JSON.stringify(notification.data));
+    }
+
+    // Check user's notification preferences
+    const notificationType = notification.type || "default";
+    const isEnabled = await isNotificationTypeEnabled(userId, notificationType);
+    if (!isEnabled) {
+      console.log(`Notification ${notificationType} disabled for user ${userId}, skipping FCM`);
+      return;
     }
 
     try {
@@ -973,20 +1028,11 @@ export const onMatchInviteCreate = onValueCreated(
     const invite = event.data.val() || {};
 
     try {
-      const tokensSnap = await admin
-        .database()
-        .ref(`/users/${inviteeUid}/fcmTokens`)
-        .once("value");
-      const tokensObj = tokensSnap.val() || {};
-      const tokens = Object.keys(tokensObj);
-      if (!tokens.length) {
-        console.log(`No tokens for invitee ${inviteeUid}`);
-        return;
-      }
+      const db = admin.database();
+      const now = Date.now();
 
       // Get match data to retrieve sport and organizerId
-      const matchSnap = await admin
-        .database()
+      const matchSnap = await db
         .ref(`/matches/${matchId}`)
         .once("value");
       const match = matchSnap.val() || {};
@@ -1010,6 +1056,40 @@ export const onMatchInviteCreate = onValueCreated(
       // Map soccer to "football"; otherwise use sport value
       const sportWord = rawSport.toLowerCase() === "soccer" ? "football" : rawSport;
 
+      // Create notification record (always created for in-app display)
+      const notificationId = `match_invite_${matchId}_${now}_${inviteeUid}`;
+      const notificationPath = `/users/${inviteeUid}/notifications/${notificationId}`;
+
+      await db.ref(notificationPath).set({
+        type: "match_invite",
+        data: {
+          matchId,
+          fromName: organizerName,
+          sport: sportWord,
+        },
+        timestamp: now,
+        read: false,
+      });
+
+      console.log(`[match_invite] Created notification record for user ${inviteeUid} for match ${matchId}`);
+
+      // Check if match invite notifications are enabled for the invitee
+      const isEnabled = await isNotificationTypeEnabled(inviteeUid, "match_invite");
+      if (!isEnabled) {
+        console.log(`Match invite notifications disabled for user ${inviteeUid}, skipping FCM`);
+        return;
+      }
+
+      const tokensSnap = await db
+        .ref(`/users/${inviteeUid}/fcmTokens`)
+        .once("value");
+      const tokensObj = tokensSnap.val() || {};
+      const tokens = Object.keys(tokensObj);
+      if (!tokens.length) {
+        console.log(`No tokens for invitee ${inviteeUid}`);
+        return;
+      }
+
       const message: admin.messaging.MulticastMessage = {
         notification: {
           title: "Match Invitation",
@@ -1018,13 +1098,14 @@ export const onMatchInviteCreate = onValueCreated(
         data: {
           type: "discover",
           matchId,
+          notificationId,
         },
         tokens,
       };
 
       const res = await admin.messaging().sendEachForMulticast(message);
       console.log(
-        `Invite push: sent ${res.successCount} of ${tokens.length} to invitee ${inviteeUid} for match ${matchId}`
+        `[match_invite] Sent ${res.successCount} of ${tokens.length} FCM notifications to invitee ${inviteeUid} for match ${matchId}`
       );
 
       if (res.failureCount > 0) {
@@ -1045,14 +1126,14 @@ export const onMatchInviteCreate = onValueCreated(
           invalid.forEach((t) => {
             updates[`/users/${inviteeUid}/fcmTokens/${t}`] = null;
           });
-          await admin.database().ref().update(updates);
+          await db.ref().update(updates);
           console.log(
             `Removed ${invalid.length} invalid tokens for ${inviteeUid}`
           );
         }
       }
     } catch (err) {
-      console.error("Error sending invite push:", err);
+      console.error("[match_invite] Error sending invite notification:", err);
     }
   }
 );

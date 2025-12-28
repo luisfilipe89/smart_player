@@ -1,11 +1,17 @@
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:firebase_database/firebase_database.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:move_young/db/db_paths.dart';
 import 'dart:async';
 
 /// NotificationSettingsService for managing notification preferences
+/// Syncs with Firebase for cross-device support, with local storage as fallback
 class NotificationSettingsService {
   final SharedPreferences _prefs;
-  
-  // Preference keys
+  final FirebaseDatabase _database;
+  final FirebaseAuth _auth;
+
+  // Preference keys for local storage
   static const String _keyNotificationsEnabled = 'notifications_enabled';
   static const String _keyFriendRequests = 'notifications_friend_requests';
   static const String _keyMatchInvites = 'notifications_match_invites';
@@ -16,23 +22,88 @@ class NotificationSettingsService {
   bool _friendRequests = true;
   bool _matchInvites = true;
   bool _matchUpdates = true;
-  
+
   final StreamController<Map<String, bool>> _settingsController =
       StreamController<Map<String, bool>>.broadcast();
 
-  NotificationSettingsService(this._prefs);
+  NotificationSettingsService(this._prefs, this._database, this._auth);
 
   /// Initialize the service and load saved preferences
+  /// Tries Firebase first, falls back to local storage, then defaults
   Future<void> initialize() async {
     try {
+      final uid = _auth.currentUser?.uid;
+
+      if (uid != null) {
+        // Try to load from Firebase first
+        try {
+          final settingsSnap = await _database
+              .ref(DbPaths.userSettingsNotificationsRoot(uid))
+              .once();
+
+          if (settingsSnap.snapshot.exists) {
+            final data = settingsSnap.snapshot.value as Map<dynamic, dynamic>?;
+            if (data != null) {
+              _notificationsEnabled = data['enabled'] as bool? ?? true;
+              _friendRequests = data['friendRequests'] as bool? ?? true;
+              _matchInvites = data['matchInvites'] as bool? ?? true;
+              _matchUpdates = data['matchUpdates'] as bool? ?? true;
+
+              // Sync to local storage for offline support
+              await _syncToLocal();
+              _emitSettings();
+              return;
+            }
+          }
+        } catch (e) {
+          // Firebase failed, fall back to local storage
+        }
+      }
+
+      // Fall back to local storage
       _notificationsEnabled = _prefs.getBool(_keyNotificationsEnabled) ?? true;
       _friendRequests = _prefs.getBool(_keyFriendRequests) ?? true;
       _matchInvites = _prefs.getBool(_keyMatchInvites) ?? true;
       _matchUpdates = _prefs.getBool(_keyMatchUpdates) ?? true;
+
+      // If we have a user and local values exist, sync to Firebase
+      if (uid != null) {
+        await _syncToFirebase();
+      }
+
       _emitSettings();
     } catch (e) {
-      // If SharedPreferences fails, use default values
+      // If everything fails, use default values
       _emitSettings();
+    }
+  }
+
+  /// Sync current settings to local storage
+  Future<void> _syncToLocal() async {
+    try {
+      await _prefs.setBool(_keyNotificationsEnabled, _notificationsEnabled);
+      await _prefs.setBool(_keyFriendRequests, _friendRequests);
+      await _prefs.setBool(_keyMatchInvites, _matchInvites);
+      await _prefs.setBool(_keyMatchUpdates, _matchUpdates);
+    } catch (e) {
+      // Ignore local storage errors
+    }
+  }
+
+  /// Sync current settings to Firebase
+  Future<void> _syncToFirebase() async {
+    final uid = _auth.currentUser?.uid;
+    if (uid == null) return;
+
+    try {
+      await _database.ref(DbPaths.userSettingsNotificationsRoot(uid)).set({
+        'enabled': _notificationsEnabled,
+        'friendRequests': _friendRequests,
+        'matchInvites': _matchInvites,
+        'matchUpdates': _matchUpdates,
+      });
+    } catch (e) {
+      // Ignore Firebase errors - local storage will be used
     }
   }
 
@@ -61,7 +132,7 @@ class NotificationSettingsService {
   /// Check if a specific notification type is enabled
   bool isNotificationTypeEnabled(String type) {
     if (!_notificationsEnabled) return false;
-    
+
     switch (type) {
       case 'friend_requests':
         return _friendRequests;
@@ -78,7 +149,8 @@ class NotificationSettingsService {
   Future<void> setNotificationsEnabled(bool value) async {
     _notificationsEnabled = value;
     try {
-      await _prefs.setBool(_keyNotificationsEnabled, value);
+      await _syncToLocal();
+      await _syncToFirebase();
       _emitSettings();
     } catch (e) {
       _emitSettings();
@@ -89,7 +161,8 @@ class NotificationSettingsService {
   Future<void> setFriendRequests(bool value) async {
     _friendRequests = value;
     try {
-      await _prefs.setBool(_keyFriendRequests, value);
+      await _syncToLocal();
+      await _syncToFirebase();
       _emitSettings();
     } catch (e) {
       _emitSettings();
@@ -100,7 +173,8 @@ class NotificationSettingsService {
   Future<void> setMatchInvites(bool value) async {
     _matchInvites = value;
     try {
-      await _prefs.setBool(_keyMatchInvites, value);
+      await _syncToLocal();
+      await _syncToFirebase();
       _emitSettings();
     } catch (e) {
       _emitSettings();
@@ -111,7 +185,8 @@ class NotificationSettingsService {
   Future<void> setMatchUpdates(bool value) async {
     _matchUpdates = value;
     try {
-      await _prefs.setBool(_keyMatchUpdates, value);
+      await _syncToLocal();
+      await _syncToFirebase();
       _emitSettings();
     } catch (e) {
       _emitSettings();
@@ -148,4 +223,3 @@ class NotificationSettingsService {
     _settingsController.close();
   }
 }
-

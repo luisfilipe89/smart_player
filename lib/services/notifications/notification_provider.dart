@@ -5,7 +5,6 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:move_young/navigation/main_scaffold.dart';
 import 'package:move_young/navigation/deep_links.dart';
 import 'package:move_young/navigation/route_registry.dart';
-import 'package:move_young/services/system/notification_settings_provider.dart';
 
 // Flutter Local Notifications plugin provider
 final flutterLocalNotificationsProvider =
@@ -127,9 +126,8 @@ final fcmTokenProvider = FutureProvider.autoDispose<String?>((ref) async {
 // Helper class for notification actions
 class NotificationActions {
   final NotificationServiceInstance _notificationService;
-  final NotificationSettingsActions? _settingsActions;
 
-  NotificationActions(this._notificationService, this._settingsActions);
+  NotificationActions(this._notificationService);
 
   Future<void> initialize({
     Function(Map<String, dynamic>)? onDeepLinkNavigation,
@@ -155,20 +153,12 @@ class NotificationActions {
         payload: payload,
       );
   Future<void> sendFriendRequestNotification(String toUid, String fromUid) async {
-    // Check if friend request notifications are enabled
-    if (_settingsActions != null && 
-        !_settingsActions!.isNotificationTypeEnabled('friend_requests')) {
-      return; // User has disabled friend request notifications
-    }
+    // Backend will check receiver's preferences before sending FCM
     await _notificationService.sendFriendRequestNotification(toUid, fromUid);
   }
   
   Future<void> sendFriendAcceptedNotification(String toUid, String fromUid) async {
-    // Check if friend request notifications are enabled (friend accepted is part of friend requests)
-    if (_settingsActions != null && 
-        !_settingsActions!.isNotificationTypeEnabled('friend_requests')) {
-      return; // User has disabled friend request notifications
-    }
+    // Backend will check receiver's preferences before sending FCM
     await _notificationService.sendFriendAcceptedNotification(toUid, fromUid);
   }
   
@@ -181,20 +171,12 @@ class NotificationActions {
         removerUid: removerUid,
       );
   Future<void> sendMatchEditedNotification(String matchId) async {
-    // Check if match update notifications are enabled
-    if (_settingsActions != null && 
-        !_settingsActions!.isNotificationTypeEnabled('match_updates')) {
-      return; // User has disabled match update notifications
-    }
+    // Backend will check receiver's preferences before sending FCM
     await _notificationService.sendMatchEditedNotification(matchId);
   }
   
   Future<void> sendMatchCancelledNotification(String matchId) async {
-    // Check if match update notifications are enabled
-    if (_settingsActions != null && 
-        !_settingsActions!.isNotificationTypeEnabled('match_updates')) {
-      return; // User has disabled match update notifications
-    }
+    // Backend will check receiver's preferences before sending FCM
     await _notificationService.sendMatchCancelledNotification(matchId);
   }
 }
@@ -202,6 +184,5 @@ class NotificationActions {
 // Notification actions provider (for notification operations)
 final notificationActionsProvider = Provider<NotificationActions>((ref) {
   final notificationService = ref.watch(notificationServiceProvider);
-  final settingsActions = ref.watch(notificationSettingsActionsProvider);
-  return NotificationActions(notificationService, settingsActions);
+  return NotificationActions(notificationService);
 });

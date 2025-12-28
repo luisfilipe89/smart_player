@@ -1,13 +1,17 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'notification_settings_service.dart';
 import 'package:move_young/providers/infrastructure/shared_preferences_provider.dart';
+import 'package:move_young/providers/infrastructure/firebase_providers.dart';
 
 // NotificationSettingsService provider with dependency injection
 final notificationSettingsServiceProvider = Provider<NotificationSettingsService?>((ref) {
   final prefsAsync = ref.watch(sharedPreferencesProvider);
+  final firebaseDatabase = ref.watch(firebaseDatabaseProvider);
+  final firebaseAuth = ref.watch(firebaseAuthProvider);
+  
   return prefsAsync.when(
     data: (prefs) {
-      final service = NotificationSettingsService(prefs);
+      final service = NotificationSettingsService(prefs, firebaseDatabase, firebaseAuth);
       // Dispose service when provider is disposed to prevent memory leaks
       ref.onDispose(() => service.dispose());
       return service;

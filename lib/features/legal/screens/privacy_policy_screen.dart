@@ -86,13 +86,6 @@ class PrivacyPolicyScreen extends StatelessWidget {
                     'privacy_rights_content'.tr(),
                     style: AppTextStyles.body,
                   ),
-                  const SizedBox(height: AppSpacing.md),
-                  Text('privacy_contact_title'.tr(), style: AppTextStyles.h3),
-                  const SizedBox(height: AppSpacing.sm),
-                  Text(
-                    'privacy_contact_email'.tr(),
-                    style: AppTextStyles.body,
-                  ),
                 ],
               ),
             ),

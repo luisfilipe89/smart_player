@@ -36,6 +36,18 @@ class DbPaths {
   static String userShareEmail(String uid) =>
       '$users/$uid/settings/profile/shareEmail';
 
+  // Notification settings
+  static String userSettingsNotificationsRoot(String uid) =>
+      '$users/$uid/settings/notifications';
+  static String userNotificationEnabled(String uid) =>
+      '$users/$uid/settings/notifications/enabled';
+  static String userNotificationFriendRequests(String uid) =>
+      '$users/$uid/settings/notifications/friendRequests';
+  static String userNotificationMatchInvites(String uid) =>
+      '$users/$uid/settings/notifications/matchInvites';
+  static String userNotificationMatchUpdates(String uid) =>
+      '$users/$uid/settings/notifications/matchUpdates';
+
   // Matches subpaths
   static String match(String matchId) => '$matches/$matchId';
   static String matchPlayers(String matchId) => '$matches/$matchId/players';

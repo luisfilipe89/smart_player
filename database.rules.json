@@ -127,6 +127,11 @@
                 "settings": {
                     "profile": {
                         ".read": "auth != null"
+                    },
+                    "notifications": {
+                        ".read": "auth != null && (auth.uid == $uid || root.child('users').child(auth.uid).child('friends').child($uid).exists())",
+                        ".write": "auth != null && auth.uid == $uid",
+                        ".validate": "newData.hasChildren(['enabled', 'friendRequests', 'matchInvites', 'matchUpdates']) && newData.child('enabled').isBoolean() && newData.child('friendRequests').isBoolean() && newData.child('matchInvites').isBoolean() && newData.child('matchUpdates').isBoolean()"
                     }
                 }
             }
