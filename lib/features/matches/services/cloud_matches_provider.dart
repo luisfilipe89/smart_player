@@ -1,7 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:move_young/features/matches/services/cloud_matches_service_instance.dart';
 import 'package:move_young/features/matches/models/match.dart';
-import 'package:move_young/services/notifications/notification_provider.dart';
 import 'package:move_young/providers/infrastructure/firebase_providers.dart';
 
 /// Provider for CloudMatchesServiceInstance with dependency injection.
@@ -13,12 +12,10 @@ final cloudMatchesServiceProvider =
     Provider<CloudMatchesServiceInstance>((ref) {
   final firebaseDatabase = ref.watch(firebaseDatabaseProvider);
   final firebaseAuth = ref.watch(firebaseAuthProvider);
-  final notificationService = ref.watch(notificationServiceProvider);
 
   return CloudMatchesServiceInstance(
     firebaseDatabase,
     firebaseAuth,
-    notificationService,
   );
 });
 

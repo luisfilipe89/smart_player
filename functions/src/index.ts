@@ -274,92 +274,11 @@ export const onMailNotificationCreate = onValueCreated(
           timestamp: now,
           read: false,
         });
-      } else if ((type === "match_edited" || type === "match_cancelled") && matchId) {
-        // Fan-out match edited/cancelled notifications to all players and invited users (excluding organizer)
-        console.log(`[${type}] Processing notification for match ${matchId}`);
-        const matchSnap = await db.ref(`/matches/${matchId}`).once("value");
-        if (!matchSnap.exists()) {
-          console.error(`[${type}] Match ${matchId} does not exist`);
-          return;
-        }
-
-        const match = matchSnap.val() || {};
-        const organizerId = (match.organizerId || "").toString();
-        console.log(`[${type}] Match ${matchId} found, organizer: ${organizerId}`);
-
-        // Get all players who have joined the match
-        let players: string[] = [];
-        if (Array.isArray(match.players)) {
-          players = match.players.map((v: any) => String(v));
-        } else if (match.players && typeof match.players === "object") {
-          players = Object.values(match.players).map((v: any) => String(v));
-        }
-        console.log(`[${type}] Found ${players.length} players: ${players.join(", ")}`);
-
-        // Get all users who have been invited (pending or accepted)
-        const invitesSnap = await db.ref(`/matches/${matchId}/invites`).once("value");
-        const invitedUsers = new Set<string>();
-        if (invitesSnap.exists()) {
-          const invites = invitesSnap.val() || {};
-          for (const uid in invites) {
-            const invite = invites[uid];
-            // Handle both Map and String formats
-            let status = "pending";
-            if (typeof invite === "object" && invite !== null) {
-              status = invite.status || "pending";
-            } else if (typeof invite === "string") {
-              status = invite;
-            }
-            // Include pending and accepted invites (not declined)
-            if (status === "pending" || status === "accepted") {
-              invitedUsers.add(uid);
-            }
-          }
-        }
-        console.log(`[${type}] Found ${invitedUsers.size} invited users: ${Array.from(invitedUsers).join(", ")}`);
-
-        // Combine players and invited users, filter out organizer
-        const allUsersToNotify = new Set<string>([...players, ...invitedUsers]);
-        allUsersToNotify.delete(organizerId);
-
-        console.log(`[${type}] Total users to notify: ${allUsersToNotify.size} (after excluding organizer)`);
-
-        if (allUsersToNotify.size === 0) {
-          console.log(`[${type}] No users to notify for match ${matchId} (organizer: ${organizerId}, players: ${players.length}, invites: ${invitedUsers.size})`);
-          return;
-        }
-
-        // Get match details for notification
-        const sport = (match.sport || "match").toString();
-        const location = (match.location || "your location").toString();
-        const organizerName = (match.organizerName || "Organizer").toString();
-
-        const updates: { [path: string]: any } = {};
-        for (const uid of allUsersToNotify) {
-          const path = `/users/${uid}/notifications/${notificationId}`;
-          if (type === "match_edited") {
-            updates[path] = {
-              type: "match_edited",
-              data: { matchId, sport, location, fromName: organizerName, changes: "details" },
-              timestamp: now,
-              read: false,
-            };
-          } else if (type === "match_cancelled") {
-            updates[path] = {
-              type: "match_cancelled",
-              data: { matchId, sport, location },
-              timestamp: now,
-              read: false,
-            };
-          }
-        }
-
-        if (Object.keys(updates).length > 0) {
-          await db.ref().update(updates);
-          console.log(`[${type}] Successfully sent ${Object.keys(updates).length} notifications for match ${matchId}`);
-        } else {
-          console.error(`[${type}] Failed to create notification updates for match ${matchId}`);
-        }
+      } else if (type === "match_edited" || type === "match_cancelled") {
+        // Match edited/cancelled notifications are now handled directly by onMatchUpdate
+        // when it detects lastOrganizerEditAt change or isActive=false
+        // This queue entry is legacy and can be ignored
+        console.log(`[${type}] Ignoring legacy queue entry - notifications now handled by onMatchUpdate for match ${matchId || 'unknown'}`);
       } else {
         // Unknown notification type - log for debugging
         console.log(`[DEBUG] onMailNotificationCreate: Unknown notification type "${type}" for notificationId ${notificationId}, payload:`, JSON.stringify(payload));
@@ -702,6 +621,152 @@ export const onMatchUpdate = onValueWritten("/matches/{matchId}", async (event) 
   } catch (e) {
     console.error("Error enforcing match version/update metadata:", e);
   }
+
+  // Handle notifications for match edits/cancellations
+  // Check if match was cancelled
+  const wasCancelled = beforeData.isActive === true && after.isActive === false;
+
+  // Only send notifications for organizer edits or cancellations
+  if (wasCancelled || isOrganizerEdit) {
+    try {
+      const matchId = event.params.matchId as string;
+      const db = admin.database();
+
+      // Get all players who have joined the match
+      let players: string[] = [];
+      if (Array.isArray(after.players)) {
+        players = after.players.map((v: any) => String(v));
+      } else if (after.players && typeof after.players === "object") {
+        players = Object.values(after.players).map((v: any) => String(v));
+      }
+
+      // Get all users who have been invited (pending or accepted)
+      const invites = after.invites || {};
+      const invitedUsers = new Set<string>();
+      for (const uid in invites) {
+        const invite = invites[uid];
+        let status = "pending";
+        if (typeof invite === "object" && invite !== null) {
+          status = invite.status || "pending";
+        } else if (typeof invite === "string") {
+          status = invite;
+        }
+        if (status === "pending" || status === "accepted") {
+          invitedUsers.add(uid);
+        }
+      }
+
+      // Combine players and invited users, filter out organizer
+      const organizerId = (after.organizerId || "").toString();
+      const allUsersToNotify = new Set<string>([...players, ...invitedUsers]);
+      allUsersToNotify.delete(organizerId);
+
+      if (allUsersToNotify.size === 0) {
+        console.log(`[${wasCancelled ? 'match_cancelled' : 'match_edited'}] No users to notify for match ${matchId}`);
+        return;
+      }
+
+      // Get match details for notification
+      const sport = (after.sport || "match").toString();
+      const location = (after.location || "your location").toString();
+      const organizerName = (after.organizerName || "Organizer").toString();
+      const now = Date.now();
+
+      // Prepare notifications and FCM messages
+      const notificationUpdates: { [path: string]: any } = {};
+      const fcmMessages: Array<{ uid: string, tokens: string[], message: admin.messaging.MulticastMessage }> = [];
+
+      for (const uid of allUsersToNotify) {
+        const notificationId = `match_${matchId}_${now}_${uid}`;
+        const path = `/users/${uid}/notifications/${notificationId}`;
+
+        if (wasCancelled) {
+          notificationUpdates[path] = {
+            type: "match_cancelled",
+            data: { matchId, sport, location },
+            timestamp: now,
+            read: false,
+          };
+        } else {
+          notificationUpdates[path] = {
+            type: "match_edited",
+            data: { matchId, sport, location, fromName: organizerName, changes: "details" },
+            timestamp: now,
+            read: false,
+          };
+        }
+
+        // Get FCM tokens for this user
+        const tokensSnap = await db.ref(`/users/${uid}/fcmTokens`).once("value");
+        const tokensObj = tokensSnap.val() || {};
+        const tokens = Object.keys(tokensObj);
+
+        if (tokens.length > 0) {
+          const title = wasCancelled ? "Match Cancelled" : "Match Updated";
+          const body = wasCancelled
+            ? `The ${sport} at ${location} has been cancelled`
+            : `${organizerName} changed the match details`;
+
+          fcmMessages.push({
+            uid,
+            tokens,
+            message: {
+              notification: { title, body },
+              data: {
+                type: wasCancelled ? "match_cancelled" : "match_edited",
+                matchId,
+                notificationId,
+              },
+              tokens,
+            },
+          });
+        }
+      }
+
+      // Write all notifications atomically
+      if (Object.keys(notificationUpdates).length > 0) {
+        await db.ref().update(notificationUpdates);
+        console.log(`[${wasCancelled ? 'match_cancelled' : 'match_edited'}] Created ${Object.keys(notificationUpdates).length} notifications for match ${matchId}`);
+      }
+
+      // Send FCM push notifications
+      for (const { uid, tokens, message } of fcmMessages) {
+        try {
+          const response = await admin.messaging().sendEachForMulticast(message);
+          console.log(`[${wasCancelled ? 'match_cancelled' : 'match_edited'}] Sent ${response.successCount} of ${tokens.length} FCM notifications to user ${uid}`);
+
+          // Clean up invalid tokens
+          if (response.failureCount > 0) {
+            const invalidTokens: string[] = [];
+            response.responses.forEach((resp, idx) => {
+              if (!resp.success && resp.error) {
+                const code = resp.error.code;
+                if (
+                  code === "messaging/invalid-registration-token" ||
+                  code === "messaging/registration-token-not-registered"
+                ) {
+                  invalidTokens.push(tokens[idx]);
+                }
+              }
+            });
+            if (invalidTokens.length > 0) {
+              const tokenUpdates: { [key: string]: null } = {};
+              invalidTokens.forEach((t) => {
+                tokenUpdates[`/users/${uid}/fcmTokens/${t}`] = null;
+              });
+              await db.ref().update(tokenUpdates);
+              console.log(`Removed ${invalidTokens.length} invalid tokens for user ${uid}`);
+            }
+          }
+        } catch (fcmError) {
+          console.error(`[${wasCancelled ? 'match_cancelled' : 'match_edited'}] Error sending FCM to user ${uid}:`, fcmError);
+        }
+      }
+    } catch (notifError) {
+      console.error(`[${wasCancelled ? 'match_cancelled' : 'match_edited'}] Error handling notifications:`, notifError);
+      // Don't fail the match update if notification fails
+    }
+  }
 });
 
 // Process notification requests and write to user's notifications
@@ -753,6 +818,15 @@ export const sendNotification = onValueCreated(
     const notificationId = event.params.notificationId as string;
 
     if (!notification || notification.read) return;
+
+    // Skip match_edited, match_cancelled, and match_invite - these are handled directly
+    // by onMatchUpdate and onMatchInviteCreate to avoid duplicate FCM sends
+    if (notification.type === "match_edited" ||
+      notification.type === "match_cancelled" ||
+      notification.type === "match_invite") {
+      console.log(`Skipping FCM for ${notification.type} - already sent by direct trigger`);
+      return;
+    }
 
     // Log all notifications for debugging to find where match_modified comes from
     if (notification.type === "match_modified") {

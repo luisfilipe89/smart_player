@@ -471,27 +471,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               child: Column(
                 children: [
                   _buildLinkTile(
-                    icon: Icons.notifications_outlined,
-                    title: 'settings_notifications'.tr(),
-                    subtitle: 'settings_notifications_enabled_desc'.tr(),
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const NotificationSettingsScreen(),
-                        ),
-                      );
-                    },
-                    trailingChevron: true,
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: AppSpacing.lg),
-            _buildSectionCard(
-              child: Column(
-                children: [
-                  _buildLinkTile(
                     icon: Icons.visibility_outlined,
                     title: 'settings_profile_visibility'.tr(),
                     subtitle: _getVisibilityLabel(),
@@ -516,6 +495,27 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         await hapticsActions.setEnabled(v);
                       }
                     },
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            _buildSectionCard(
+              child: Column(
+                children: [
+                  _buildLinkTile(
+                    icon: Icons.notifications_outlined,
+                    title: 'settings_notifications'.tr(),
+                    subtitle: 'settings_notifications_enabled_desc'.tr(),
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const NotificationSettingsScreen(),
+                        ),
+                      );
+                    },
+                    trailingChevron: true,
                   ),
                 ],
               ),

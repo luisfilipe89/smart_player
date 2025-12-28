@@ -146,27 +146,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   bottom: AppSpacing.lg,
                 ),
                 children: [
-                  // Profile avatar (no upload/change)
-                  _buildSectionCard(
-                    child: Column(
-                      children: [
-                        Hero(
-                          tag: 'avatar-${user?.uid ?? 'me'}',
-                          child: CircleAvatar(
-                            radius: 52,
-                            backgroundColor: AppColors.lightgrey,
-                            child: const Icon(
-                              Icons.person,
-                              size: 52,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: AppSpacing.lg),
-
                   // Basic Details Section
                   _buildSectionCard(
                     title: 'profile_basic_details'.tr(),

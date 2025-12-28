@@ -4,7 +4,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:move_young/features/matches/models/match.dart';
 import 'package:move_young/db/db_paths.dart';
 import 'package:move_young/utils/logger.dart';
-import 'package:move_young/services/notifications/notification_interface.dart';
 import 'package:move_young/models/infrastructure/service_error.dart';
 import 'package:move_young/utils/crashlytics_helper.dart';
 import 'package:move_young/services/calendar/calendar_service.dart';
@@ -17,8 +16,6 @@ import 'package:move_young/utils/geolocation_utils.dart';
 class CloudMatchesServiceInstance {
   final FirebaseDatabase _database;
   final FirebaseAuth _auth;
-  // Notification service for sending match edited/cancelled notifications
-  final INotificationService _notificationService;
 
   // Query limits to prevent memory issues
   static const int _maxJoinableMatches = 50;
@@ -29,8 +26,7 @@ class CloudMatchesServiceInstance {
   static const Duration _defaultCacheTTL =
       Duration(seconds: 30); // 30 second cache
 
-  CloudMatchesServiceInstance(
-      this._database, this._auth, this._notificationService);
+  CloudMatchesServiceInstance(this._database, this._auth);
 
   /// Invalidate cache for a specific user or all users
   void _invalidateCache({String? userId}) {
@@ -669,24 +665,15 @@ class CloudMatchesServiceInstance {
       await _database.ref().update(updates);
       // Streams will update automatically - no cache clearing needed
 
-      // Only send notifications if match details actually changed
-      // Don't send notifications if only invites were added (no match details changed)
+      // Notifications are now handled directly by onMatchUpdate Cloud Function
+      // when it detects lastOrganizerEditAt change or isActive=false
+      // No need to queue notifications here - Cloud Function will handle it
       if (matchDetailsChanged) {
-        // Send notifications to all players (excluding organizer)
-        try {
-          NumberedLogger.i(
-              'Sending match edited notification for match ${match.id} (match details changed)');
-          await _notificationService.sendMatchEditedNotification(match.id);
-          NumberedLogger.i(
-              'Successfully queued match edited notification for match ${match.id}');
-        } catch (e, st) {
-          NumberedLogger.e('Error sending match edited notification: $e');
-          NumberedLogger.d('Stack trace: $st');
-          // Don't fail the update if notification fails
-        }
+        NumberedLogger.i(
+            'Match ${match.id} details changed - notifications will be sent by Cloud Function');
       } else {
         NumberedLogger.d(
-            'Skipping match edited notification for match ${match.id} - no match details changed (only invites or participant changes)');
+            'Skipping notification for match ${match.id} - no match details changed (only invites or participant changes)');
       }
 
       // Sync calendar event only if match details changed
@@ -807,18 +794,11 @@ class CloudMatchesServiceInstance {
       await _database.ref().update(updates);
       // Streams will update automatically - no cache clearing needed
 
-      // Send notifications to all players (excluding organizer)
-      try {
-        NumberedLogger.i(
-            'Sending match cancelled notification for match $matchId');
-        await _notificationService.sendMatchCancelledNotification(matchId);
-        NumberedLogger.i(
-            'Successfully queued match cancelled notification for match $matchId');
-      } catch (e, st) {
-        NumberedLogger.e('Error sending match cancelled notification: $e');
-        NumberedLogger.d('Stack trace: $st');
-        // Don't fail the cancellation if notification fails
-      }
+      // Notifications are now handled directly by onMatchUpdate Cloud Function
+      // when it detects isActive=false change
+      // No need to queue notifications here - Cloud Function will handle it
+      NumberedLogger.i(
+          'Match $matchId cancelled - notifications will be sent by Cloud Function');
 
       // Remove calendar event for this match (if it's in any user's calendar)
       // Note: Calendar removal happens per-user, so we can't remove from all users' calendars here
