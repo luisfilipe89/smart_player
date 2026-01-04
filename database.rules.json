@@ -175,20 +175,6 @@
             "$requestId": {
                 ".write": "auth != null"
             }
-        },
-        "mail": {
-            "notifications": {
-                "$id": {
-                    ".read": "false",
-                    ".write": "auth != null && ((newData.child('type').val() === 'friend_request' && newData.child('toUid').isString() && newData.child('fromUid').val() === auth.uid) || (newData.child('type').val() === 'friend_accept' && newData.child('toUid').isString() && newData.child('fromUid').val() === auth.uid) || (newData.child('type').val() === 'match_invite' && newData.child('toUid').isString() && newData.child('matchId').isString() && newData.child('fromUid').val() === auth.uid) || (newData.child('type').val() === 'match_edited' && newData.child('matchId').isString() && root.child('matches').child(newData.child('matchId').val()).child('organizerId').val() === auth.uid) || (newData.child('type').val() === 'match_cancelled' && newData.child('matchId').isString() && root.child('matches').child(newData.child('matchId').val()).child('organizerId').val() === auth.uid))",
-                    ".validate": "newData.hasChild('type') && newData.child('type').isString()"
-                }
-            },
-            "$emailId": {
-                ".read": "false",
-                ".write": "auth != null && $emailId != 'notifications'",
-                ".validate": "newData.hasChild('to') && newData.child('to').isString() && newData.child('message').hasChildren(['subject','html','text'])"
-            }
         }
     }
 }

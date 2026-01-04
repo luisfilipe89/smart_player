@@ -212,87 +212,6 @@ export const processPendingFieldReport = onRequest(
   }
 );
 
-// Consume client-queued notifications at /mail/notifications and fan-out
-// to per-user notifications that are then pushed via sendNotification above.
-export const onMailNotificationCreate = onValueCreated(
-  "/mail/notifications/{notificationId}",
-  async (event) => {
-    const payload = event.data.val() || {};
-    const notificationId = event.params.notificationId as string;
-    try {
-      const type = (payload.type || "").toString();
-      const toUid = (payload.toUid || "").toString();
-      const fromUid = (payload.fromUid || "").toString();
-      const matchId = (payload.matchId || "").toString();
-
-      const db = admin.database();
-      // Idempotency: skip if already processed
-      const processedRef = db.ref(`/mail/processed/${notificationId}`);
-      const processedSnap = await processedRef.once("value");
-      if (processedSnap.exists()) {
-        await db.ref(`/mail/notifications/${notificationId}`).remove();
-        return;
-      }
-      const now = Date.now();
-
-      if (type === "friend_request" && toUid) {
-        // Resolve fromName best-effort
-        let fromName = "Someone";
-        if (fromUid) {
-          try {
-            const user = await admin.auth().getUser(fromUid);
-            if (user.displayName) fromName = user.displayName;
-          } catch (_) { }
-        }
-
-        await db.ref(`/users/${toUid}/notifications/${notificationId}`).set({
-          type: "friend_request",
-          data: { fromUid, fromName },
-          timestamp: now,
-          read: false,
-        });
-      } else if (type === "friend_accept" && toUid) {
-        // Resolve fromName best-effort
-        let fromName = "Someone";
-        if (fromUid) {
-          try {
-            const user = await admin.auth().getUser(fromUid);
-            if (user.displayName) fromName = user.displayName;
-          } catch (_) { }
-        }
-
-        await db.ref(`/users/${toUid}/notifications/${notificationId}`).set({
-          type: "friend_request_accepted",
-          data: { fromUid, fromName },
-          timestamp: now,
-          read: false,
-        });
-      } else if (type === "match_invite" && toUid && matchId) {
-        await db.ref(`/users/${toUid}/notifications/${notificationId}`).set({
-          type: "match_invite",
-          data: { matchId },
-          timestamp: now,
-          read: false,
-        });
-      } else if (type === "match_edited" || type === "match_cancelled") {
-        // Match edited/cancelled notifications are now handled directly by onMatchUpdate
-        // when it detects lastOrganizerEditAt change or isActive=false
-        // This queue entry is legacy and can be ignored
-        console.log(`[${type}] Ignoring legacy queue entry - notifications now handled by onMatchUpdate for match ${matchId || 'unknown'}`);
-      } else {
-        // Unknown notification type - log for debugging
-        console.log(`[DEBUG] onMailNotificationCreate: Unknown notification type "${type}" for notificationId ${notificationId}, payload:`, JSON.stringify(payload));
-      }
-
-      // Mark as processed and remove the queued mail notification
-      await processedRef.set({ ts: now, type });
-      await db.ref(`/mail/notifications/${notificationId}`).remove();
-    } catch (e) {
-      console.error("Error processing mail notification:", e);
-    }
-  }
-);
-
 // Cleanup when a match is deleted: remove joined indexes, invites, and related notifications
 export const onMatchDelete = onValueDeleted("/matches/{matchId}", async (event) => {
   const matchId = event.params.matchId as string;
@@ -840,6 +759,7 @@ async function isNotificationTypeEnabled(
     switch (notificationType) {
       case "friend_request":
       case "friend_request_accepted":
+      case "friend_removed":
         return settings.friendRequests !== false; // Default true
       case "match_invite":
         return settings.matchInvites !== false; // Default true
@@ -866,11 +786,13 @@ export const sendNotification = onValueCreated(
 
     if (!notification || notification.read) return;
 
-    // Skip match_edited, match_cancelled, and match_invite - these are handled directly
-    // by onMatchUpdate and onMatchInviteCreate to avoid duplicate FCM sends
+    // Skip notification types handled directly by their respective triggers to avoid duplicate FCM sends
     if (notification.type === "match_edited" ||
       notification.type === "match_cancelled" ||
-      notification.type === "match_invite") {
+      notification.type === "match_invite" ||
+      notification.type === "friend_request" ||
+      notification.type === "friend_request_accepted" ||
+      notification.type === "friend_removed") {
       console.log(`Skipping FCM for ${notification.type} - already sent by direct trigger`);
       return;
     }
@@ -1134,6 +1056,362 @@ export const onMatchInviteCreate = onValueCreated(
       }
     } catch (err) {
       console.error("[match_invite] Error sending invite notification:", err);
+    }
+  }
+);
+
+// Friend request trigger → push directly to recipient
+export const onFriendRequestCreate = onValueCreated(
+  "/users/{toUid}/friendRequests/received/{fromUid}",
+  async (event) => {
+    const toUid = event.params.toUid as string;
+    const fromUid = event.params.fromUid as string;
+
+    try {
+      const db = admin.database();
+      const now = Date.now();
+
+      // Resolve sender's display name
+      let fromName = "Someone";
+      try {
+        const user = await admin.auth().getUser(fromUid);
+        if (user.displayName) fromName = user.displayName;
+      } catch (_) {
+        // Fallback if user lookup fails
+      }
+
+      // Create notification record (always created for in-app display)
+      const notificationId = `friend_request_${now}_${toUid}`;
+      const notificationPath = `/users/${toUid}/notifications/${notificationId}`;
+
+      await db.ref(notificationPath).set({
+        type: "friend_request",
+        data: { fromUid, fromName },
+        timestamp: now,
+        read: false,
+      });
+
+      console.log(`[friend_request] Created notification record for user ${toUid} from ${fromUid}`);
+
+      // Check if friend request notifications are enabled for the recipient
+      const isEnabled = await isNotificationTypeEnabled(toUid, "friend_request");
+      if (!isEnabled) {
+        console.log(`Friend request notifications disabled for user ${toUid}, skipping FCM`);
+        return;
+      }
+
+      const tokensSnap = await db
+        .ref(`/users/${toUid}/fcmTokens`)
+        .once("value");
+      const tokensObj = tokensSnap.val() || {};
+      const tokens = Object.keys(tokensObj);
+      if (!tokens.length) {
+        console.log(`No tokens for user ${toUid}`);
+        return;
+      }
+
+      const message: admin.messaging.MulticastMessage = {
+        notification: {
+          title: "New Friend Request",
+          body: `${fromName} sent you a friend request`,
+        },
+        data: {
+          type: "friend_request",
+          route: "/friends",
+          notificationId,
+        },
+        tokens,
+      };
+
+      const res = await admin.messaging().sendEachForMulticast(message);
+      console.log(
+        `[friend_request] Sent ${res.successCount} of ${tokens.length} FCM notifications to user ${toUid}`
+      );
+
+      if (res.failureCount > 0) {
+        const invalid: string[] = [];
+        res.responses.forEach((r, i) => {
+          if (!r.success && r.error) {
+            const code = r.error.code;
+            if (
+              code === "messaging/invalid-registration-token" ||
+              code === "messaging/registration-token-not-registered"
+            ) {
+              invalid.push(tokens[i]);
+            }
+          }
+        });
+        if (invalid.length) {
+          const updates: { [key: string]: null } = {};
+          invalid.forEach((t) => {
+            updates[`/users/${toUid}/fcmTokens/${t}`] = null;
+          });
+          await db.ref().update(updates);
+          console.log(
+            `Removed ${invalid.length} invalid tokens for ${toUid}`
+          );
+        }
+      }
+    } catch (err) {
+      console.error("[friend_request] Error sending friend request notification:", err);
+    }
+  }
+);
+
+// Friend accept trigger → push directly to original requester
+export const onFriendAcceptCreate = onValueCreated(
+  "/users/{uid}/friends/{friendUid}",
+  async (event) => {
+    const uid = event.params.uid as string;
+    const friendUid = event.params.friendUid as string;
+
+    try {
+      const db = admin.database();
+
+      // Check if this is an accept event by verifying if there was a pending request
+      // We need to determine which user is the original requester
+      // Read both sent and received paths atomically to determine the relationship
+      const [sentRequestSnap, receivedRequestSnap, friendSentSnap, friendReceivedSnap] = await Promise.all([
+        db.ref(`/users/${uid}/friendRequests/sent/${friendUid}`).once("value"),
+        db.ref(`/users/${uid}/friendRequests/received/${friendUid}`).once("value"),
+        db.ref(`/users/${friendUid}/friendRequests/sent/${uid}`).once("value"),
+        db.ref(`/users/${friendUid}/friendRequests/received/${uid}`).once("value"),
+      ]);
+
+      // Determine who is the original requester
+      let requesterUid: string | null = null;
+      let accepterUid: string | null = null;
+
+      if (sentRequestSnap.exists()) {
+        // uid sent the request, friendUid accepted
+        requesterUid = uid;
+        accepterUid = friendUid;
+      } else if (receivedRequestSnap.exists()) {
+        // friendUid sent the request, uid accepted
+        requesterUid = friendUid;
+        accepterUid = uid;
+      } else if (friendSentSnap.exists()) {
+        // friendUid sent the request, uid accepted (checking from friend's perspective)
+        requesterUid = friendUid;
+        accepterUid = uid;
+      } else if (friendReceivedSnap.exists()) {
+        // uid sent the request, friendUid accepted (checking from friend's perspective)
+        requesterUid = uid;
+        accepterUid = friendUid;
+      } else {
+        // No pending request found - this might be a direct friend add or the request was already removed
+        // Skip notification to avoid duplicate notifications
+        console.log(`[friend_accept] No pending request found for ${uid} and ${friendUid}, skipping notification`);
+        return;
+      }
+
+      // Only notify the original requester
+      // Since the trigger fires for both users, we only process it once (for the requester)
+      if (requesterUid !== uid) {
+        // This trigger is for the accepter's friends list, skip (the other trigger will handle it)
+        return;
+      }
+
+      const now = Date.now();
+
+      // Resolve accepter's display name
+      let fromName = "Someone";
+      try {
+        const user = await admin.auth().getUser(accepterUid!);
+        if (user.displayName) fromName = user.displayName;
+      } catch (_) {
+        // Fallback if user lookup fails
+      }
+
+      // Create notification record (always created for in-app display)
+      const notificationId = `friend_accept_${now}_${requesterUid}`;
+      const notificationPath = `/users/${requesterUid}/notifications/${notificationId}`;
+
+      await db.ref(notificationPath).set({
+        type: "friend_request_accepted",
+        data: { fromUid: accepterUid, fromName },
+        timestamp: now,
+        read: false,
+      });
+
+      console.log(`[friend_accept] Created notification record for user ${requesterUid} (accepted by ${accepterUid})`);
+
+      // Check if friend request accepted notifications are enabled
+      const isEnabled = await isNotificationTypeEnabled(requesterUid, "friend_request_accepted");
+      if (!isEnabled) {
+        console.log(`Friend accept notifications disabled for user ${requesterUid}, skipping FCM`);
+        return;
+      }
+
+      const tokensSnap = await db
+        .ref(`/users/${requesterUid}/fcmTokens`)
+        .once("value");
+      const tokensObj = tokensSnap.val() || {};
+      const tokens = Object.keys(tokensObj);
+      if (!tokens.length) {
+        console.log(`No tokens for user ${requesterUid}`);
+        return;
+      }
+
+      const message: admin.messaging.MulticastMessage = {
+        notification: {
+          title: "Friend Request Accepted",
+          body: `${fromName} accepted your friend request`,
+        },
+        data: {
+          type: "friend_request_accepted",
+          route: "/friends",
+          notificationId,
+        },
+        tokens,
+      };
+
+      const res = await admin.messaging().sendEachForMulticast(message);
+      console.log(
+        `[friend_accept] Sent ${res.successCount} of ${tokens.length} FCM notifications to user ${requesterUid}`
+      );
+
+      if (res.failureCount > 0) {
+        const invalid: string[] = [];
+        res.responses.forEach((r, i) => {
+          if (!r.success && r.error) {
+            const code = r.error.code;
+            if (
+              code === "messaging/invalid-registration-token" ||
+              code === "messaging/registration-token-not-registered"
+            ) {
+              invalid.push(tokens[i]);
+            }
+          }
+        });
+        if (invalid.length) {
+          const updates: { [key: string]: null } = {};
+          invalid.forEach((t) => {
+            updates[`/users/${requesterUid}/fcmTokens/${t}`] = null;
+          });
+          await db.ref().update(updates);
+          console.log(
+            `Removed ${invalid.length} invalid tokens for ${requesterUid}`
+          );
+        }
+      }
+    } catch (err) {
+      console.error("[friend_accept] Error sending friend accept notification:", err);
+    }
+  }
+);
+
+// Friend remove trigger → push directly to removed user
+export const onFriendRemoveCreate = onValueDeleted(
+  "/users/{uid}/friends/{friendUid}",
+  async (event) => {
+    const uid = event.params.uid as string;
+    const friendUid = event.params.friendUid as string;
+
+    try {
+      const db = admin.database();
+
+      // When a friend is removed, both users' friends lists are updated:
+      // - /users/{uid}/friends/{friendUid} = null (uid removed friendUid)
+      // - /users/{friendUid}/friends/{uid} = null (friendUid removed uid)
+      // The trigger fires twice. We want to notify the user who was removed (friendUid).
+      // To avoid duplicate notifications, only process when uid < friendUid (alphabetically first)
+      // This ensures we only process once and notify the correct user.
+      if (uid > friendUid) {
+        // Skip the second trigger (alphabetically later user)
+        return;
+      }
+
+      // uid is the one who removed friendUid, so friendUid should be notified
+      const removedUserUid = friendUid;
+      const removerUid = uid;
+
+      const now = Date.now();
+
+      // Resolve remover's display name
+      let fromName = "Someone";
+      try {
+        const user = await admin.auth().getUser(removerUid);
+        if (user.displayName) fromName = user.displayName;
+      } catch (_) {
+        // Fallback if user lookup fails
+      }
+
+      // Create notification record (always created for in-app display)
+      const notificationId = `friend_removed_${now}_${removedUserUid}`;
+      const notificationPath = `/users/${removedUserUid}/notifications/${notificationId}`;
+
+      await db.ref(notificationPath).set({
+        type: "friend_removed",
+        data: { fromUid: removerUid, fromName },
+        timestamp: now,
+        read: false,
+      });
+
+      console.log(`[friend_removed] Created notification record for user ${removedUserUid} (removed by ${removerUid})`);
+
+      // Check if friend removed notifications are enabled
+      // Note: friend_removed uses the same preference as friendRequests
+      const isEnabled = await isNotificationTypeEnabled(removedUserUid, "friend_removed");
+      if (!isEnabled) {
+        console.log(`Friend removed notifications disabled for user ${removedUserUid}, skipping FCM`);
+        return;
+      }
+
+      const tokensSnap = await db
+        .ref(`/users/${removedUserUid}/fcmTokens`)
+        .once("value");
+      const tokensObj = tokensSnap.val() || {};
+      const tokens = Object.keys(tokensObj);
+      if (!tokens.length) {
+        console.log(`No tokens for user ${removedUserUid}`);
+        return;
+      }
+
+      const message: admin.messaging.MulticastMessage = {
+        notification: {
+          title: "Friend Removed",
+          body: `${fromName} removed you as a friend`,
+        },
+        data: {
+          type: "friend_removed",
+          route: "/friends",
+          notificationId,
+        },
+        tokens,
+      };
+
+      const res = await admin.messaging().sendEachForMulticast(message);
+      console.log(
+        `[friend_removed] Sent ${res.successCount} of ${tokens.length} FCM notifications to user ${removedUserUid}`
+      );
+
+      if (res.failureCount > 0) {
+        const invalid: string[] = [];
+        res.responses.forEach((r, i) => {
+          if (!r.success && r.error) {
+            const code = r.error.code;
+            if (
+              code === "messaging/invalid-registration-token" ||
+              code === "messaging/registration-token-not-registered"
+            ) {
+              invalid.push(tokens[i]);
+            }
+          }
+        });
+        if (invalid.length) {
+          const updates: { [key: string]: null } = {};
+          invalid.forEach((t) => {
+            updates[`/users/${removedUserUid}/fcmTokens/${t}`] = null;
+          });
+          await db.ref().update(updates);
+          console.log(
+            `Removed ${invalid.length} invalid tokens for ${removedUserUid}`
+          );
+        }
+      }
+    } catch (err) {
+      console.error("[friend_removed] Error sending friend removed notification:", err);
     }
   }
 );

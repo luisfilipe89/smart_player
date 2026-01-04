@@ -359,35 +359,19 @@ class NotificationServiceInstance implements INotificationService {
   @override
   Future<void> sendFriendRequestNotification(
       String toUid, String fromUid) async {
-    try {
-      // Write a message for Cloud Functions to pick up and send FCM
-      // functions path: /mail/notifications/...
-      await _db.ref('mail/notifications').push().set({
-        'type': 'friend_request',
-        'toUid': toUid,
-        'fromUid': fromUid,
-        'ts': DateTime.now().toIso8601String(),
-      });
-      NumberedLogger.i('Queued friend request notification to $toUid');
-    } catch (e) {
-      NumberedLogger.e('Error sending friend request notification: $e');
-    }
+    // Notification is now handled automatically by Cloud Function
+    // onFriendRequestCreate when /users/{toUid}/friendRequests/received/{fromUid} is created
+    // No action needed here - the friend request write in friends_service will trigger it
+    NumberedLogger.i('Friend request notification will be sent by Cloud Function for $toUid');
   }
 
   @override
   Future<void> sendFriendAcceptedNotification(
       String toUid, String fromUid) async {
-    try {
-      await _db.ref('mail/notifications').push().set({
-        'type': 'friend_accept',
-        'toUid': toUid,
-        'fromUid': fromUid,
-        'ts': DateTime.now().toIso8601String(),
-      });
-      NumberedLogger.i('Queued friend accepted notification to $toUid');
-    } catch (e) {
-      NumberedLogger.e('Error sending friend accepted notification: $e');
-    }
+    // Notification is now handled automatically by Cloud Function
+    // onFriendAcceptCreate when /users/{toUid}/friends/{fromUid} is created
+    // No action needed here - the friend accept write in friends_service will trigger it
+    NumberedLogger.i('Friend accepted notification will be sent by Cloud Function for $toUid');
   }
 
   @override
@@ -395,46 +379,26 @@ class NotificationServiceInstance implements INotificationService {
     required String removedUserUid,
     required String removerUid,
   }) async {
-    try {
-      await _db.ref('mail/notifications').push().set({
-        'type': 'friend_removed',
-        'toUid': removedUserUid,
-        'fromUid': removerUid,
-        'ts': DateTime.now().toIso8601String(),
-      });
-      NumberedLogger.i('Queued friend removed notification to $removedUserUid');
-    } catch (e) {
-      NumberedLogger.e('Error sending friend removed notification: $e');
-    }
+    // Notification is now handled automatically by Cloud Function
+    // onFriendRemoveCreate when /users/{uid}/friends/{friendUid} is deleted
+    // No action needed here - the friend removal write in friends_service will trigger it
+    NumberedLogger.i('Friend removed notification will be sent by Cloud Function for $removedUserUid');
   }
 
   @override
   Future<void> sendMatchEditedNotification(String matchId) async {
-    try {
-      await _db.ref('mail/notifications').push().set({
-        'type': 'match_edited',
-        'matchId': matchId,
-        'ts': DateTime.now().toIso8601String(),
-      });
-      NumberedLogger.i('Queued match edited notification for match $matchId');
-    } catch (e) {
-      NumberedLogger.e('Error sending match edited notification: $e');
-    }
+    // Notification is now handled automatically by Cloud Function
+    // onMatchUpdate when match is edited (detects lastOrganizerEditAt change)
+    // No action needed here - the match update will trigger it
+    NumberedLogger.i('Match edited notification will be sent by Cloud Function for match $matchId');
   }
 
   @override
   Future<void> sendMatchCancelledNotification(String matchId) async {
-    try {
-      await _db.ref('mail/notifications').push().set({
-        'type': 'match_cancelled',
-        'matchId': matchId,
-        'ts': DateTime.now().toIso8601String(),
-      });
-      NumberedLogger.i(
-          'Queued match cancelled notification for match $matchId');
-    } catch (e) {
-      NumberedLogger.e('Error sending match cancelled notification: $e');
-    }
+    // Notification is now handled automatically by Cloud Function
+    // onMatchUpdate when match is cancelled (detects isActive=false)
+    // No action needed here - the match update will trigger it
+    NumberedLogger.i('Match cancelled notification will be sent by Cloud Function for match $matchId');
   }
 
   Future<void> dispose() async {

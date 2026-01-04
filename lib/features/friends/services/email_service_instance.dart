@@ -12,9 +12,8 @@ class EmailService {
 
   EmailService(this._db, this._auth, this._firestore);
 
-  /// Send a friend invite email using a Firebase-triggered email mechanism.
-  /// This writes to the `mail` collection in Realtime Database which should be
-  /// picked up by the Firebase Email extension (or a custom backend listener).
+  /// Send a friend invite email using Firebase Trigger Email extension.
+  /// Writes to Firestore `mail` collection which is monitored by the extension.
   Future<bool> sendFriendInviteEmail({
     required String recipientEmail,
   }) async {
@@ -45,36 +44,7 @@ class EmailService {
         inviteLink: inviteLink,
       );
 
-      // Payload stored in Realtime Database (legacy pipeline / audit)
-      final Map<String, dynamic> realtimeEmailData = {
-        'to': recipientEmail,
-        'message': {
-          'subject': 'friends_invite_email_title'.tr(),
-          'html': htmlBody,
-          'text': textBody,
-        },
-        'template': {
-          'name': 'friend_invite',
-          'data': {
-            'inviterName': inviterName,
-            'inviterEmail': inviterEmail,
-            'recipientName': recipientName,
-            'appName': 'SMARTPLAYER',
-            'inviteLink': inviteLink,
-          },
-        },
-        'createdAt': DateTime.now().toIso8601String(),
-        'status': 'pending',
-      };
-
-      if (inviterEmail.isNotEmpty) {
-        realtimeEmailData['replyTo'] = inviterEmail;
-      }
-
-      // Write to mail collection to trigger email extension
-      await _db.ref('${DbPaths.mail}/$emailId').set(realtimeEmailData);
-
-      // Mirror into Firestore for the Trigger Email extension
+      // Write to Firestore for the Trigger Email extension
       final firestoreEmailData = {
         'to': [recipientEmail],
         'message': {
