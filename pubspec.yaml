@@ -117,6 +117,7 @@ flutter:
     - assets/translations/
     - assets/fields/
     - assets/fields/output/
+    - assets/water/
 
   fonts:
     - family: Poppins

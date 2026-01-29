@@ -16,13 +16,11 @@ final flutterLocalNotificationsProvider =
 final notificationServiceProvider =
     Provider<NotificationServiceInstance>((ref) {
   final firebaseMessaging = ref.watch(firebaseMessagingProvider);
-  final firebaseDatabase = ref.watch(firebaseDatabaseProvider);
   final flutterLocalNotifications =
       ref.watch(flutterLocalNotificationsProvider);
 
   return NotificationServiceInstance(
     firebaseMessaging,
-    firebaseDatabase,
     flutterLocalNotifications,
   );
 });

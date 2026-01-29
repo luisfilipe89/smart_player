@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:move_young/utils/logger.dart';
-import 'package:firebase_database/firebase_database.dart';
+
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'notification_interface.dart';
@@ -11,7 +11,6 @@ import 'notification_interface.dart';
 /// Instance-based NotificationService for use with Riverpod dependency injection
 class NotificationServiceInstance implements INotificationService {
   final FirebaseMessaging _messaging;
-  final FirebaseDatabase _db;
   final FlutterLocalNotificationsPlugin _local;
 
   StreamSubscription? _authStateSubscription;
@@ -51,7 +50,6 @@ class NotificationServiceInstance implements INotificationService {
 
   NotificationServiceInstance(
     this._messaging,
-    this._db,
     this._local,
   );
 

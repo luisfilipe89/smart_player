@@ -270,9 +270,10 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
       return true;
     }).toList();
 
-    // Pre-create keys for all filtered events to ensure they exist when we try to scroll
-    for (final event in events) {
-      _itemKeys.putIfAbsent(event.title, () => GlobalKey());
+    // Pre-create keys for all filtered events (unique per event+index to avoid duplicate GlobalKey when titles repeat)
+    _itemKeys.clear();
+    for (var i = 0; i < events.length; i++) {
+      _itemKeys.putIfAbsent(_eventKey(events[i], i), () => GlobalKey());
     }
 
     setState(() {
@@ -371,7 +372,8 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
       return;
     }
 
-    final key = _itemKeys[widget.highlightEventTitle!];
+    final idx = filteredEvents.indexWhere((e) => e.title == widget.highlightEventTitle!);
+    final key = idx >= 0 ? _itemKeys[_eventKey(filteredEvents[idx], idx)] : null;
     NumberedLogger.d(
         '_scrollToHighlightedEvent: key exists: ${key != null}, key: $key');
 
@@ -665,15 +667,16 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
     );
   }
 
-  Widget _buildEventCard(Event event) {
+  /// Unique key string per event and index so duplicate titles don't share a GlobalKey.
+  String _eventKey(Event event, int index) =>
+      '${event.title}|${event.dateTime}|${event.location}|$index';
+
+  Widget _buildEventCard(Event event, int index) {
     // Key should already be created in _applyFilters
-    // Only get it, don't create it here to avoid duplicates
-    final key = _itemKeys[event.title];
-    final widgetKey = key ?? ValueKey('event_${event.title}');
+    final key = _itemKeys[_eventKey(event, index)];
+    final widgetKey = key ?? ValueKey('event_${event.title}_$index');
 
     if (key == null) {
-      // This shouldn't happen if _applyFilters ran, but if it does, use ValueKey as fallback
-      // Don't create a GlobalKey here to avoid duplicates
       NumberedLogger.w(
           '_buildEventCard: Key missing for event: ${event.title}, using ValueKey fallback');
     }
@@ -875,7 +878,7 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
               ),
               sliver: SliverList(
                 delegate: SliverChildBuilderDelegate(
-                  (context, index) => _buildEventCard(filteredEvents[index]),
+                  (context, index) => _buildEventCard(filteredEvents[index], index),
                   childCount: filteredEvents.length,
                 ),
               ),

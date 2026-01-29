@@ -8,6 +8,7 @@ import 'package:move_young/widgets/tab_with_count.dart';
 import 'package:move_young/widgets/app_back_button.dart';
 import 'package:move_young/utils/logger.dart';
 import 'package:move_young/features/activities/services/local_fields_service.dart';
+import 'package:move_young/features/activities/services/water_fountains_service.dart';
 import 'package:move_young/services/system/location_provider.dart';
 import 'package:move_young/utils/geolocation_utils.dart';
 import 'package:move_young/utils/navigation_utils.dart';
@@ -58,16 +59,19 @@ class _ActivitiesScreenState extends ConsumerState<ActivitiesScreen>
     with SingleTickerProviderStateMixin {
   late final TabController _tabController;
   final LocalFieldsService _fieldsService = const LocalFieldsService();
+  final WaterFountainsService _waterFountainsService =
+      const WaterFountainsService();
 
   List<FitnessItem> _fitnessStations = [];
   List<FitnessItem> _sportContainers = [];
+  List<FitnessItem> _waterFountains = [];
   bool _isLoading = true;
   bool _isCalculatingDistances = false;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(length: 3, vsync: this);
     _tabController.addListener(_onTabChanged);
     _loadFitnessData();
   }
@@ -114,6 +118,12 @@ class _ActivitiesScreenState extends ConsumerState<ActivitiesScreen>
           await _fieldsService.loadFields(sportType: 'sport_container');
       NumberedLogger.d(
           'Loaded ${containerFields?.length ?? 0} sport container fields');
+
+      // Load water fountains
+      final waterFountainsData =
+          await _waterFountainsService.loadWaterFountains();
+      NumberedLogger.d(
+          'Loaded ${waterFountainsData?.length ?? 0} water fountains');
 
       // Process fitness stations
       _fitnessStations = [];
@@ -197,8 +207,25 @@ class _ActivitiesScreenState extends ConsumerState<ActivitiesScreen>
         }).toList();
       }
 
+      // Process water fountains
+      _waterFountains = [];
+      if (waterFountainsData != null && waterFountainsData.isNotEmpty) {
+        _waterFountains = waterFountainsData.map((fountain) {
+          return FitnessItem(
+            id: fountain['id']?.toString() ?? '',
+            title: fountain['title']?.toString() ??
+                fountain['beschrijvi']?.toString() ??
+                'Watertap',
+            address: fountain['address']?.toString(),
+            latitude: fountain['lat'] as double?,
+            longitude: fountain['lon'] as double?,
+            name: fountain['name']?.toString(),
+          );
+        }).toList();
+      }
+
       NumberedLogger.d(
-          'Categorized: ${_fitnessStations.length} stations, ${_sportContainers.length} containers');
+          'Categorized: ${_fitnessStations.length} stations, ${_sportContainers.length} containers, ${_waterFountains.length} fountains');
 
       // Show items immediately (in random order as loaded)
       if (mounted) {
@@ -302,10 +329,46 @@ class _ActivitiesScreenState extends ConsumerState<ActivitiesScreen>
         return distA.compareTo(distB);
       });
 
+      // Update water fountains with distances
+      final waterFountainsWithDistances = await Future.wait(
+        _waterFountains.map((item) async {
+          if (item.latitude == null || item.longitude == null) {
+            return item;
+          }
+
+          final distance = calculateDistanceMeters(
+            startLat: userPosition.latitude,
+            startLon: userPosition.longitude,
+            endLat: item.latitude!,
+            endLon: item.longitude!,
+          );
+
+          return FitnessItem(
+            id: item.id,
+            title: item.title,
+            address: item.address,
+            latitude: item.latitude,
+            longitude: item.longitude,
+            imageUrl: item.imageUrl,
+            imageUrls: item.imageUrls,
+            distanceMeters: distance,
+            name: item.name,
+          );
+        }),
+      );
+
+      // Sort by distance
+      waterFountainsWithDistances.sort((a, b) {
+        final distA = a.distanceMeters ?? double.infinity;
+        final distB = b.distanceMeters ?? double.infinity;
+        return distA.compareTo(distB);
+      });
+
       if (mounted) {
         setState(() {
           _fitnessStations = fitnessStationsWithDistances;
           _sportContainers = sportContainersWithDistances;
+          _waterFountains = waterFountainsWithDistances;
           _isCalculatingDistances = false;
         });
       }
@@ -458,8 +521,10 @@ class _ActivitiesScreenState extends ConsumerState<ActivitiesScreen>
                     color: AppColors.primary.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: const Icon(
-                    Icons.fitness_center,
+                  child: Icon(
+                    item.id.startsWith('rivm_drinkwaterkranen')
+                        ? Icons.water_drop
+                        : Icons.fitness_center,
                     color: AppColors.primary,
                     size: 22,
                   ),
@@ -496,8 +561,9 @@ class _ActivitiesScreenState extends ConsumerState<ActivitiesScreen>
                   ],
                 ),
               ),
-              // Images - support multiple images with carousel
-              _buildImageSection(item),
+              // Images - support multiple images with carousel (skip for water fountains)
+              if (!item.id.startsWith('rivm_drinkwaterkranen'))
+                _buildImageSection(item),
               // Action buttons row
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
@@ -692,6 +758,10 @@ class _ActivitiesScreenState extends ConsumerState<ActivitiesScreen>
               label: 'sport_containers'.tr(),
               count: _sportContainers.length,
             ),
+            TabWithCount(
+              label: 'water_fountains'.tr(),
+              count: _waterFountains.length,
+            ),
           ],
         ),
       ),
@@ -839,6 +909,53 @@ class _ActivitiesScreenState extends ConsumerState<ActivitiesScreen>
                                         itemBuilder: (_, i) =>
                                             _buildFitnessCard(
                                                 _sportContainers[i]),
+                                      ),
+                              ),
+                              // Water Fountains tab
+                              RefreshIndicator(
+                                onRefresh: _loadFitnessData,
+                                child: _waterFountains.isEmpty
+                                    ? ListView(
+                                        physics:
+                                            const AlwaysScrollableScrollPhysics(),
+                                        padding: const EdgeInsets.only(
+                                            bottom: AppHeights.reg),
+                                        children: [
+                                          Padding(
+                                            padding: AppPaddings.allSuperBig,
+                                            child: Column(
+                                              mainAxisAlignment:
+                                                  MainAxisAlignment.center,
+                                              children: [
+                                                const Icon(Icons.water_drop,
+                                                    size: 64,
+                                                    color: AppColors.grey),
+                                                const SizedBox(
+                                                    height: AppHeights.reg),
+                                                Text(
+                                                  'no_water_fountains'.tr(),
+                                                  style: AppTextStyles.title
+                                                      .copyWith(
+                                                          color:
+                                                              AppColors.grey),
+                                                  textAlign: TextAlign.center,
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ],
+                                      )
+                                    : ListView.builder(
+                                        physics:
+                                            const AlwaysScrollableScrollPhysics(),
+                                        padding: AppPaddings.allMedium.add(
+                                          const EdgeInsets.only(
+                                              bottom: AppHeights.reg),
+                                        ),
+                                        itemCount: _waterFountains.length,
+                                        itemBuilder: (_, i) =>
+                                            _buildFitnessCard(
+                                                _waterFountains[i]),
                                       ),
                               ),
                             ],
