@@ -29,7 +29,8 @@ class ConnectivityServiceInstance {
         }
       },
       onError: (error) {
-        NumberedLogger.w('ConnectivityService: Error in connectivity stream: $error');
+        NumberedLogger.w(
+            'ConnectivityService: Error in connectivity stream: $error');
       },
     );
   }

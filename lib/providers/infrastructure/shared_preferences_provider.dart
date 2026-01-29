@@ -88,7 +88,8 @@ final sharedPreferencesProvider =
       await Future.delayed(const Duration(milliseconds: 1000));
       final prefs = await SharedPreferences.getInstance();
       _earlyInitializedPrefs = prefs;
-      NumberedLogger.i('[SharedPreferences] Lazy initialization successful on retry');
+      NumberedLogger.i(
+          '[SharedPreferences] Lazy initialization successful on retry');
       return prefs;
     } catch (e2) {
       NumberedLogger.e(

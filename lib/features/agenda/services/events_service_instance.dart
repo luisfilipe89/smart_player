@@ -57,11 +57,3 @@ class EventsServiceInstance {
         lower.contains('op inschrijving'));
   }
 }
-
-
-
-
-
-
-
-

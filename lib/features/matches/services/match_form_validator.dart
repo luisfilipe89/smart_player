@@ -60,7 +60,8 @@ class MatchFormValidator {
     required String? time,
   }) {
     if (date == null || time == null) {
-      return ValidationResult.success(); // Let required field validation handle this
+      return ValidationResult
+          .success(); // Let required field validation handle this
     }
 
     final now = DateTime.now();
@@ -95,7 +96,8 @@ class MatchFormValidator {
   /// Returns a validation result indicating if the time format is valid.
   static ValidationResult validateTimeFormat(String? time) {
     if (time == null || time.isEmpty) {
-      return ValidationResult.success(); // Let required field validation handle this
+      return ValidationResult
+          .success(); // Let required field validation handle this
     }
 
     final timeParts = time.split(':');
@@ -139,8 +141,3 @@ class MatchFormValidator {
     );
   }
 }
-
-
-
-
-

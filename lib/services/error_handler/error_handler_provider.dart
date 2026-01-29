@@ -23,7 +23,8 @@ class ErrorHandlerActions {
   void logError(dynamic error, StackTrace? stackTrace) =>
       _errorHandlerService.logError(error, stackTrace);
 
-  void showError(BuildContext context, dynamic error, {VoidCallback? onRetry}) =>
+  void showError(BuildContext context, dynamic error,
+          {VoidCallback? onRetry}) =>
       _errorHandlerService.showError(context, error, onRetry: onRetry);
 
   void showSnackBar(BuildContext context, String message,
@@ -31,4 +32,3 @@ class ErrorHandlerActions {
       _errorHandlerService.showSnackBar(context, message,
           backgroundColor: backgroundColor);
 }
-

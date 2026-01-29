@@ -26,4 +26,3 @@ final fieldReportActionsProvider = Provider<FieldReportActions>((ref) {
   final service = ref.watch(fieldReportServiceProvider);
   return FieldReportActions(service);
 });
-

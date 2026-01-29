@@ -24,5 +24,3 @@ final fieldsActionsProvider = Provider<FieldsActions>((ref) {
   final local = ref.watch(localFieldsServiceProvider);
   return FieldsActions(local);
 });
-
-

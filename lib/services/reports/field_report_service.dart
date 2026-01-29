@@ -4,4 +4,3 @@ abstract class IFieldReportService {
   /// Stores a new field issue report and returns the generated report ID.
   Future<String> submitReport(FieldReportSubmission submission);
 }
-

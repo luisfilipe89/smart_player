@@ -84,7 +84,9 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
         await ref.read(connectivityActionsProvider).hasInternetConnection();
     if (!connected) {
       if (mounted) {
-        ref.read(errorHandlerActionsProvider).showError(context, 'error_network');
+        ref
+            .read(errorHandlerActionsProvider)
+            .showError(context, 'error_network');
       }
       return;
     }
@@ -344,4 +346,3 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
     );
   }
 }
-

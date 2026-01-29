@@ -1,7 +1,7 @@
 /// Cost categories for filtering events
 enum CostType {
-  free,    // Free events
-  paid,    // Paid events
+  free, // Free events
+  paid, // Paid events
 }
 
 /// Utility class to parse cost strings and determine if event is free or paid
@@ -56,6 +56,3 @@ class CostParser {
     return costType == selectedType;
   }
 }
-
-
-

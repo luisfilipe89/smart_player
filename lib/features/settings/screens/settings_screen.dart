@@ -83,7 +83,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     try {
       // Get user ID before deletion (will be null after deletion)
       final uid = ref.read(currentUserIdProvider);
-      
+
       final authActions = ref.read(authActionsProvider);
       final result = await authActions.deleteAccount();
       if (!mounted) return;
@@ -102,7 +102,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             NumberedLogger.w('Failed to delete user database entry: $e');
           }
         }
-        
+
         scaffoldMessenger.showSnackBar(
           SnackBar(content: Text('settings_account_deleted'.tr())),
         );
@@ -335,7 +335,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     try {
       final profileActions = ref.read(profileSettingsActionsProvider);
       await profileActions.setVisibility(newVisibility);
-      
+
       if (mounted) {
         setState(() {
           _visibility = newVisibility;
@@ -358,7 +358,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   Future<void> _showVisibilityDialog() async {
     final selectedVisibility = ValueNotifier<String>(_visibility);
-    
+
     final result = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
@@ -371,7 +371,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ListTile(
                 contentPadding: EdgeInsets.zero,
                 leading: Icon(
-                  value == 'public' ? Icons.radio_button_checked : Icons.radio_button_unchecked,
+                  value == 'public'
+                      ? Icons.radio_button_checked
+                      : Icons.radio_button_unchecked,
                   color: value == 'public' ? AppColors.primary : AppColors.grey,
                 ),
                 title: Text('settings_profile_public'.tr()),
@@ -383,8 +385,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ListTile(
                 contentPadding: EdgeInsets.zero,
                 leading: Icon(
-                  value == 'friends' ? Icons.radio_button_checked : Icons.radio_button_unchecked,
-                  color: value == 'friends' ? AppColors.primary : AppColors.grey,
+                  value == 'friends'
+                      ? Icons.radio_button_checked
+                      : Icons.radio_button_unchecked,
+                  color:
+                      value == 'friends' ? AppColors.primary : AppColors.grey,
                 ),
                 title: Text('settings_profile_friends'.tr()),
                 subtitle: Text('settings_profile_friends_desc'.tr()),
@@ -395,8 +400,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ListTile(
                 contentPadding: EdgeInsets.zero,
                 leading: Icon(
-                  value == 'private' ? Icons.radio_button_checked : Icons.radio_button_unchecked,
-                  color: value == 'private' ? AppColors.primary : AppColors.grey,
+                  value == 'private'
+                      ? Icons.radio_button_checked
+                      : Icons.radio_button_unchecked,
+                  color:
+                      value == 'private' ? AppColors.primary : AppColors.grey,
                 ),
                 title: Text('settings_profile_private'.tr()),
                 subtitle: Text('settings_profile_private_desc'.tr()),
@@ -573,12 +581,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     return ListTile(
       contentPadding: EdgeInsets.zero,
       leading: Icon(icon, color: iconColor ?? AppColors.primary),
-      title: Text(title, style: AppTextStyles.body.copyWith(
-        color: titleColor,
-      )),
-      subtitle: subtitle != null
-          ? Text(subtitle, style: AppTextStyles.small)
-          : null,
+      title: Text(title,
+          style: AppTextStyles.body.copyWith(
+            color: titleColor,
+          )),
+      subtitle:
+          subtitle != null ? Text(subtitle, style: AppTextStyles.small) : null,
       trailing: trailingChevron ? const Icon(Icons.chevron_right) : null,
       onTap: onTap,
     );
@@ -595,9 +603,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       contentPadding: EdgeInsets.zero,
       leading: Icon(icon, color: AppColors.primary),
       title: Text(title, style: AppTextStyles.body),
-      subtitle: subtitle != null
-          ? Text(subtitle, style: AppTextStyles.small)
-          : null,
+      subtitle:
+          subtitle != null ? Text(subtitle, style: AppTextStyles.small) : null,
       trailing: Switch(
         value: value,
         onChanged: onChanged,

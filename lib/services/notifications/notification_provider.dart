@@ -150,16 +150,18 @@ class NotificationActions {
         body: body,
         payload: payload,
       );
-  Future<void> sendFriendRequestNotification(String toUid, String fromUid) async {
+  Future<void> sendFriendRequestNotification(
+      String toUid, String fromUid) async {
     // Backend will check receiver's preferences before sending FCM
     await _notificationService.sendFriendRequestNotification(toUid, fromUid);
   }
-  
-  Future<void> sendFriendAcceptedNotification(String toUid, String fromUid) async {
+
+  Future<void> sendFriendAcceptedNotification(
+      String toUid, String fromUid) async {
     // Backend will check receiver's preferences before sending FCM
     await _notificationService.sendFriendAcceptedNotification(toUid, fromUid);
   }
-  
+
   Future<void> sendFriendRemovedNotification({
     required String removedUserUid,
     required String removerUid,
@@ -172,7 +174,7 @@ class NotificationActions {
     // Backend will check receiver's preferences before sending FCM
     await _notificationService.sendMatchEditedNotification(matchId);
   }
-  
+
   Future<void> sendMatchCancelledNotification(String matchId) async {
     // Backend will check receiver's preferences before sending FCM
     await _notificationService.sendMatchCancelledNotification(matchId);

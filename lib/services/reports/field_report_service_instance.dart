@@ -66,8 +66,7 @@ class FieldReportServiceInstance implements IFieldReportService {
       'createdAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
       'source': 'mobile',
-    }
-      ..removeWhere(
+    }..removeWhere(
         (key, value) =>
             value == null || (value is String && value.trim().isEmpty),
       );
@@ -81,4 +80,3 @@ class FieldReportServiceInstance implements IFieldReportService {
     }
   }
 }
-

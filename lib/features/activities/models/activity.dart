@@ -13,5 +13,3 @@ class Activity {
     this.align,
   });
 }
-
-

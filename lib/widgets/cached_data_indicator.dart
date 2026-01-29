@@ -87,4 +87,3 @@ class CachedDataIndicator extends ConsumerWidget {
     );
   }
 }
-

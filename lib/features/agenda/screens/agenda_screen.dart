@@ -372,8 +372,10 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
       return;
     }
 
-    final idx = filteredEvents.indexWhere((e) => e.title == widget.highlightEventTitle!);
-    final key = idx >= 0 ? _itemKeys[_eventKey(filteredEvents[idx], idx)] : null;
+    final idx = filteredEvents
+        .indexWhere((e) => e.title == widget.highlightEventTitle!);
+    final key =
+        idx >= 0 ? _itemKeys[_eventKey(filteredEvents[idx], idx)] : null;
     NumberedLogger.d(
         '_scrollToHighlightedEvent: key exists: ${key != null}, key: $key');
 
@@ -878,7 +880,8 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
               ),
               sliver: SliverList(
                 delegate: SliverChildBuilderDelegate(
-                  (context, index) => _buildEventCard(filteredEvents[index], index),
+                  (context, index) =>
+                      _buildEventCard(filteredEvents[index], index),
                   childCount: filteredEvents.length,
                 ),
               ),

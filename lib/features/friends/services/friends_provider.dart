@@ -133,6 +133,7 @@ class FriendsActions {
       rethrow; // Re-throw so UI can show error
     }
   }
+
   /// Declines a friend request from another user.
   Future<bool> declineFriendRequest(String fromUid) =>
       _friendsService.declineFriendRequest(fromUid);

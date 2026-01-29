@@ -7,11 +7,3 @@ final eventsServiceProvider = Provider<EventsServiceInstance>((ref) {
   final firebaseDatabase = ref.watch(firebaseDatabaseProvider);
   return EventsServiceInstance(firebaseDatabase);
 });
-
-
-
-
-
-
-
-

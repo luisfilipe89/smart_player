@@ -45,7 +45,8 @@ class PrivacyPolicyScreen extends StatelessWidget {
                     style: AppTextStyles.body,
                   ),
                   const SizedBox(height: AppSpacing.md),
-                  Text('privacy_data_collect_title'.tr(), style: AppTextStyles.h3),
+                  Text('privacy_data_collect_title'.tr(),
+                      style: AppTextStyles.h3),
                   const SizedBox(height: AppSpacing.sm),
                   Text(
                     'privacy_data_collect_content'.tr(),
@@ -59,14 +60,16 @@ class PrivacyPolicyScreen extends StatelessWidget {
                     style: AppTextStyles.body,
                   ),
                   const SizedBox(height: AppSpacing.md),
-                  Text('privacy_legal_basis_title'.tr(), style: AppTextStyles.h3),
+                  Text('privacy_legal_basis_title'.tr(),
+                      style: AppTextStyles.h3),
                   const SizedBox(height: AppSpacing.sm),
                   Text(
                     'privacy_legal_basis_content'.tr(),
                     style: AppTextStyles.body,
                   ),
                   const SizedBox(height: AppSpacing.md),
-                  Text('privacy_third_parties_title'.tr(), style: AppTextStyles.h3),
+                  Text('privacy_third_parties_title'.tr(),
+                      style: AppTextStyles.h3),
                   const SizedBox(height: AppSpacing.sm),
                   Text(
                     'privacy_third_parties_content'.tr(),

@@ -360,7 +360,8 @@ class NotificationServiceInstance implements INotificationService {
     // Notification is now handled automatically by Cloud Function
     // onFriendRequestCreate when /users/{toUid}/friendRequests/received/{fromUid} is created
     // No action needed here - the friend request write in friends_service will trigger it
-    NumberedLogger.i('Friend request notification will be sent by Cloud Function for $toUid');
+    NumberedLogger.i(
+        'Friend request notification will be sent by Cloud Function for $toUid');
   }
 
   @override
@@ -369,7 +370,8 @@ class NotificationServiceInstance implements INotificationService {
     // Notification is now handled automatically by Cloud Function
     // onFriendAcceptCreate when /users/{toUid}/friends/{fromUid} is created
     // No action needed here - the friend accept write in friends_service will trigger it
-    NumberedLogger.i('Friend accepted notification will be sent by Cloud Function for $toUid');
+    NumberedLogger.i(
+        'Friend accepted notification will be sent by Cloud Function for $toUid');
   }
 
   @override
@@ -380,7 +382,8 @@ class NotificationServiceInstance implements INotificationService {
     // Notification is now handled automatically by Cloud Function
     // onFriendRemoveCreate when /users/{uid}/friends/{friendUid} is deleted
     // No action needed here - the friend removal write in friends_service will trigger it
-    NumberedLogger.i('Friend removed notification will be sent by Cloud Function for $removedUserUid');
+    NumberedLogger.i(
+        'Friend removed notification will be sent by Cloud Function for $removedUserUid');
   }
 
   @override
@@ -388,7 +391,8 @@ class NotificationServiceInstance implements INotificationService {
     // Notification is now handled automatically by Cloud Function
     // onMatchUpdate when match is edited (detects lastOrganizerEditAt change)
     // No action needed here - the match update will trigger it
-    NumberedLogger.i('Match edited notification will be sent by Cloud Function for match $matchId');
+    NumberedLogger.i(
+        'Match edited notification will be sent by Cloud Function for match $matchId');
   }
 
   @override
@@ -396,7 +400,8 @@ class NotificationServiceInstance implements INotificationService {
     // Notification is now handled automatically by Cloud Function
     // onMatchUpdate when match is cancelled (detects isActive=false)
     // No action needed here - the match update will trigger it
-    NumberedLogger.i('Match cancelled notification will be sent by Cloud Function for match $matchId');
+    NumberedLogger.i(
+        'Match cancelled notification will be sent by Cloud Function for match $matchId');
   }
 
   Future<void> dispose() async {

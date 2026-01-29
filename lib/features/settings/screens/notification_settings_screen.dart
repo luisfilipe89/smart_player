@@ -36,7 +36,7 @@ class _NotificationSettingsScreenState
         // Initialize the service to load saved preferences
         await settingsActions.initialize();
         final settings = settingsActions.getSettings();
-        
+
         if (mounted) {
           setState(() {
             _notificationsEnabled = settings['notificationsEnabled'] ?? true;
@@ -67,7 +67,7 @@ class _NotificationSettingsScreenState
     setState(() {
       _notificationsEnabled = value;
     });
-    
+
     final settingsActions = ref.read(notificationSettingsActionsProvider);
     if (settingsActions != null) {
       try {
