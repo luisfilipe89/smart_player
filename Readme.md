@@ -1,6 +1,8 @@
 # SmartPlayer
 
 A Flutter app for organising and joining sports matches, managing your agenda, connecting with friends, and discovering fitness activities. Built with **Firebase** and **Riverpod**, targeting **Android**.
+📊 [Project presentation (Canva)](https://www.canva.com/design/DAG4Y5H7bbE/VCXIx9GDslnIZmqYtGY2Ww/edit?utm_content=DAG4Y5H7bbE&utm_campaign=designshare&utm_medium=link2&utm_source=sharebutton)
+
 
 ---
 
